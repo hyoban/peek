@@ -177,8 +177,9 @@ func (a *app) loadDiff(d *fileDiff) {
 				// sideways would drift with the slant of every vertical
 				// swipe on a touchpad, the list taking the swipe's height
 				// and the diff under the pointer its width.
-				Wrap: true,
-				Font: codeFont,
+				Wrap:  true,
+				Font:  codeFont,
+				Theme: codeTheme,
 			}
 			state.Stats() // diffs the texts here rather than in a frame
 		}
@@ -218,6 +219,16 @@ const maxTextSize = 8 << 20
 const monoFamily = "MonoLisaCode, MonoLisa Variable, monospace"
 
 var codeFont = ui.Font{Family: monoFamily, Size: codeSize}
+
+// codeTheme is the default's, light or dark, with comments in italics.
+var codeTheme = func() *editor.Theme {
+	ct := &editor.Theme{} // the default's colors fill those left zero
+	ct.Tokens[editor.TokenComment].Italic = true
+	ct.Tokens[editor.TokenEmphasis].Italic = true
+	ct.Tokens[editor.TokenHeading].Bold = true
+	ct.Tokens[editor.TokenStrong].Bold = true
+	return ct
+}()
 
 // textNote tells why these texts do not show, "" where they do.
 func textNote(texts ...string) string {

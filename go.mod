@@ -13,3 +13,7 @@ require (
 	golang.org/x/net v0.59.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 )
+
+// The fork's italic-tokens branch draws TokenStyle.Italic and Bold, for
+// comments in italics, until MyGo does (egoist/mygo#703).
+replace github.com/egoist/mygo => github.com/hyoban/mygo v0.6.4-0.20261024163459-015a7ea7c74e

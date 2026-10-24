@@ -726,7 +726,7 @@ func (a *app) loadText(hash, p string) {
 		}
 		var code *editor.State
 		if note == "" {
-			code = &editor.State{Buffer: codeBuffer(p, text), ReadOnly: true, SoftWrap: true, Font: codeFont}
+			code = &editor.State{Buffer: codeBuffer(p, text), ReadOnly: true, SoftWrap: true, Font: codeFont, Theme: codeTheme}
 		}
 		return func() {
 			if p == a.openFile {

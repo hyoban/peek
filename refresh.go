@@ -199,7 +199,7 @@ func (a *app) reloadFiles() {
 			case a.code != nil:
 				resetText(a.code.Buffer, text)
 			default:
-				a.code = &editor.State{Buffer: codeBuffer(open, text), ReadOnly: true, SoftWrap: true, Font: codeFont}
+				a.code = &editor.State{Buffer: codeBuffer(open, text), ReadOnly: true, SoftWrap: true, Font: codeFont, Theme: codeTheme}
 				a.codeNote = ""
 			}
 		}
