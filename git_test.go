@@ -379,3 +379,20 @@ func TestReadByGroup(t *testing.T) {
 		t.Errorf("no count of two read, texts %q", tt.Texts())
 	}
 }
+
+func TestImportsFolded(t *testing.T) {
+	for _, tc := range []struct {
+		path, text string
+		want       []int
+	}{
+		{"main.go", "package main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n)\n\nfunc main() {\n\tfmt.Println(os.Args)\n}\n", []int{2}},
+		{"one.go", "package main\n\nimport \"fmt\"\n\nfunc main() { fmt.Println() }\n", nil},
+		{"app.ts", "import {\n  a,\n  b,\n} from './x'\nimport c from './c'\n\nconsole.log(a, b, c)\n", []int{0}},
+		{"app.js", "import a from './a'\nimport b from './b'\n\nconsole.log(a, b)\n", []int{0}},
+		{"app.py", "from x import (\n    a,\n    b,\n)\n\nprint(a, b)\n", []int{0}},
+	} {
+		if got := newCode(tc.path, tc.text).Folded(); !slices.Equal(got, tc.want) {
+			t.Errorf("%s folded %v, want %v", tc.path, got, tc.want)
+		}
+	}
+}

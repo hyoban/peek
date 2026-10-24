@@ -668,12 +668,12 @@ func (a *app) loadText(hash, p string) {
 	a.background(func() func() {
 		text, err := fileText(a.repo, hash, p)
 		picture, note := fileView(p, text, err)
-		var code *editor.State
-		if note == "" && picture == nil {
-			code = &editor.State{Buffer: codeBuffer(p, text), ReadOnly: true, SoftWrap: true, Font: codeFont, Theme: codeTheme}
-		}
 		return func() {
 			if p == a.openFile {
+				var code *editor.State
+				if note == "" && picture == nil {
+					code = newCode(p, text)
+				}
 				a.code, a.picture, a.codeNote = code, picture, note
 			}
 		}

@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
-	"github.com/egoist/mygo/ui/editor"
 )
 
 // history is what the history column lists, read together.
@@ -197,7 +196,7 @@ func (a *app) reloadFiles() {
 			case a.code != nil:
 				resetText(a.code.Buffer, text)
 			default:
-				a.code = &editor.State{Buffer: codeBuffer(open, text), ReadOnly: true, SoftWrap: true, Font: codeFont, Theme: codeTheme}
+				a.code = newCode(open, text)
 				a.picture, a.codeNote = nil, ""
 			}
 		}

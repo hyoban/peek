@@ -437,6 +437,14 @@ func codeBuffer(p, text string) *editor.Buffer {
 	return buf
 }
 
+// newCode shows a file's text, its imports folded away, as they are
+// seldom what a file is read for.
+func newCode(p, text string) *editor.State {
+	st := &editor.State{Buffer: codeBuffer(p, text), ReadOnly: true, SoftWrap: true, Font: codeFont, Theme: codeTheme}
+	st.FoldImports()
+	return st
+}
+
 // count says how many of a noun: "1 file", "3 files".
 func count(n int, noun string) string {
 	if n == 1 {
