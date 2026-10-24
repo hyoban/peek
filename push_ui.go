@@ -37,11 +37,18 @@ func (a *app) pushButton(c *ui.Context) {
 		}
 		tooltip = a.push.status + "\nClick to cancel"
 	case a.push.failed:
-		label, tooltip = "Push failed", a.push.status+"\nClick to retry"
+		label, tooltip = "Push failed", a.push.status
+		if a.canPush {
+			tooltip += "\nClick to retry"
+		}
 	case a.push.status != "":
-		label, tooltip = "Pushed", a.push.status+"\nClick to push again"
+		label, tooltip = "Pushed", a.push.status
 	}
-	ui.Button(c.Key("push"), label).Shrink(0).Tooltip(tooltip).OnClick(func() {
+	disabled := !a.canPush && !a.push.running
+	if disabled && a.push.status == "" {
+		tooltip = "Nothing to push"
+	}
+	ui.Button(c.Key("push"), label).Shrink(0).Disabled(disabled).Tooltip(tooltip).OnClick(func() {
 		if a.push.running {
 			a.push.cancel()
 			return
@@ -51,7 +58,7 @@ func (a *app) pushButton(c *ui.Context) {
 }
 
 func (a *app) startPush() {
-	if a.push.running {
+	if a.push.running || !a.canPush {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
@@ -70,6 +77,8 @@ func (a *app) startPush() {
 			a.push.status, a.push.failed = status, err != nil
 			if err != nil {
 				a.push.status = err.Error()
+			} else {
+				a.canPush = false
 			}
 			a.refresh()
 		}

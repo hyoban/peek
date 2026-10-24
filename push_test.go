@@ -229,6 +229,15 @@ func TestPushUI(t *testing.T) {
 	if !tt.HasText("Push") || tt.HasText("Pushed") {
 		t.Fatal("success label did not expire", tt.Texts())
 	}
+	if a.canPush {
+		t.Fatal("Push still enabled after syncing")
+	}
+	_ = tt.Click("Push")
+	a.startPush()
+	tt.Frame()
+	if a.push.status != "" {
+		t.Fatal("Push ran with nothing to push")
+	}
 	cancelled := false
 	a.push = pushState{running: true, status: "Generating commit message with Codex…", cancel: func() { cancelled = true }}
 	tt.Frame()
@@ -237,6 +246,14 @@ func TestPushUI(t *testing.T) {
 	}
 	if !cancelled {
 		t.Fatal("not cancelled")
+	}
+	if err := os.WriteFile(filepath.Join(repo, "retry.txt"), []byte("retry\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a.refresh()
+	tt.Frame()
+	if !a.canPush {
+		t.Fatal("Push did not enable for new changes")
 	}
 	a.push = pushState{failed: true, status: "Test failure"}
 	tt.Frame()
@@ -287,4 +304,39 @@ printf '%s' '{"message":"Update the files"}' > "$output"
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestPushAvailability(t *testing.T) {
+	repo, _ := pushTestRepo(t)
+	pushTestGit(t, repo, "add", "--all")
+	pushTestGit(t, repo, "commit", "-m", "Update the files")
+	check := func(want bool) {
+		t.Helper()
+		if got := hasUnpushedCommits(repo); got != want {
+			t.Fatalf("hasUnpushedCommits = %v, want %v", got, want)
+		}
+	}
+	check(true) // clean working tree, with an unpushed commit
+	pushTestGit(t, repo, "push")
+	check(false)
+
+	pushTestGit(t, repo, "reset", "--hard", "HEAD~1")
+	check(false) // behind alone is not something to push
+	pushTestGit(t, repo, "switch", "-c", "feature")
+	check(true) // a branch that has not been published
+	pushTestGit(t, repo, "push", "-u", "origin", "feature")
+	check(false)
+
+	fork := t.TempDir()
+	pushTestGit(t, fork, "init", "--bare")
+	pushTestGit(t, repo, "remote", "add", "fork", fork)
+	pushTestGit(t, repo, "config", "branch.feature.pushRemote", "fork")
+	check(true) // origin is up to date, but the actual push destination is not
+	pushTestGit(t, repo, "push", "fork", "feature")
+	check(false)
+
+	pushTestGit(t, repo, "checkout", "--detach")
+	check(false)
+	pushTestGit(t, repo, "commit", "--allow-empty", "-m", "A detached change")
+	check(true)
 }

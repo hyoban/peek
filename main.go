@@ -38,6 +38,7 @@ type app struct {
 	published                []func()
 	err                      string
 	push                     pushState
+	canPush                  bool // work tree changes or commits not yet pushed
 	// theme is this pass's, and inactiveTheme the one of lists without
 	// the keyboard focus.
 	theme, inactiveTheme *ui.Theme
@@ -625,6 +626,7 @@ func (a *app) loadCommits() {
 				return
 			}
 			a.commits, a.worktreeChanges, a.branch, a.github = h.commits, h.changes, h.branch, h.github
+			a.canPush = h.canPush
 			if len(h.commits) > 0 {
 				a.commitRow = 0
 			}

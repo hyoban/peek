@@ -14,6 +14,40 @@ import (
 
 type messageGenerator func(context.Context, string, string) (string, error)
 
+// Use the same destination as Push, rather than the pull upstream, which
+// may be different for a fork. Read cached remote refs without network I/O.
+func hasUnpushedCommits(repo string) bool {
+	g := func(args ...string) (string, error) {
+		out, err := git(repo, args...)
+		return strings.TrimSpace(out), err
+	}
+	if _, err := g("rev-parse", "--verify", "HEAD"); err != nil {
+		return false
+	}
+	branch, _ := g("symbolic-ref", "--quiet", "--short", "HEAD")
+	remote, target, err := pushDestination(g, branch)
+	if err != nil {
+		return false
+	}
+	fetchURL, _ := g("remote", "get-url", remote)
+	pushURL, _ := g("remote", "get-url", "--push", remote)
+	if fetchURL != pushURL {
+		return true // fetched refs cannot prove a different push destination is up to date
+	}
+	args := []string{"rev-list", "--max-count=1", "HEAD", "--not"}
+	if branch == "" {
+		args = append(args, "--remotes="+remote)
+	} else {
+		ref := "refs/remotes/" + remote + "/" + target
+		if _, err := g("rev-parse", "--verify", ref); err != nil {
+			return true // a branch that has not been published yet
+		}
+		args = append(args, ref)
+	}
+	out, err := g(args...)
+	return err != nil || out != ""
+}
+
 // pushRepository commits the staged snapshot, then pushes exactly one branch.
 // Failures leave the index and any new commit available for a retry.
 func pushRepository(ctx context.Context, repo string, generate messageGenerator, progress func(string)) (string, error) {
