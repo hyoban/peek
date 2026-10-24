@@ -75,6 +75,8 @@ func kindOf(p string) fileKind {
 	case slices.ContainsFunc(dirs, func(d string) bool { return slices.Contains(testDirs, d) }),
 		strings.HasSuffix(lower, "_test"), strings.HasSuffix(lower, "_spec"),
 		strings.HasSuffix(lower, ".test"), strings.HasSuffix(lower, ".spec"),
+		// Button.stories.tsx, but not .storybook's config
+		strings.HasSuffix(lower, ".stories"), strings.HasSuffix(lower, ".story"),
 		strings.HasPrefix(lower, "test_") && ext == ".py",
 		// FooTest.java, FooTests.swift
 		strings.HasSuffix(stem, "Test") && stem != "Test", strings.HasSuffix(stem, "Tests") && stem != "Tests":

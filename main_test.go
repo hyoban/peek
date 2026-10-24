@@ -145,14 +145,14 @@ func TestGrouped(t *testing.T) {
 	files := []string{
 		"README.md", "docs/guide.png", "fileicons/LICENSE-file-icons.md",
 		"git_test.go", "src/__tests__/app.tsx", "app.spec.ts", "FooTest.java", "test_util.py", "testdata/in.md",
-		"main.go", "go.mod", "src/app.tsx", "Test.java", "latest.go", "fileicons/tables.go",
+		"Button.stories.tsx", "main.go", ".storybook/main.ts", "go.mod", "src/app.tsx", "Test.java", "latest.go", "fileicons/tables.go",
 	}
 	tree := newPathTree()
 	tree.set(foldGrouped(files))
 	tree.openAll()
 	want := []string{
-		"fileicons/tables.go", "src/app.tsx", "go.mod", "latest.go", "main.go", "Test.java",
-		"src/__tests__/app.tsx", "testdata/in.md", "app.spec.ts", "FooTest.java", "git_test.go", "test_util.py",
+		".storybook/main.ts", "fileicons/tables.go", "src/app.tsx", "go.mod", "latest.go", "main.go", "Test.java",
+		"src/__tests__/app.tsx", "testdata/in.md", "app.spec.ts", "Button.stories.tsx", "FooTest.java", "git_test.go", "test_util.py",
 		"docs/guide.png", "fileicons/LICENSE-file-icons.md", "README.md",
 	}
 	if got := tree.files(); !slices.Equal(got, want) {
