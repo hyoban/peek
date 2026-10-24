@@ -22,6 +22,7 @@ type projects struct {
 	recent  []string        // the repositories opened, the latest first
 	file    string          // where recent is kept, "" for nowhere
 	inline  bool            // the apps', for tests
+	unwatch func()          // stops watching the project shown
 }
 
 func newProjects() *projects {
@@ -79,6 +80,11 @@ func (p *projects) open(repo string) {
 		}
 		p.apps[repo] = a
 		a.loadCommits()
+	} else if a != p.cur {
+		a.refresh() // what changed while another showed
+	}
+	if a != p.cur && p.win != nil {
+		p.watch(a)
 	}
 	p.cur = a
 	if p.win != nil {

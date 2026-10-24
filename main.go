@@ -30,8 +30,11 @@ type app struct {
 	branch   string
 	// inline runs loads on the UI thread, as tests and snapshots want,
 	// and redraw asks for the frame a window's Update would draw then.
-	inline, redraw bool
-	err            string
+	// Those a pass starts wait in published for the next, as a window's
+	// Update comes between passes, not within one.
+	inline, redraw, building bool
+	published                []func()
+	err                      string
 	// theme is this pass's, and inactiveTheme the one of lists without
 	// the keyboard focus.
 	theme, inactiveTheme *ui.Theme
@@ -49,6 +52,9 @@ type app struct {
 	// worktreeChanges are the work tree's, read with the history, for
 	// its entry's first load.
 	worktreeChanges []change
+	// refreshing is while the history is read again, and refreshAgain
+	// that files changed meanwhile.
+	refreshing, refreshAgain bool
 
 	// Changes mode.
 	changes    map[string]change // by new path
@@ -112,6 +118,13 @@ func (a *app) themed(c *ui.Context) {
 }
 
 func (a *app) view(c *ui.Context) {
+	for len(a.published) > 0 {
+		publish := a.published[0]
+		a.published = a.published[1:]
+		publish()
+	}
+	a.building = true
+	defer func() { a.building = false }()
 	a.themed(c)
 	c.OnShortcut(ui.Cmd, ui.Key1, func() {
 		if a.mode == modeChanges {
@@ -573,7 +586,11 @@ func (a *app) openInFiles(hash, p string) bool {
 // on it, to publish the result.
 func (a *app) background(work func() func()) {
 	if a.inline {
-		work()()
+		if publish := work(); a.building {
+			a.published = append(a.published, publish)
+		} else {
+			publish()
+		}
 		a.redraw = true
 		return
 	}
@@ -582,20 +599,14 @@ func (a *app) background(work func() func()) {
 
 func (a *app) loadCommits() {
 	a.background(func() func() {
-		commits, err := loadCommits(a.repo, 500)
-		changes, _ := loadWorktreeChanges(a.repo)
-		branch := currentBranch(a.repo)
-		if n := len(changes); n > 0 {
-			wt := commit{Hash: worktree, Subject: "Uncommitted Changes", Summary: count(n, "file") + " changed"}
-			commits = append([]commit{wt}, commits...)
-		}
+		h := readHistory(a.repo)
 		return func() {
-			if err != nil {
-				a.err = err.Error()
+			if h.err != nil {
+				a.err = h.err.Error()
 				return
 			}
-			a.commits, a.worktreeChanges, a.branch = commits, changes, branch
-			if len(commits) > 0 {
+			a.commits, a.worktreeChanges, a.branch = h.commits, h.changes, h.branch
+			if len(h.commits) > 0 {
 				a.commitRow = 0
 			}
 		}
@@ -603,7 +614,6 @@ func (a *app) loadCommits() {
 }
 
 func (a *app) loadCommit(hash string) {
-	row := a.loadedRow
 	seeded := a.worktreeChanges
 	a.worktreeChanges = nil
 	a.background(func() func() {
@@ -617,7 +627,7 @@ func (a *app) loadCommit(hash string) {
 		}
 		tree := fold(paths)
 		return func() {
-			if row != a.loadedRow {
+			if cm, ok := a.current(); !ok || cm.Hash != hash {
 				return // another commit was chosen meanwhile
 			}
 			if err != nil {
@@ -643,13 +653,12 @@ func (a *app) loadCommit(hash string) {
 // loadFiles lists the files of the commit for the files mode, keeping the
 // file open where the commit has it too.
 func (a *app) loadFiles(hash string) {
-	row := a.loadedRow
 	a.allTree.dirs = nil
 	a.background(func() func() {
 		files, err := listFiles(a.repo, hash)
 		tree := fold(files)
 		return func() {
-			if row != a.filesFor {
+			if cm, ok := a.current(); !ok || cm.Hash != hash || a.filesFor != a.loadedRow {
 				return
 			}
 			if err != nil {

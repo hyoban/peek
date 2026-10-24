@@ -41,6 +41,8 @@ func git(repo string, args ...string) (string, error) {
 	gitSlots <- struct{}{}
 	defer func() { <-gitSlots }()
 	cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+	// Reads alone, which leave the index as it is for the watch.
+	cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0")
 	var out, errOut bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errOut
 	if err := cmd.Run(); err != nil {

@@ -18,6 +18,7 @@ type fileDiff struct {
 	state   *editor.DiffState
 	note    string // why the diff does not show
 	loading bool
+	stale   bool // the file may have changed since it loaded
 }
 
 // The stacked diffs list two rows a file: its header, pinned at the top
@@ -140,7 +141,7 @@ func diffHeader(c *ui.Context, d *fileDiff) {
 
 func (a *app) diffBody(c *ui.Context, d *fileDiff) {
 	t := c.Theme()
-	if d.state == nil && d.note == "" && !d.loading {
+	if (d.state == nil && d.note == "" || d.stale) && !d.loading {
 		a.loadDiff(d)
 	}
 	switch {
@@ -155,9 +156,10 @@ func (a *app) diffBody(c *ui.Context, d *fileDiff) {
 
 // loadDiff reads the file's texts and diffs them off the UI thread.
 func (a *app) loadDiff(d *fileDiff) {
-	d.loading = true
+	d.loading, d.stale = true, false
 	cm, _ := a.current()
 	gen := a.diffGen
+	shown := d.state != nil // which a reload updates where it is
 	a.background(func() func() {
 		before, after := fileTexts(a.repo, cm.Hash, d.change)
 		note := textNote(before, after)
@@ -165,7 +167,7 @@ func (a *app) loadDiff(d *fileDiff) {
 			note = "Only the file's mode changed"
 		}
 		var state *editor.DiffState
-		if note == "" {
+		if note == "" && !shown {
 			state = &editor.DiffState{
 				Old:        codeBuffer(d.change.Path, before),
 				New:        codeBuffer(d.change.Path, after),
@@ -185,9 +187,28 @@ func (a *app) loadDiff(d *fileDiff) {
 			if gen != a.diffGen {
 				return // another commit was chosen meanwhile
 			}
+			if note == "" && d.state != nil {
+				// The diff shown follows its texts, keeping its place
+				// and the lines expanded.
+				resetText(d.state.Old, before)
+				resetText(d.state.New, after)
+				d.note = ""
+				return
+			}
+			if note == "" && state == nil {
+				d.stale = true // its diff went meanwhile, and loads anew
+				return
+			}
 			d.note, d.state = note, state
 		}
 	})
+}
+
+// resetText puts the text in the buffer where it differs.
+func resetText(b *editor.Buffer, text string) {
+	if b.String() != text {
+		b.Reset(text)
+	}
 }
 
 const maxTextSize = 8 << 20
