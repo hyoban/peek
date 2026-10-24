@@ -20,9 +20,6 @@ func TestToggleMatrix(t *testing.T) {
 	for _, mode := range []int{modeChanges, modeFiles} {
 		for _, history := range []bool{true, false} {
 			for _, tree := range []bool{true, false} {
-				if mode == modeFiles && !history {
-					continue // the history never shows in files mode
-				}
 				a.mode, a.showHistory, a.showTree = mode, history, tree
 				settle(tt)
 				name := fmt.Sprintf("%s-mode%d-history%v-tree%v.png", out, mode, history, tree)

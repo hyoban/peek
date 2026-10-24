@@ -85,11 +85,8 @@ func TestFilesMode(t *testing.T) {
 	if a.mode != modeFiles {
 		t.Fatalf("mode %d after clicking Files", a.mode)
 	}
-	if tt.HasText("Uncommitted Changes") {
-		t.Error("the history shows in files mode")
-	}
-	if !a.showHistory {
-		t.Error("files mode turned the history toggle off; it should only hide the column")
+	if !tt.HasText("Uncommitted Changes") {
+		t.Error("the history does not show in files mode")
 	}
 	if !a.allTree.has("main.go") || !a.allTree.has("docs/new.md") || a.allTree.has("old.txt") {
 		t.Errorf("work tree files %v, want main.go and docs/new.md without old.txt", a.allTree.dirs)
@@ -105,7 +102,7 @@ func TestFilesMode(t *testing.T) {
 	}
 	tt.Frame()
 	if !tt.HasText("Uncommitted Changes") {
-		t.Error("the history did not come back with the changes")
+		t.Error("the history does not show in changes mode")
 	}
 	a.setMode(modeFiles)
 	tt.Frame()

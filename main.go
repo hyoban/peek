@@ -130,11 +130,7 @@ func (a *app) view(c *ui.Context) {
 	a.building = true
 	defer func() { a.building = false }()
 	a.themed(c)
-	c.OnShortcut(ui.Cmd, ui.Key1, func() {
-		if a.mode == modeChanges {
-			a.showHistory = !a.showHistory
-		}
-	})
+	c.OnShortcut(ui.Cmd, ui.Key1, func() { a.showHistory = !a.showHistory })
 	c.OnShortcut(ui.Cmd, ui.Key2, func() { a.showTree = !a.showTree })
 	c.OnShortcut(ui.Cmd|ui.Shift, ui.KeyE, func() { a.setMode(modeChanges) })
 	c.OnShortcut(ui.Cmd|ui.Shift, ui.KeyF, func() { a.setMode(modeFiles) })
@@ -144,11 +140,10 @@ func (a *app) view(c *ui.Context) {
 
 	// The toolbar stays as it is whichever columns show, so its controls
 	// never move. The tree and the text keep their places whichever mode
-	// shows, the history at the end, as an inspector: files mode is an
-	// editor's two columns, without the history, which comes back with
-	// the changes. The toolbar changes the state in actions, after the
-	// pass, so that all of the pass sees the same.
-	history := a.showHistory && a.mode == modeChanges
+	// shows, the history at the end, as an inspector. The toolbar changes
+	// the state in actions, after the pass, so that all of the pass sees
+	// the same.
+	history := a.showHistory
 	content := func() {
 		if a.mode == modeFiles {
 			a.codePane(c)
@@ -232,11 +227,7 @@ func (a *app) toolbar(c *ui.Context) {
 				}
 			}
 		})
-		historyLabel := "History (⌘1)"
-		if a.mode == modeFiles {
-			historyLabel = "History shows with Changes"
-		}
-		a.toggle(c, "history", historyIcon, &a.showHistory, a.mode == modeChanges, historyLabel)
+		a.toggle(c, "history", historyIcon, &a.showHistory, true, "History (⌘1)")
 	})
 }
 
