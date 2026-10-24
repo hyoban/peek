@@ -10,7 +10,7 @@ import (
 
 // history is what the history column lists, read together.
 type history struct {
-	commits []commit // the work tree's entry first where it has changes
+	commits []commit // the work tree's entry first
 	changes []change // the work tree's
 	branch  string
 	err     error
@@ -19,10 +19,14 @@ type history struct {
 func readHistory(repo string) history {
 	commits, err := loadCommits(repo, 500)
 	changes, _ := loadWorktreeChanges(repo)
+	// The work tree's entry always shows, for its files to read as they
+	// are on disk, with changes or none.
+	summary := "No changes"
 	if n := len(changes); n > 0 {
-		wt := commit{Hash: worktree, Subject: "Uncommitted Changes", Summary: count(n, "file") + " changed"}
-		commits = append([]commit{wt}, commits...)
+		summary = count(n, "file") + " changed"
 	}
+	wt := commit{Hash: worktree, Subject: "Uncommitted Changes", Summary: summary}
+	commits = append([]commit{wt}, commits...)
 	return history{commits: commits, changes: changes, branch: currentBranch(repo), err: err}
 }
 
@@ -71,7 +75,7 @@ func (a *app) applyHistory(h history) {
 	row := a.rowOf(shown)
 	a.loadedRow, a.filesFor = row, -1
 	if row < 0 {
-		return // gone, as the work tree once committed: sync loads the chosen
+		return // gone, as a commit amended: sync loads the chosen
 	}
 	if filesShown {
 		a.filesFor = row

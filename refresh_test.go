@@ -45,7 +45,8 @@ func TestRefresh(t *testing.T) {
 	}
 
 	// Choose the first commit, then commit everything: the work tree's
-	// entry goes, a commit comes, and the first stays chosen.
+	// entry stays with no changes, a commit comes, and the first stays
+	// chosen.
 	a.commitRow = 1
 	tt.Frame()
 	first := a.commits[1].Hash
@@ -57,8 +58,8 @@ func TestRefresh(t *testing.T) {
 	}
 	a.refresh()
 	settle(tt)
-	if len(a.commits) != 2 || a.commits[0].Subject != "Second" {
-		t.Fatalf("commits %+v, want Second over the first", a.commits)
+	if len(a.commits) != 3 || a.commits[0].Hash != worktree || a.commits[0].Summary != "No changes" || a.commits[1].Subject != "Second" {
+		t.Fatalf("commits %+v, want the clean work tree, then Second over the first", a.commits)
 	}
 	if cm, ok := a.current(); !ok || cm.Hash != first || a.commitRow != a.loadedRow {
 		t.Errorf("shown %+v (row %d, chosen %d), want the first commit", cm, a.loadedRow, a.commitRow)
@@ -87,5 +88,29 @@ func TestRefreshFiles(t *testing.T) {
 	}
 	if got := a.allTree.chosen(); got != "main.go" {
 		t.Errorf("tree chose %q, want main.go", got)
+	}
+}
+
+// A clean work tree still has its entry, whose files the files mode lists.
+func TestCleanWorktree(t *testing.T) {
+	repo := testRepo(t)
+	if _, err := git(repo, "add", "-A"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := git(repo, "-c", "user.name=Ada", "-c", "user.email=ada@example.com", "commit", "-q", "-m", "Second"); err != nil {
+		t.Fatal(err)
+	}
+	a, tt := testApp(t, repo, nil)
+	settle(tt)
+	if cm, ok := a.current(); !ok || cm.Hash != worktree || cm.Summary != "No changes" {
+		t.Fatalf("shown %+v, want the clean work tree", cm)
+	}
+	if !tt.HasText("No changes") {
+		t.Errorf("texts %q", tt.Texts())
+	}
+	a.setMode(modeFiles)
+	settle(tt)
+	if !a.allTree.has("main.go") || !a.allTree.has("docs/new.md") {
+		t.Errorf("work tree files %v", a.allTree.dirs)
 	}
 }
