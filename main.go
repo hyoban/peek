@@ -98,12 +98,12 @@ func newApp(repo string) *app {
 
 const titleBarHeight = 52 // the height of an inset title bar
 
-// The sizes of text, a little larger than the system's 13.
+// The sizes of text, the system's: 13 for the body, 11 for captions and
+// 12 for code, as Xcode's, which the user scales in their preferences.
 const (
-	fontSize  = 15
-	smallSize = 13 // secondary text
-	badgeSize = 11 // the letters of the status badges
-	codeSize  = 14
+	fontSize  = 13
+	smallSize = 11 // secondary text
+	codeSize  = 12
 )
 
 // themed sets this pass's theme: the system's, its text at the app's size
@@ -130,10 +130,8 @@ func (a *app) view(c *ui.Context) {
 	a.building = true
 	defer func() { a.building = false }()
 	a.themed(c)
-	c.OnShortcut(ui.Cmd, ui.Key1, func() { a.showHistory = !a.showHistory })
-	c.OnShortcut(ui.Cmd, ui.Key2, func() { a.showTree = !a.showTree })
-	c.OnShortcut(ui.Cmd|ui.Shift, ui.KeyE, func() { a.setMode(modeChanges) })
-	c.OnShortcut(ui.Cmd|ui.Shift, ui.KeyF, func() { a.setMode(modeFiles) })
+	// The shortcuts are the View menu's (viewMenu), as the menu bar holds
+	// every command of a Mac app.
 
 	// The toolbar stays as it is whichever columns show, so its controls
 	// never move. The tree and the text keep their places whichever mode
@@ -191,72 +189,40 @@ func endSplit(c *ui.Context, size *float32, end, rest func()) ui.Element {
 	})
 }
 
-// toolbar is the window's title bar: the tree's toggle beside the traffic
-// lights, then the repository, the mode in the middle, and the version
-// shown and the history's toggle at the end, over their columns.
+// toolbar is the window's title bar, a toolbar as macOS draws one: the
+// sidebar's button beside the traffic lights, then the project, the mode
+// in the middle, and the history's button at the end, over its column.
+// Its controls take no face until hovered, Tab stops on it once and the
+// arrows move among them.
 func (a *app) toolbar(c *ui.Context) {
 	t := c.Theme()
 	bar := c.TitleBar()
 	ui.Row(c).Height(titleBarHeight).Shrink(0).FillWidth().AlignItems(ui.Center).
-		Gap(t.Space(2)).Padding(0, bar.Right+t.Space(3), 0, bar.Left+t.Space(3)).DragWindow().
+		Padding(0, bar.Right+t.Space(2), 0, bar.Left+t.Space(2)).DragWindow().
 		Background(t.Surface).Children(func() {
-		a.toggle(c, "tree", filesIcon, &a.showTree, true, "File Tree (⌘2)")
-		ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Gap(t.Space(1)).Children(func() {
-			a.projectTitle(c)
-			if a.github != "" {
-				a.linkButton(c, "github", githubIcon, "Open on GitHub", a.github)
-			}
-		})
-		a.modeSwitch(c)
-		ui.Row(c).Grow(1).Basis(0).MinWidth(0).Justify(ui.End).AlignItems(ui.Center).Children(func() {
-			if cm, ok := a.current(); ok {
-				label, mono := "Working Tree", false
-				if cm.Hash != worktree {
-					label, mono = cm.Short, true
+		ui.Toolbar(c, func() {
+			a.paneButton(c, "sidebar", sidebarIcon, &a.showTree, "Sidebar")
+			ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Gap(t.Space(1)).Children(func() {
+				a.projectTitle(c)
+				if a.github != "" {
+					a.linkButton(c, "github", githubIcon, "Open on GitHub", a.github)
 				}
-				chip := ui.Text(c, label).FontSize(smallSize).TextColor(t.TextMuted).SingleLine().
-					Padding(2, t.Space(2)).Radius(999).Background(t.Text.Alpha(0.07)).Tooltip("The version shown")
-				if mono {
-					chip.Font(monoFamily)
-				}
-			}
-		})
-		a.toggle(c, "history", historyIcon, &a.showHistory, true, "History (⌘1)")
+			})
+			a.modeChoice = a.mode
+			ui.Segmented(c.Key("mode"), &a.modeChoice, "Changes", "Files").Shrink(0).Label("Mode").
+				OnChange(func() { a.setMode(a.modeChoice) })
+			ui.Row(c).Grow(1).Basis(0).MinWidth(0)
+			a.paneButton(c, "history", historyIcon, &a.showHistory, "History")
+		}).Grow(1).MinWidth(0).Padding(0).Label("Toolbar")
 	})
 }
 
-// modeSwitch chooses between the changes and the files, as the segmented
-// controls of macOS toolbars: a recessed track and a raised segment.
-func (a *app) modeSwitch(c *ui.Context) {
-	t := c.Theme()
-	a.modeChoice = a.mode
-	seg := ui.SegmentedBase(c.Key("mode"), &a.modeChoice, 2)
-	seg.Track.Shrink(0).Padding(2).Gap(2).Radius(9).Background(t.Text.Alpha(0.06)).Label("Show").
-		OnChange(func() { a.setMode(a.modeChoice) })
-	seg.Track.Children(func() {
-		for i, svg := range []*ui.SVG{changesIcon, browseIcon} {
-			label := []string{"Changes", "Files"}[i]
-			chosen := i == a.mode
-			s := seg.Segment(i).Height(26).Padding(0, t.Space(3)).Radius(7).Gap(t.Space(1.5)).
-				AlignItems(ui.Center).TextColor(t.TextMuted).Label(label)
-			switch {
-			case chosen && t.Dark:
-				s.Background(t.Text.Alpha(0.16)).TextColor(t.Text)
-			case chosen:
-				s.Background(t.Background).TextColor(t.Text).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.12))
-			case s.Hovered():
-				s.TextColor(t.Text)
-			}
-			s.Children(func() {
-				ui.Icon(c, svg).Size(15, 15)
-				ui.Text(c, label).FontSize(smallSize + 1).FontWeight(500).SingleLine()
-				if n := len(a.changes); i == modeChanges && n > 0 {
-					ui.Textf(c, "%d", n).FontSize(smallSize-1).FontWeight(600).TextColor(t.TextMuted).
-						Padding(0, 6).Radius(999).Background(t.Text.Alpha(0.08))
-				}
-			})
-		}
-	})
+// paneButton shows or hides a column, as the sidebar buttons of macOS
+// toolbars: an icon alone, named for what a click does.
+func (a *app) paneButton(c *ui.Context, key string, svg *ui.SVG, on *bool, pane string) {
+	action := showOrHide(*on, pane)
+	ui.Button(c.Key(key), "").Shrink(0).Label(action).Tooltip(action).
+		Children(func() { ui.Icon(c, svg).Size(16, 16) }).OnClick(func() { *on = !*on })
 }
 
 // projectTitle is the title and subtitle of the window, as Xcode's
@@ -264,12 +230,12 @@ func (a *app) modeSwitch(c *ui.Context) {
 func (a *app) projectTitle(c *ui.Context) {
 	t := c.Theme()
 	b := ui.ButtonBase(c.Key("project")).Bind(&a.titleButton).Shrink(1).MinWidth(0).
-		Padding(2, t.Space(2)).Radius(7).Label("Switch Project").Tooltip(a.repo)
+		Padding(t.Space(0.5), t.Space(2)).Radius(t.Radius).Label("Switch Project").Tooltip(a.repo)
 	switch {
 	case b.Pressed():
-		b.Background(t.Text.Alpha(0.12))
+		b.Background(t.SurfacePressed)
 	case b.Hovered():
-		b.Background(t.Text.Alpha(0.07))
+		b.Background(t.SurfaceHover)
 	}
 	b.OnClick(func() {
 		if a.projects != nil {
@@ -281,7 +247,7 @@ func (a *app) projectTitle(c *ui.Context) {
 		ui.Column(c).MinWidth(0).Children(func() {
 			ui.Row(c).MinWidth(0).Gap(t.Space(1)).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, path.Base(a.repo)).FontWeight(700).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
-				ui.Icon(c, chevronIcon).Size(11, 11).Shrink(0).TextColor(t.TextMuted)
+				ui.Icon(c, chevronIcon).Size(9, 9).Shrink(0).TextColor(t.TextMuted)
 			})
 			if a.branch != "" {
 				ui.Text(c, a.branch).FontSize(smallSize).TextColor(t.TextMuted).SingleLine().Ellipsis("…")
@@ -292,37 +258,9 @@ func (a *app) projectTitle(c *ui.Context) {
 
 // linkButton opens the page in the browser, its icon alone.
 func (a *app) linkButton(c *ui.Context, key string, svg *ui.SVG, label, url string) {
-	t := c.Theme()
 	services := c.Services()
-	b := ui.ButtonBase(c.Key(key)).Size(28, 28).Shrink(0).Radius(7).Center().
-		TextColor(t.TextMuted).Label(label).Tooltip(label + " — " + strings.TrimPrefix(url, "https://"))
-	switch {
-	case b.Pressed():
-		b.Background(t.Text.Alpha(0.12)).TextColor(t.Text)
-	case b.Hovered():
-		b.Background(t.Text.Alpha(0.07)).TextColor(t.Text)
-	}
-	b.Children(func() { ui.Icon(c, svg).Size(16, 16) }).OnClick(func() { services.OpenURL(url) })
-}
-
-// toggle shows or hides a column, its icon in the text's colour while the
-// column shows, as the toolbar buttons of macOS are.
-func (a *app) toggle(c *ui.Context, key string, svg *ui.SVG, on *bool, enabled bool, label string) {
-	t := c.Theme()
-	b := ui.ButtonBase(c.Key(key)).Size(32, 28).Shrink(0).Radius(7).Center().
-		TextColor(t.TextMuted).Label(label).Tooltip(label).Disabled(!enabled)
-	switch {
-	case !enabled:
-		b.Opacity(0.3)
-	case b.Pressed():
-		b.Background(t.Text.Alpha(0.12))
-	case b.Hovered():
-		b.Background(t.Text.Alpha(0.07))
-	}
-	if enabled && *on {
-		b.TextColor(t.Text)
-	}
-	b.Children(func() { ui.Icon(c, svg).Size(17, 17) }).OnClick(func() { *on = !*on })
+	ui.Button(c.Key(key), "").Shrink(0).Label(label).Tooltip(label + " — " + strings.TrimPrefix(url, "https://")).
+		Children(func() { ui.Icon(c, svg).Size(16, 16) }).OnClick(func() { services.OpenURL(url) })
 }
 
 // column builds one of the window's columns, all alike: the background,
@@ -331,9 +269,9 @@ func (a *app) toggle(c *ui.Context, key string, svg *ui.SVG, on *bool, enabled b
 func column(c *ui.Context, title, detail string, body func()) {
 	t := c.Theme()
 	ui.Column(c).Fill().Background(t.Background).Children(func() {
-		ui.Row(c).Height(38).Shrink(0).FillWidth().AlignItems(ui.Center).Gap(t.Space(2)).
+		ui.Row(c).Height(30).Shrink(0).FillWidth().AlignItems(ui.Center).Gap(t.Space(2)).
 			Padding(0, t.Space(3)).Children(func() {
-			ui.Text(c, title).FontSize(smallSize).FontWeight(600).SingleLine().Ellipsis("…").
+			ui.Text(c, title).FontWeight(600).SingleLine().Ellipsis("…").
 				Grow(1).MinWidth(0).Tooltip(title)
 			if detail != "" {
 				ui.Text(c, detail).FontSize(smallSize).TextColor(t.TextMuted).SingleLine().Shrink(0)
@@ -376,7 +314,7 @@ func (a *app) history(c *ui.Context) {
 			emptyNote(c, a.err)
 			return
 		case len(a.commits) == 0:
-			emptyNote(c, "Loading…")
+			loading(c)
 			return
 		}
 		a.commitList.Selected = &a.commitRow
@@ -431,7 +369,7 @@ func (a *app) treePane(c *ui.Context) {
 	}
 	column(c, title, "", func() {
 		if tree.dirs == nil {
-			emptyNote(c, "Loading…")
+			loading(c)
 			return
 		}
 		a.treeView(c.Key(key), tree, label)
@@ -505,6 +443,14 @@ func statusMark(c *ui.Context, status string, onAccent bool) {
 	}
 	ui.Text(c, status).FontSize(smallSize).FontWeight(600).TextColor(color).
 		TextAlign(ui.Center).Width(16).Shrink(0)
+}
+
+// loading is a column whose content loads, as AppKit's spinning
+// indicator in the middle.
+func loading(c *ui.Context) {
+	ui.Column(c).Grow(1).FillWidth().Center().Children(func() {
+		ui.Spinner(c).Label("Loading")
+	})
 }
 
 func emptyNote(c *ui.Context, note string) {
@@ -758,6 +704,7 @@ func main() {
 				{Role: mygo.RoleClose},
 			}},
 			{Role: mygo.RoleEditMenu},
+			p.viewMenu(),
 			{Role: mygo.RoleWindowMenu},
 		}))
 		p.win = mygo.NewWindow(mygo.WindowOptions{

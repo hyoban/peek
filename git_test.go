@@ -122,7 +122,7 @@ func TestFilesMode(t *testing.T) {
 
 func TestStackedDiffs(t *testing.T) {
 	repo := testRepo(t)
-	for i := range 30 {
+	for i := range 40 {
 		os.WriteFile(filepath.Join(repo, fmt.Sprintf("z%02d.txt", i)), []byte(strings.Repeat("line\n", 20)), 0o644)
 	}
 	a, tt := testApp(t, repo, nil)
@@ -130,7 +130,7 @@ func TestStackedDiffs(t *testing.T) {
 	for _, d := range a.diffs {
 		order = append(order, d.change.Path)
 	}
-	if len(order) != 33 || order[0] != "main.go" || order[1] != "docs/new.md" || order[2] != "old.txt" {
+	if len(order) != 43 || order[0] != "main.go" || order[1] != "docs/new.md" || order[2] != "old.txt" {
 		t.Fatalf("diff order %q, want code, then docs, each in the tree's order", order[:min(len(order), 4)])
 	}
 	if !tt.HasText("main.go") || !tt.HasText("old.txt") {
@@ -139,19 +139,19 @@ func TestStackedDiffs(t *testing.T) {
 	if a.diffs[0].state == nil {
 		t.Error("the diff of main.go in view did not load")
 	}
-	if a.diffs[32].state != nil || a.diffs[32].loading {
+	if a.diffs[42].state != nil || a.diffs[42].loading {
 		t.Error("the diff of the last file loaded before it came into view")
 	}
 
-	a.changeTree.show("z29.txt")
+	a.changeTree.show("z39.txt")
 	settle(tt)
-	if a.file != "z29.txt" || a.diffs[32].state == nil {
-		t.Errorf("file %q after choosing z29.txt in the tree; its diff loaded: %v", a.file, a.diffs[32].state != nil)
+	if a.file != "z39.txt" || a.diffs[42].state == nil {
+		t.Errorf("file %q after choosing z39.txt in the tree; its diff loaded: %v", a.file, a.diffs[42].state != nil)
 	}
-	if first, last := a.diffList.Visible(); headerRow(32) < first || headerRow(32) > last {
-		t.Errorf("rows %d–%d in view, want z29.txt's header %d", first, last, headerRow(32))
+	if first, last := a.diffList.Visible(); headerRow(42) < first || headerRow(42) > last {
+		t.Errorf("rows %d–%d in view, want z39.txt's header %d", first, last, headerRow(42))
 	}
-	if got := a.changeTree.chosen(); got != "z29.txt" {
+	if got := a.changeTree.chosen(); got != "z39.txt" {
 		t.Errorf("tree chose %q after the scroll settled", got)
 	}
 

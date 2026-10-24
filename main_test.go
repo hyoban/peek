@@ -65,13 +65,13 @@ func TestPanelsToggle(t *testing.T) {
 	if !tt.HasText("1 commit") {
 		t.Fatalf("history not shown, texts %q", tt.Texts())
 	}
-	if err := tt.Click("History (⌘1)"); err != nil {
+	if err := tt.Click("Hide History"); err != nil {
 		t.Fatal(err)
 	}
 	if a.showHistory || tt.HasText("1 commit") {
 		t.Errorf("history still shown after toggling it off, texts %q", tt.Texts())
 	}
-	if err := tt.Click("File Tree (⌘2)"); err != nil {
+	if err := tt.Click("Hide Sidebar"); err != nil {
 		t.Fatal(err)
 	}
 	if a.showTree {

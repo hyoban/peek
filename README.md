@@ -36,10 +36,10 @@ All of the commit's files, to read any of them as it was then.
 | Shortcut | Action |
 | --- | --- |
 | <kbd>⌘</kbd> <kbd>O</kbd> | Open a folder |
-| <kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>E</kbd> | Changes mode |
-| <kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>F</kbd> | Files mode |
-| <kbd>⌘</kbd> <kbd>1</kbd> | Show or hide the history |
-| <kbd>⌘</kbd> <kbd>2</kbd> | Show or hide the file tree |
+| <kbd>⌘</kbd> <kbd>1</kbd> | Changes mode |
+| <kbd>⌘</kbd> <kbd>2</kbd> | Files mode |
+| <kbd>⌃</kbd> <kbd>⌘</kbd> <kbd>S</kbd> | Show or hide the sidebar |
+| <kbd>⌃</kbd> <kbd>⌘</kbd> <kbd>I</kbd> | Show or hide the history |
 
 ## Usage
 

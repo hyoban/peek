@@ -269,16 +269,17 @@ func (a *app) diffHeader(c *ui.Context, d *fileDiff) {
 	t := c.Theme()
 	ch := d.change
 	dir, name := path.Split(ch.Path)
-	bar := ui.Row(c).FillWidth().Height(40).AlignItems(ui.Center).Gap(t.Space(2)).Padding(0, t.Space(4)).
+	bar := ui.Row(c).FillWidth().Height(32).AlignItems(ui.Center).Gap(t.Space(2)).Padding(0, t.Space(4)).
 		Background(t.Surface).BorderColor(t.Border.Alpha(0.6)).BorderWidth(0, 0, 1)
 	if d.read {
 		// A click on a read file's bar shows its diff again, or folds it,
-		// as GitHub's Viewed files open: still marked read.
-		bar.KeepFocus().Cursor(ui.CursorPointer).OnClick(func() { d.opened = !d.opened })
+		// as GitHub's Viewed files open: still marked read. The arrow,
+		// not a pointing hand, tells it, as the hand is for links on a Mac.
+		bar.KeepFocus().OnClick(func() { d.opened = !d.opened })
 	}
 	bar.Children(func() {
 		if d.read {
-			chevron := ui.Icon(c, chevronIcon).Size(12, 12).Shrink(0).TextColor(t.TextMuted)
+			chevron := ui.Icon(c, chevronIcon).Size(10, 10).Shrink(0).TextColor(t.TextMuted)
 			if d.folded() {
 				chevron.Rotate(-90)
 			}
@@ -314,7 +315,7 @@ func (a *app) diffBody(c *ui.Context, d *fileDiff) {
 	case d.note != "":
 		ui.Text(c, d.note).TextColor(t.TextMuted).Padding(t.Space(4), t.Space(3))
 	case d.state == nil:
-		ui.Text(c, "Loading…").TextColor(t.TextMuted).Padding(t.Space(4), t.Space(3))
+		ui.Row(c).FillWidth().Padding(t.Space(4), t.Space(3)).Children(func() { ui.Spinner(c).Label("Loading") })
 	default:
 		editor.DiffView(c.Key("diff:"+d.change.Path), d.state).FillWidth().Padding(0, 0, t.Space(4))
 	}
