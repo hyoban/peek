@@ -210,12 +210,44 @@ func (a *app) toolbar(c *ui.Context) {
 				}
 			})
 			a.modeChoice = a.mode
-			ui.Segmented(c.Key("mode"), &a.modeChoice, "Changes", "Files").Shrink(0).Label("Mode").
+			modeSwitch(c.Key("mode"), &a.modeChoice, "Changes", "Files").Label("Mode").
 				OnChange(func() { a.setMode(a.modeChoice) })
 			ui.Row(c).Grow(1).Basis(0).MinWidth(0)
 			a.paneButton(c, "history", historyIcon, &a.showHistory, "History")
 		}).Grow(1).MinWidth(0).Padding(0).Label("Toolbar")
 	})
+}
+
+// modeSwitch is a segmented control as macOS toolbars draw it: a filled
+// track without a border, 24 points tall, of segments as wide as one
+// another, the chosen one raised from it.
+func modeSwitch(c *ui.Context, selected *int, labels ...string) ui.Element {
+	t := c.Theme()
+	const pad, inset = 10, 2
+	var widest float32
+	for _, label := range labels {
+		w, _ := c.MeasureText(0, ui.Span{Text: label, Size: t.FontSize})
+		widest = max(widest, w)
+	}
+	track, chosen, hover := ui.RGBA(0, 0, 0, 0.06), ui.Hex("#ffffff"), ui.RGBA(0, 0, 0, 0.04)
+	if t.Dark {
+		track, chosen, hover = ui.RGBA(255, 255, 255, 0.1), ui.RGBA(255, 255, 255, 0.24), ui.RGBA(255, 255, 255, 0.06)
+	}
+	parts := ui.SegmentedBase(c, selected, len(labels))
+	parts.Track.Height(24).AlignItems(ui.Stretch).Padding(inset).Gap(inset).Radius(7).Background(track)
+	parts.Track.Children(func() {
+		for i, label := range labels {
+			s := parts.Segment(i).Width(widest + 2*pad).Radius(5).TextColor(t.Text)
+			switch {
+			case i == *selected:
+				s.Background(chosen).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.15))
+			case s.Hovered():
+				s.Background(hover)
+			}
+			s.Children(func() { ui.Text(c, label).FontSize(t.FontSize).SingleLine() })
+		}
+	})
+	return parts.Track
 }
 
 // paneButton shows or hides a column, as the sidebar buttons of macOS
