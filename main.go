@@ -711,7 +711,7 @@ func main() {
 			{Role: mygo.RoleWindowMenu},
 		}))
 		p.win = mygo.NewWindow(mygo.WindowOptions{
-			Title:     "peek",
+			Title:     "Peek",
 			Width:     1440,
 			Height:    900,
 			MinWidth:  640,

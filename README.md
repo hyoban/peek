@@ -1,4 +1,4 @@
-# peek
+# Peek
 
 A native git diff viewer for macOS, built in Go with [MyGo](https://github.com/egoist/mygo).
 
@@ -49,9 +49,9 @@ Requires Go 1.27 or later, and `git` on your `PATH`.
 go run . path/to/repository
 ```
 
-Without a path, peek opens the repository you are in, or the last one it opened.
+Without a path, Peek opens the repository you are in, or the last one it opened.
 
-To build `peek.app` and a `.dmg` into `build/`:
+To build `Peek.app` and a `.dmg` into `build/`:
 
 ```bash
 go tool mygo build
