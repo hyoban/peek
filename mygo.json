@@ -1,6 +1,12 @@
 {
   "name": "peek",
-  "identifier": "com.example.peek",
+  "identifier": "cc.hyoban.peek",
   "version": "0.1.0",
-  "out": "build"
+  "copyright": "Copyright © 2026 Stephen Zhou",
+  "out": "build",
+  "macos": {
+    "infoPlist": {
+      "LSApplicationCategoryType": "public.app-category.developer-tools"
+    }
+  }
 }

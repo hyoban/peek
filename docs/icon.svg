@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#363f56"/><stop offset="1" stop-color="#151a25"/>
+    </linearGradient>
+    <linearGradient id="sheet" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#edf0f5"/>
+    </linearGradient>
+    <linearGradient id="back" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8590a6"/><stop offset="1" stop-color="#5d6880"/>
+    </linearGradient>
+    <linearGradient id="fold" x1="790" y1="640" x2="680" y2="750" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#b9c1cf"/><stop offset=".55" stop-color="#f4f6fa"/><stop offset="1" stop-color="#ffffff"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000" flood-opacity="0.32"/>
+    </filter>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#000" flood-opacity="0.45"/>
+    </filter>
+    <filter id="curl" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="-8" dy="-8" stdDeviation="12" flood-color="#0b1020" flood-opacity="0.35"/>
+    </filter>
+    <path id="pagep" d="M266 236 h492 a28 28 0 0 1 28 28 v376 l-170 170 h-350 a28 28 0 0 1 -28 -28 v-518 a28 28 0 0 1 28 -28z"/>
+    <clipPath id="page"><use href="#pagep"/></clipPath>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)" filter="url(#shadow)"/>
+  <rect x="100.5" y="100.5" width="823" height="823" rx="184.5" fill="none" stroke="#fff" stroke-opacity=".08"/>
+
+  <g transform="translate(-14 0)">
+  <!-- the commit before, beneath -->
+  <rect x="294" y="204" width="520" height="574" rx="28" fill="url(#back)" filter="url(#soft)"/>
+
+  <use href="#pagep" fill="url(#sheet)" filter="url(#soft)"/>
+  <g clip-path="url(#page)">
+    <rect x="304" y="292" width="300" height="34" rx="17" fill="#c6cdd9"/>
+    <rect x="238" y="358" width="560" height="74" fill="#ffe0e0"/>
+    <rect x="238" y="358" width="14" height="74" fill="#ef4b55"/>
+    <rect x="304" y="378" width="360" height="34" rx="17" fill="#ef4b55"/>
+    <rect x="238" y="440" width="560" height="148" fill="#d9f6e1"/>
+    <rect x="238" y="440" width="14" height="148" fill="#1fae5b"/>
+    <rect x="304" y="460" width="400" height="34" rx="17" fill="#1fae5b"/>
+    <rect x="304" y="534" width="250" height="34" rx="17" fill="#1fae5b"/>
+    <rect x="304" y="622" width="230" height="34" rx="17" fill="#c6cdd9"/>
+    <rect x="304" y="696" width="170" height="34" rx="17" fill="#c6cdd9"/>
+  </g>
+  <!-- lifted corner: the page's back, folded up toward the middle -->
+  <path d="M786 640 L616 810 Q646 700 786 640z" fill="url(#fold)" filter="url(#curl)"/>
+  </g>
+</svg>
