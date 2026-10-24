@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -15,33 +16,26 @@ type pushState struct {
 }
 
 func (a *app) pushButton(c *ui.Context) {
-	label := "Push"
-	if a.push.running {
+	label, tooltip := "Push", "Commit all changes with Codex and push"
+	switch {
+	case a.push.running:
 		label = "Pushing…"
-	}
-	ui.Button(c.Key("push"), label).Shrink(0).Disabled(a.push.running).
-		Tooltip("Commit all changes with Codex and push").OnClick(a.startPush)
-}
-
-func (a *app) pushStatus(c *ui.Context) {
-	if a.push.status == "" {
-		return
-	}
-	t := c.Theme()
-	ui.Row(c).Key("push-status").FillWidth().Shrink(0).AlignItems(ui.Center).
-		Padding(t.Space(1), t.Space(3)).Gap(t.Space(2)).Background(t.Surface).Children(func() {
-		label := a.push.status
-		if a.push.failed {
-			label = "Push failed: " + label
+		if phase, _, ok := strings.Cut(a.push.status, " "); ok {
+			label = phase + "…"
 		}
-		ui.Text(c, label).SingleLine().Ellipsis("…").Grow(1).MinWidth(0).Tooltip(label)
+		tooltip = a.push.status + "\nClick to cancel"
+	case a.push.failed:
+		label, tooltip = "Push failed", a.push.status+"\nClick to retry"
+	case a.push.status != "":
+		label, tooltip = "Pushed", a.push.status+"\nClick to push again"
+	}
+	ui.Button(c.Key("push"), label).Shrink(0).Tooltip(tooltip).OnClick(func() {
 		if a.push.running {
-			ui.Button(c.Key("cancel-push"), "Cancel").OnClick(func() { a.push.cancel() })
-		} else {
-			ui.Button(c.Key("dismiss-push"), "Dismiss").OnClick(func() { a.push.status = "" })
+			a.push.cancel()
+			return
 		}
+		a.startPush()
 	})
-	ui.Divider(c)
 }
 
 func (a *app) startPush() {

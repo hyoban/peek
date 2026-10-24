@@ -67,10 +67,11 @@ branch. With no new changes, Push sends existing commits without calling Codex.
 Git's push-remote settings are respected; otherwise Peek uses `origin` or the
 only configured remote. No pull request is created.
 
-Progress and errors appear below the toolbar. Authentication, network and
+The Push button shows progress and the result; hover it for details. Click it
+while running to cancel, or after a failure to retry. Authentication, network and
 non-fast-forward failures stop the operation; Peek does not force-push or
 automatically merge. Failed attempts retain staged changes and any local commit
-for a retry. Hover the status to read the full error. Commit message generation
+for a retry. Commit message generation
 supports staged diffs up to 256 KiB; larger changes can be committed manually
 before clicking Push.
 

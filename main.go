@@ -158,7 +158,6 @@ func (a *app) view(c *ui.Context) {
 	ui.Column(c).Fill().Children(func() {
 		a.toolbar(c)
 		ui.Divider(c)
-		a.pushStatus(c)
 		ui.Row(c).Grow(1).FillWidth().MinHeight(0).Children(func() {
 			if history {
 				endSplit(c, &a.historyWidth, func() { a.history(c) }, rest).Fill()

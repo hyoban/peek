@@ -214,26 +214,16 @@ func TestPushUI(t *testing.T) {
 		t.Fatal(err)
 	}
 	settle(tt)
-	if a.push.running || a.push.failed || !tt.HasText("Pushed to origin/main") {
+	if a.push.running || a.push.failed || !tt.HasText("Pushed") {
 		t.Fatalf("push state %+v; texts %q", a.push, tt.Texts())
 	}
 	if a.commits[0].Summary != "No changes" || a.commits[1].Subject != "Update the files" {
 		t.Fatalf("stale history: %+v", a.commits)
 	}
-	if err := tt.Click("Dismiss"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Frame()
-	if a.push.status != "" {
-		t.Fatal("status not dismissed")
-	}
 	cancelled := false
 	a.push = pushState{running: true, status: "Generating commit message with Codex…", cancel: func() { cancelled = true }}
 	tt.Frame()
-	if err := tt.Click("Pushing…"); err == nil && !a.push.running {
-		t.Fatal("running push triggered again")
-	}
-	if err := tt.Click("Cancel"); err != nil {
+	if err := tt.Click("Generating…"); err != nil {
 		t.Fatal(err)
 	}
 	if !cancelled {
@@ -241,11 +231,18 @@ func TestPushUI(t *testing.T) {
 	}
 	a.push = pushState{failed: true, status: "Test failure"}
 	tt.Frame()
-	if !tt.HasText("Push failed: Test failure") {
+	if !tt.HasText("Push failed") {
 		t.Fatal(tt.Texts())
 	}
 	for range 3 {
 		tt.Frame()
+	}
+	if err := tt.Click("Push failed"); err != nil {
+		t.Fatal(err)
+	}
+	settle(tt)
+	if !tt.HasText("Pushed") {
+		t.Fatal("retry did not finish", tt.Texts())
 	}
 }
 
