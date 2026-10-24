@@ -76,7 +76,8 @@ type app struct {
 	filesFor int    // the row of the commit whose files are listed, or load; -1 for none
 	openFile string // the file whose text shows, or loads
 	code     *editor.State
-	codeNote string // why the text does not show
+	picture  ui.ImageSource // the file's picture, in place of code
+	codeNote string         // why the text does not show
 }
 
 func newApp(repo string) *app {
@@ -461,13 +462,20 @@ func emptyNote(c *ui.Context, note string) {
 
 func (a *app) codePane(c *ui.Context) {
 	detail := ""
-	if a.openFile != "" {
+	switch {
+	case a.picture != nil:
+		detail = pictureSize(a.picture)
+	case a.openFile != "":
 		detail = "Read only"
 	}
 	column(c, a.openFile, detail, func() {
 		switch {
 		case a.codeNote != "":
 			emptyNote(c, a.codeNote)
+		case a.picture != nil:
+			ui.Column(c).Grow(1).FillWidth().Center().Padding(c.Theme().Space(4)).Children(func() {
+				ui.Image(c, a.picture).Fit(ui.ScaleDown).MaxWidthPercent(100).MaxHeightPercent(100)
+			})
 		case a.code == nil:
 			emptyNote(c, "No file selected")
 		default:
@@ -650,7 +658,7 @@ func (a *app) loadFiles(hash string) {
 			if keep == "" {
 				keep = a.file
 			}
-			a.openFile, a.code, a.codeNote = "", nil, ""
+			a.openFile, a.code, a.picture, a.codeNote = "", nil, nil, ""
 			a.openInFiles(hash, keep)
 		}
 	})
@@ -659,17 +667,14 @@ func (a *app) loadFiles(hash string) {
 func (a *app) loadText(hash, p string) {
 	a.background(func() func() {
 		text, err := fileText(a.repo, hash, p)
-		note := textNote(text)
-		if err != nil {
-			note = "Could not read this file"
-		}
+		picture, note := fileView(p, text, err)
 		var code *editor.State
-		if note == "" {
+		if note == "" && picture == nil {
 			code = &editor.State{Buffer: codeBuffer(p, text), ReadOnly: true, SoftWrap: true, Font: codeFont, Theme: codeTheme}
 		}
 		return func() {
 			if p == a.openFile {
-				a.code, a.codeNote = code, note
+				a.code, a.picture, a.codeNote = code, picture, note
 			}
 		}
 	})

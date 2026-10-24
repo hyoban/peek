@@ -17,7 +17,8 @@ import (
 type fileDiff struct {
 	change  change
 	state   *editor.DiffState
-	note    string // why the diff does not show
+	picture *pictureDiff // the diff of a changed picture, in place of state
+	note    string       // why the diff does not show
 	loading bool
 	stale   bool // the file may have changed since it loaded
 	read    bool // marked read: its diff folds away under its header
@@ -306,7 +307,7 @@ func (a *app) diffHeader(c *ui.Context, d *fileDiff) {
 
 func (a *app) diffBody(c *ui.Context, d *fileDiff) {
 	t := c.Theme()
-	if (d.state == nil && d.note == "" || d.stale) && !d.loading {
+	if (d.state == nil && d.picture == nil && d.note == "" || d.stale) && !d.loading {
 		a.loadDiff(d) // for its counts too, where it is read
 	}
 	switch {
@@ -314,6 +315,8 @@ func (a *app) diffBody(c *ui.Context, d *fileDiff) {
 		ui.Row(c).FillWidth().Height(0)
 	case d.note != "":
 		ui.Text(c, d.note).TextColor(t.TextMuted).Padding(t.Space(4), t.Space(3))
+	case d.picture != nil:
+		pictureDiffView(c, d.picture)
 	case d.state == nil:
 		ui.Row(c).FillWidth().Padding(t.Space(4), t.Space(3)).Children(func() { ui.Spinner(c).Label("Loading") })
 	default:
@@ -329,6 +332,15 @@ func (a *app) loadDiff(d *fileDiff) {
 	shown := d.state != nil // which a reload updates where it is
 	a.background(func() func() {
 		before, after := fileTexts(a.repo, cm.Hash, d.change)
+		if isBitmap(d.change.Path) && before != after {
+			picture, note := decodePictures(d.change.Path, before, after)
+			return func() {
+				d.loading = false
+				if gen == a.diffGen {
+					d.note, d.picture = note, picture
+				}
+			}
+		}
 		note := textNote(before, after)
 		if note == "" && before == after {
 			note = "Only the file's mode changed"

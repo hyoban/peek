@@ -167,6 +167,7 @@ func (a *app) reloadFiles() {
 		if open != "" {
 			text, textErr = fileText(a.repo, worktree, open)
 		}
+		picture, note := fileView(open, text, textErr)
 		return func() {
 			if cm, ok := a.current(); err != nil || !ok || cm.Hash != worktree || a.filesFor != a.loadedRow {
 				return
@@ -186,22 +187,18 @@ func (a *app) reloadFiles() {
 				return
 			}
 			if !a.allTree.has(open) {
-				a.openFile, a.code, a.codeNote = "", nil, "" // deleted
+				a.openFile, a.code, a.picture, a.codeNote = "", nil, nil, "" // deleted
 				return
 			}
 			a.allTree.show(open)
-			note := textNote(text)
-			if textErr != nil {
-				note = "Could not read this file"
-			}
 			switch {
-			case note != "":
-				a.code, a.codeNote = nil, note
+			case note != "" || picture != nil:
+				a.code, a.picture, a.codeNote = nil, picture, note
 			case a.code != nil:
 				resetText(a.code.Buffer, text)
 			default:
 				a.code = &editor.State{Buffer: codeBuffer(open, text), ReadOnly: true, SoftWrap: true, Font: codeFont, Theme: codeTheme}
-				a.codeNote = ""
+				a.picture, a.codeNote = nil, ""
 			}
 		}
 	})
