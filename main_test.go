@@ -123,3 +123,19 @@ func TestCompactFolders(t *testing.T) {
 		t.Errorf("show opened %v, want every folder above the file", tree.opened)
 	}
 }
+
+// The history's divider, at the end, follows the pointer: dragged to the
+// left, the history widens.
+func TestHistoryResize(t *testing.T) {
+	a, tt := testApp(t, testRepo(t), nil)
+	settle(tt)
+	x := float32(1200) - a.historyWidth - 0.5 // the divider, a DIP wide
+	tt.Press(x, 400)
+	tt.Move(x-50, 400)
+	tt.Move(x-100, 400)
+	tt.Release(x-100, 400)
+	tt.Frame()
+	if a.historyWidth < 440 || a.historyWidth > 480 {
+		t.Errorf("history width %v after dragging 100 to the left, want about 460", a.historyWidth)
+	}
+}

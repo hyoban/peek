@@ -139,10 +139,11 @@ func (a *app) view(c *ui.Context) {
 	}
 
 	// The toolbar stays as it is whichever columns show, so its controls
-	// never move; files mode is an editor's two columns, the tree and the
-	// text, without the history, which comes back with the changes. The
-	// toolbar changes the state in actions, after the pass, so that all of
-	// the pass sees the same.
+	// never move. The tree and the text keep their places whichever mode
+	// shows, the history at the end, as an inspector: files mode is an
+	// editor's two columns, without the history, which comes back with
+	// the changes. The toolbar changes the state in actions, after the
+	// pass, so that all of the pass sees the same.
 	history := a.showHistory && a.mode == modeChanges
 	content := func() {
 		if a.mode == modeFiles {
@@ -163,7 +164,7 @@ func (a *app) view(c *ui.Context) {
 		ui.Divider(c)
 		ui.Row(c).Grow(1).FillWidth().MinHeight(0).Children(func() {
 			if history {
-				ui.Split(c, &a.historyWidth, func() { a.history(c) }, rest).Fill()
+				endSplit(c, &a.historyWidth, func() { a.history(c) }, rest).Fill()
 			} else {
 				rest()
 			}
@@ -176,9 +177,27 @@ func (a *app) view(c *ui.Context) {
 	}
 }
 
-// toolbar is the window's title bar: the column toggles beside the
-// traffic lights, the repository, the mode in the middle and the version
-// shown at the end.
+// endSplit is Split with end at the end, *size its width, as a window's
+// inspector keeps its width while the window resizes: a Split laid out
+// the other way round, its panes the window's way.
+func endSplit(c *ui.Context, size *float32, end, rest func()) ui.Element {
+	dir, flipped := c.Direction(), ui.RightToLeft
+	if dir == ui.RightToLeft {
+		flipped = ui.LeftToRight
+	}
+	pane := func(build func()) func() {
+		return func() { ui.Column(c).Fill().Direction(dir).Children(build) }
+	}
+	// The direction is the Split's before it builds its divider, whose
+	// drags follow it.
+	return ui.Row(c).Direction(flipped).Children(func() {
+		ui.Split(c, size, pane(end), pane(rest)).Fill()
+	})
+}
+
+// toolbar is the window's title bar: the tree's toggle beside the traffic
+// lights, then the repository, the mode in the middle, and the version
+// shown and the history's toggle at the end, over their columns.
 func (a *app) toolbar(c *ui.Context) {
 	t := c.Theme()
 	bar := c.TitleBar()
@@ -188,15 +207,10 @@ func (a *app) toolbar(c *ui.Context) {
 		row.Background(t.Surface)
 	}
 	row.Children(func() {
-		historyLabel := "History (⌘1)"
-		if a.mode == modeFiles {
-			historyLabel = "History shows with Changes"
-		}
-		a.toggle(c, "history", historyIcon, &a.showHistory, a.mode == modeChanges, historyLabel)
 		a.toggle(c, "tree", filesIcon, &a.showTree, true, "File Tree (⌘2)")
 		ui.Row(c).Grow(1).Basis(0).MinWidth(0).Children(func() { a.projectTitle(c) })
 		a.modeSwitch(c)
-		ui.Row(c).Grow(1).Basis(0).MinWidth(0).Justify(ui.End).Children(func() {
+		ui.Row(c).Grow(1).Basis(0).MinWidth(0).Justify(ui.End).AlignItems(ui.Center).Children(func() {
 			if cm, ok := a.current(); ok {
 				label, mono := "Working Tree", false
 				if cm.Hash != worktree {
@@ -209,6 +223,11 @@ func (a *app) toolbar(c *ui.Context) {
 				}
 			}
 		})
+		historyLabel := "History (⌘1)"
+		if a.mode == modeFiles {
+			historyLabel = "History shows with Changes"
+		}
+		a.toggle(c, "history", historyIcon, &a.showHistory, a.mode == modeChanges, historyLabel)
 	})
 }
 

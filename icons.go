@@ -7,7 +7,7 @@ func icon(shapes string) *ui.SVG {
 }
 
 var (
-	historyIcon  = icon(`<rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M6 2.5v11"/>`)
+	historyIcon  = icon(`<rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M10 2.5v11"/>`)
 	filesIcon    = icon(`<path d="M2.5 2.5v9.5a1 1 0 0 0 1 1H6"/><path d="M2.5 6H6"/><rect x="7.5" y="4" width="6" height="4" rx="1"/><rect x="7.5" y="10" width="6" height="4" rx="1"/>`)
 	folderIcon   = icon(`<path d="M1.5 4.5a1 1 0 0 1 1-1h3.6l1.4 1.5h5.9a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1h-10.9a1 1 0 0 1-1-1z"/>`)
 	worktreeIcon = icon(`<path d="M10.5 2.5l3 3-7.5 7.5H3v-3z"/><path d="M8.5 4.5l3 3"/>`)
