@@ -134,9 +134,6 @@ func (a *app) view(c *ui.Context) {
 	c.OnShortcut(ui.Cmd, ui.Key2, func() { a.showTree = !a.showTree })
 	c.OnShortcut(ui.Cmd|ui.Shift, ui.KeyE, func() { a.setMode(modeChanges) })
 	c.OnShortcut(ui.Cmd|ui.Shift, ui.KeyF, func() { a.setMode(modeFiles) })
-	if c.Vibrancy() {
-		c.Root().Background(ui.Transparent)
-	}
 
 	// The toolbar stays as it is whichever columns show, so its controls
 	// never move. The tree and the text keep their places whichever mode
@@ -169,6 +166,11 @@ func (a *app) view(c *ui.Context) {
 			}
 		})
 	})
+	// The material shows through the root, cleared after the build:
+	// SetTheme, which the lists call for their focus, makes it opaque.
+	if c.Vibrancy() {
+		c.Root().Background(ui.Transparent)
+	}
 	a.sync(c)
 	if a.redraw {
 		a.redraw = false
@@ -344,11 +346,8 @@ func sectionTitle(c *ui.Context, title string) {
 
 func (a *app) history(c *ui.Context) {
 	t := c.Theme()
-	col := ui.Column(c).Fill()
-	if !c.Vibrancy() {
-		col.Background(t.Surface)
-	}
-	col.Children(func() {
+	// Solid, as the tree: only the toolbar shows the material.
+	ui.Column(c).Fill().Background(t.Surface).Children(func() {
 		columnHeader(c, func() {
 			sectionTitle(c, "History")
 			ui.Spacer(c)
@@ -420,9 +419,6 @@ func (a *app) treePane(c *ui.Context) {
 	if a.mode == modeFiles {
 		title, key, tree, label = "Files", "all", &a.allTree, "Files"
 		col.Background(t.Surface) // the editor's sidebar
-		if c.Vibrancy() {
-			col.Background(ui.Transparent)
-		}
 	}
 	col.Children(func() {
 		columnHeader(c, func() { sectionTitle(c, title) })
