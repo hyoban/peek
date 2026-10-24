@@ -279,9 +279,27 @@ func TestPushButtonLayouts(t *testing.T) {
 	a.loadedRow, a.commitRow = 0, 0
 	for _, width := range []int{640, 1200} {
 		tt := ui.NewTester(a.view, width, 800)
+		tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Left: 78})
 		settle(tt)
 		if !tt.HasText("Push") {
 			t.Fatalf("no Push button at width %d", width)
+		}
+		mode, ok := tt.Find("Changes")
+		if !ok {
+			t.Fatal("mode switch missing")
+		}
+		for _, state := range []pushState{
+			{running: true, status: "Generating commit message with Codex…"},
+			{running: true, status: "Pushing origin/main…"},
+			{failed: true, status: "Test failure"},
+			{status: "Pushed to origin/main"},
+			{},
+		} {
+			a.push = state
+			tt.Frame()
+			if got, ok := tt.Find("Changes"); !ok || got != mode {
+				t.Fatalf("mode switch moved at width %d for %q: %v → %v", width, state.status, mode, got)
+			}
 		}
 	}
 }

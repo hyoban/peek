@@ -214,8 +214,9 @@ func (a *app) toolbar(c *ui.Context) {
 			a.modeChoice = a.mode
 			modeSwitch(c.Key("mode"), &a.modeChoice, "Changes", "Files").Label("Mode").
 				OnChange(func() { a.setMode(a.modeChoice) })
-			ui.Row(c).Grow(1).Basis(0).MinWidth(0)
-			a.pushButton(c)
+			// Keep both sides equally wide as the Push label changes.
+			ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).
+				Justify(ui.End).Children(func() { a.pushButton(c) })
 			a.paneButton(c, "history", historyIcon, &a.showHistory, "History")
 		}).Grow(1).MinWidth(0).Padding(0).Label("Toolbar")
 	})
