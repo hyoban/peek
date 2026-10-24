@@ -126,16 +126,17 @@ func (a *app) updateChanges(changes []change) {
 			a.changes[ch.Path] = ch
 			paths[i] = ch.Path
 		}
-		a.changeTree.set(fold(paths))
-		a.changeTree.openAll()
+		a.changeTree.set(foldGrouped(paths))
+		a.openChanges()
 		a.diffs = nil
 		for _, p := range a.changeTree.files() {
 			d := old[p]
 			if d == nil || d.change != a.changes[p] {
-				d = &fileDiff{change: a.changes[p]}
+				d = a.newDiff(a.changes[p])
 			}
 			a.diffs = append(a.diffs, d)
 		}
+		a.indexDiffs()
 		if _, ok := a.changes[a.file]; !ok {
 			a.file = ""
 			if len(a.diffs) > 0 {

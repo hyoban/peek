@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"path"
+	"slices"
 	"strings"
 
 	"peek/fileicons"
@@ -19,6 +20,7 @@ type fileDiff struct {
 	note    string // why the diff does not show
 	loading bool
 	stale   bool // the file may have changed since it loaded
+	read    bool // marked read: its diff folds away under its header
 }
 
 // The stacked diffs list two rows a file: its header, pinned at the top
@@ -33,10 +35,155 @@ func (a *app) resetDiffs() {
 	a.diffs = nil
 	a.diffGen++
 	for _, p := range a.changeTree.files() {
-		a.diffs = append(a.diffs, &fileDiff{change: a.changes[p]})
+		a.diffs = append(a.diffs, a.newDiff(a.changes[p]))
 	}
+	a.indexDiffs()
 	a.diffList = ui.ListState{}
 	a.scrollTarget, a.settledFirst = -1, -1
+}
+
+// fileKind is what a file holds, the changes grouping code first, then
+// tests, then docs.
+type fileKind int
+
+const (
+	kindCode fileKind = iota
+	kindTest
+	kindDocs
+)
+
+var (
+	testDirs = []string{"test", "tests", "__tests__", "__mocks__", "testdata", "spec", "e2e"}
+	docsDirs = []string{"doc", "docs"}
+	docsExts = []string{".md", ".mdx", ".markdown", ".rst", ".adoc", ".org", ".txt"}
+	docsStem = []string{"readme", "license", "licence", "changelog", "changes", "notice", "authors", "contributing", "copying"}
+)
+
+// kindOf tells what the file holds by its name and where it is.
+func kindOf(p string) fileKind {
+	dirs := strings.Split(path.Dir(p), "/")
+	name := path.Base(p)
+	ext := path.Ext(name)
+	stem := strings.TrimSuffix(name, ext)
+	lower := strings.ToLower(stem)
+	switch {
+	case slices.ContainsFunc(dirs, func(d string) bool { return slices.Contains(testDirs, d) }),
+		strings.HasSuffix(lower, "_test"), strings.HasSuffix(lower, "_spec"),
+		strings.HasSuffix(lower, ".test"), strings.HasSuffix(lower, ".spec"),
+		strings.HasPrefix(lower, "test_") && ext == ".py",
+		// FooTest.java, FooTests.swift
+		strings.HasSuffix(stem, "Test") && stem != "Test", strings.HasSuffix(stem, "Tests") && stem != "Tests":
+		return kindTest
+	case slices.ContainsFunc(dirs, func(d string) bool { return slices.Contains(docsDirs, d) }),
+		slices.Contains(docsExts, strings.ToLower(ext)),
+		slices.ContainsFunc(docsStem, func(s string) bool { return lower == s || strings.HasPrefix(lower, s+"-") }):
+		return kindDocs
+	}
+	return kindCode
+}
+
+// newDiff is the diff of a changed file of the commit, read where it was
+// marked so, or else where it is a test or docs.
+func (a *app) newDiff(ch change) *fileDiff {
+	read, ok := a.read[a.readKey(ch.Path)]
+	if !ok {
+		read = kindOf(ch.Path) != kindCode
+	}
+	return &fileDiff{change: ch, read: read}
+}
+
+// openChanges opens the change tree, but for the groups of tests and
+// docs, which start closed as their diffs start read.
+func (a *app) openChanges() {
+	t := &a.changeTree
+	t.openAll()
+	for _, item := range t.dirs[""] {
+		if isGroup(item) && item != groupPrefix+kindNames[kindCode] {
+			t.state.Open.Remove(item)
+		}
+	}
+	t.remember()
+}
+
+func (a *app) indexDiffs() {
+	a.diffOf = make(map[string]*fileDiff, len(a.diffs))
+	for _, d := range a.diffs {
+		a.diffOf[d.change.Path] = d
+	}
+}
+
+// readKey is the key of the file's mark in the commit shown.
+func (a *app) readKey(p string) string {
+	cm, _ := a.current()
+	return cm.Hash + "\x00" + p
+}
+
+// setRead marks the file's diff read or not, for as long as the app runs.
+func (a *app) setRead(d *fileDiff, read bool) {
+	d.read = read
+	if a.read == nil {
+		a.read = map[string]bool{}
+	}
+	a.read[a.readKey(d.change.Path)] = read
+}
+
+// diffsUnder returns the diffs of the files the item of the change tree
+// holds: a group's or a folder's, or a file's own.
+func (a *app) diffsUnder(item string) []*fileDiff {
+	t := &a.changeTree
+	if !t.isDir(item) {
+		if d := a.diffOf[item]; d != nil {
+			return []*fileDiff{d}
+		}
+		return nil
+	}
+	var under []*fileDiff
+	var walk func(dir string)
+	walk = func(dir string) {
+		for _, p := range t.dirs[dir] {
+			if t.isDir(p) {
+				walk(p)
+			} else if d := a.diffOf[p]; d != nil {
+				under = append(under, d)
+			}
+		}
+	}
+	walk(item)
+	return under
+}
+
+// countRead counts the diffs read among these.
+func countRead(diffs []*fileDiff) int {
+	n := 0
+	for _, d := range diffs {
+		if d.read {
+			n++
+		}
+	}
+	return n
+}
+
+// readMenu marks the files of the item of the change tree read, or not,
+// all at once.
+func (a *app) readMenu(m *ui.Menu, item string) {
+	diffs := a.diffsUnder(item)
+	n := countRead(diffs)
+	if m.Item("Mark as Viewed").Disabled(n == len(diffs)).Chosen() {
+		for _, d := range diffs {
+			a.setRead(d, true)
+		}
+	}
+	if m.Item("Mark as Not Viewed").Disabled(n == 0).Chosen() {
+		for _, d := range diffs {
+			a.setRead(d, false)
+		}
+	}
+}
+
+// readFile reports whether the file's diff is marked read.
+func (a *app) readFile(p string) bool {
+	d := a.diffOf[p]
+	return d != nil && d.read
 }
 
 func (a *app) diffIndex(p string) int {
@@ -59,7 +206,7 @@ func (a *app) scrollToFile(p string) {
 
 // followScroll chooses in the tree the file at the top of the column as
 // the user scrolls, once a scroll the tree asked for has come.
-func (a *app) followScroll() {
+func (a *app) followScroll(c *ui.Context) {
 	if len(a.diffs) == 0 {
 		return
 	}
@@ -81,6 +228,7 @@ func (a *app) followScroll() {
 	if p := a.diffs[i].change.Path; p != a.file {
 		a.file = p
 		a.changeTree.show(p)
+		c.Services().Invalidate() // for the tree to choose it
 	}
 }
 
@@ -107,7 +255,7 @@ func (a *app) diffPane(c *ui.Context) {
 		ui.List(c.Key("diffs"), &a.diffList, len(a.diffs)*2, func(row int) {
 			d := a.diffs[diffFile(row)]
 			if isHeader(row) {
-				diffHeader(c, d)
+				a.diffHeader(c, d)
 				return
 			}
 			a.diffBody(c, d)
@@ -116,7 +264,7 @@ func (a *app) diffPane(c *ui.Context) {
 }
 
 // diffHeader is a file's bar, pinned while its diff scrolls.
-func diffHeader(c *ui.Context, d *fileDiff) {
+func (a *app) diffHeader(c *ui.Context, d *fileDiff) {
 	t := c.Theme()
 	ch := d.change
 	dir, name := path.Split(ch.Path)
@@ -136,15 +284,20 @@ func diffHeader(c *ui.Context, d *fileDiff) {
 			ui.Textf(c, "−%d", deleted).FontSize(smallSize).Font(monoFamily).TextColor(statusColor(t, "D")).Shrink(0)
 		}
 		statusMark(c, ch.Status, false)
+		// Marked read, as GitHub's Viewed, which folds the diff away.
+		ui.Checkbox(c.Key("read:"+ch.Path), &d.read, "Viewed").FontSize(smallSize).Shrink(0).
+			OnClick(func() { a.setRead(d, d.read) })
 	})
 }
 
 func (a *app) diffBody(c *ui.Context, d *fileDiff) {
 	t := c.Theme()
 	if (d.state == nil && d.note == "" || d.stale) && !d.loading {
-		a.loadDiff(d)
+		a.loadDiff(d) // for its counts too, where it is read
 	}
 	switch {
+	case d.read:
+		ui.Row(c).FillWidth().Height(0)
 	case d.note != "":
 		ui.Text(c, d.note).TextColor(t.TextMuted).Padding(t.Space(4), t.Space(3))
 	case d.state == nil:

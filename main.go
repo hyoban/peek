@@ -63,8 +63,10 @@ type app struct {
 	changeTree pathTree
 	file       string // the file at the top of the diffs
 	diffs      []*fileDiff
-	diffGen    int // counts the lists of diffs, to drop stale loads
+	diffOf     map[string]*fileDiff // the diffs by path
+	diffGen    int                  // counts the lists of diffs, to drop stale loads
 	diffList   ui.ListState
+	read       map[string]bool // diffs marked read or not, by commit and path
 	// scrollTarget is the file the diffs scroll to for the tree, -1 once
 	// there; settledFirst the first row then, until the user scrolls.
 	scrollTarget, settledFirst int
@@ -458,12 +460,27 @@ func (a *app) treeItem(c *ui.Context, tree *pathTree, p string, selected, focuse
 	}
 	isFile := !tree.isDir(p)
 	ch, changed := a.changes[p]
+	if isFile && tree == &a.changeTree && a.readFile(p) && !selected {
+		text = muted // read, as the diffs fold it away
+	}
 	row := ui.Row(c).FillWidth().Gap(t.Space(1.5)).PaddingY(1).AlignItems(ui.Center)
 	if !isFile {
 		// A click on a folder opens or closes it as its arrow does, which
 		// sync makes choose it too, as Finder's and Xcode's rows do. It
 		// acts once the outline is built, as it changes the outline's rows.
 		row.KeepFocus().OnClick(func() { tree.flip(p) })
+	}
+	if tree == &a.changeTree {
+		row.ContextMenu(func(m *ui.Menu) { a.readMenu(m, p) })
+	}
+	if isGroup(p) {
+		row.Children(func() {
+			ui.Text(c, tree.labels[p]).FontSize(smallSize).FontWeight(600).TextColor(muted).SingleLine().Grow(1)
+			// How many of its files are read, as their diffs fold.
+			diffs := a.diffsUnder(p)
+			ui.Textf(c, "%d/%d", countRead(diffs), len(diffs)).FontSize(smallSize).TextColor(muted).Shrink(0).Padding(0, t.Space(1))
+		})
+		return
 	}
 	row.Children(func() {
 		if isFile {
@@ -479,7 +496,7 @@ func (a *app) treeItem(c *ui.Context, tree *pathTree, p string, selected, focuse
 			}
 			ui.Icon(c, folderIcon).Size(15, 15).Shrink(0).TextColor(color)
 		}
-		ui.Text(c, tree.labels[p]).TextColor(text).SingleLine().Ellipsis("…").Grow(1).MinWidth(0).Tooltip(p)
+		ui.Text(c, tree.labels[p]).TextColor(text).SingleLine().Ellipsis("…").Grow(1).MinWidth(0).Tooltip(itemPath(p))
 		if isFile && changed {
 			statusMark(c, ch.Status, selected && focused)
 		}
@@ -568,7 +585,7 @@ func (a *app) sync(c *ui.Context) {
 			a.file = p
 			a.scrollToFile(p)
 		} else {
-			a.followScroll()
+			a.followScroll(c)
 		}
 	case modeFiles:
 		if a.filesFor != a.loadedRow {
@@ -666,7 +683,7 @@ func (a *app) loadCommit(hash string) {
 		for i, ch := range changes {
 			paths[i] = ch.Path
 		}
-		tree := fold(paths)
+		tree := foldGrouped(paths)
 		return func() {
 			if cm, ok := a.current(); !ok || cm.Hash != hash {
 				return // another commit was chosen meanwhile
@@ -680,7 +697,7 @@ func (a *app) loadCommit(hash string) {
 				a.changes[ch.Path] = ch
 			}
 			a.changeTree.set(tree)
-			a.changeTree.openAll()
+			a.openChanges()
 			a.resetDiffs()
 			a.file = ""
 			if len(a.diffs) > 0 {

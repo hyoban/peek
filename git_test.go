@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -132,13 +133,13 @@ func TestStackedDiffs(t *testing.T) {
 	for _, d := range a.diffs {
 		order = append(order, d.change.Path)
 	}
-	if len(order) != 33 || order[0] != "docs/new.md" || order[1] != "main.go" || order[2] != "old.txt" {
-		t.Fatalf("diff order %q, want the tree's", order[:min(len(order), 4)])
+	if len(order) != 33 || order[0] != "main.go" || order[1] != "docs/new.md" || order[2] != "old.txt" {
+		t.Fatalf("diff order %q, want code, then docs, each in the tree's order", order[:min(len(order), 4)])
 	}
 	if !tt.HasText("main.go") || !tt.HasText("old.txt") {
 		t.Errorf("headers missing, texts %q", tt.Texts())
 	}
-	if a.diffs[1].state == nil {
+	if a.diffs[0].state == nil {
 		t.Error("the diff of main.go in view did not load")
 	}
 	if a.diffs[32].state != nil || a.diffs[32].loading {
@@ -257,5 +258,93 @@ func TestGitHubButton(t *testing.T) {
 	settle(tt)
 	if a.github != "https://github.com/hyoban/peek" {
 		t.Errorf("github %q, want origin's page", a.github)
+	}
+}
+
+func TestReadDiffs(t *testing.T) {
+	a, tt := testApp(t, testRepo(t), nil)
+	settle(tt)
+	read := func() []bool {
+		var r []bool
+		for _, d := range a.diffs {
+			r = append(r, d.read)
+		}
+		return r
+	}
+	// main.go, docs/new.md, old.txt: tests and docs start read.
+	if got := read(); fmt.Sprint(got) != "[false true true]" {
+		t.Fatalf("read %v, want the docs read", got)
+	}
+	if open := a.changeTree.state.Open; !open.Has(groupPrefix+"Code") || open.Has(groupPrefix+"Docs") {
+		t.Errorf("open %v, want Code open and Docs closed", slices.Collect(open.All()))
+	}
+	if !tt.HasText("Viewed") {
+		t.Errorf("no Viewed box, texts %q", tt.Texts())
+	}
+
+	// The marks stay with the commit while another shows.
+	a.setRead(a.diffs[0], true)
+	a.setRead(a.diffs[2], false)
+	a.commitRow = 1
+	settle(tt)
+	if len(a.diffs) == 0 || a.diffs[0].read {
+		t.Errorf("the first commit's main.go read %v", read())
+	}
+	a.commitRow = 0
+	settle(tt)
+	if got := read(); fmt.Sprint(got) != "[true true false]" {
+		t.Errorf("read %v after coming back, want the marks kept", got)
+	}
+}
+
+func TestReadByGroup(t *testing.T) {
+	repo := testRepo(t)
+	os.WriteFile(filepath.Join(repo, "docs", "more.md"), []byte("# More\n"), 0o644)
+	a, tt := testApp(t, repo, nil)
+	settle(tt)
+	// main.go, then the docs: docs/more.md, docs/new.md, old.txt.
+	read := func() string {
+		var r []bool
+		for _, d := range a.diffs {
+			r = append(r, d.read)
+		}
+		return fmt.Sprint(r)
+	}
+	if !tt.HasText("3/3") {
+		t.Errorf("no count of the docs read, texts %q", tt.Texts())
+	}
+
+	if err := tt.RightClick("Docs"); err != nil {
+		t.Fatal(err)
+	}
+	if got := fmt.Sprint(tt.Menu()); got != "[Mark as Viewed Mark as Not Viewed]" {
+		t.Errorf("menu %s", got)
+	}
+	if err := tt.ChooseMenuItem("Mark as Not Viewed"); err != nil {
+		t.Fatal(err)
+	}
+	settle(tt)
+	if got := read(); got != "[false false false false]" {
+		t.Errorf("read %s after marking Docs not viewed", got)
+	}
+	if !tt.HasText("0/3") {
+		t.Errorf("no count of none read, texts %q", tt.Texts())
+	}
+
+	// A folder marks its files only.
+	a.changeTree.state.Open.Add(groupPrefix + "Docs")
+	settle(tt)
+	if err := tt.RightClick("docs"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem("Mark as Viewed"); err != nil {
+		t.Fatal(err)
+	}
+	settle(tt)
+	if got := read(); got != "[false true true false]" {
+		t.Errorf("read %s after marking the docs folder viewed", got)
+	}
+	if !tt.HasText("2/3") {
+		t.Errorf("no count of two read, texts %q", tt.Texts())
 	}
 }

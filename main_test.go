@@ -4,6 +4,7 @@ import (
 	"image"
 	"image/png"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
@@ -137,5 +138,53 @@ func TestHistoryResize(t *testing.T) {
 	tt.Frame()
 	if a.historyWidth < 440 || a.historyWidth > 480 {
 		t.Errorf("history width %v after dragging 100 to the left, want about 460", a.historyWidth)
+	}
+}
+
+func TestGrouped(t *testing.T) {
+	files := []string{
+		"README.md", "docs/guide.png", "fileicons/LICENSE-file-icons.md",
+		"git_test.go", "src/__tests__/app.tsx", "app.spec.ts", "FooTest.java", "test_util.py", "testdata/in.md",
+		"main.go", "go.mod", "src/app.tsx", "Test.java", "latest.go", "fileicons/tables.go",
+	}
+	tree := newPathTree()
+	tree.set(foldGrouped(files))
+	tree.openAll()
+	want := []string{
+		"fileicons/tables.go", "src/app.tsx", "go.mod", "latest.go", "main.go", "Test.java",
+		"src/__tests__/app.tsx", "testdata/in.md", "app.spec.ts", "FooTest.java", "git_test.go", "test_util.py",
+		"docs/guide.png", "fileicons/LICENSE-file-icons.md", "README.md",
+	}
+	if got := tree.files(); !slices.Equal(got, want) {
+		t.Errorf("files\n %q\nwant\n %q", got, want)
+	}
+	var groups []string
+	for _, g := range tree.dirs[""] {
+		if !isGroup(g) {
+			t.Errorf("%q at the root, want only groups", g)
+		}
+		groups = append(groups, tree.labels[g])
+	}
+	if !slices.Equal(groups, []string{"Code", "Tests", "Docs"}) {
+		t.Errorf("groups %q", groups)
+	}
+	// fileicons is a directory in Code and in Docs both.
+	if got := tree.labels[groupPrefix+"Docs/fileicons"]; got != "fileicons" {
+		t.Errorf("Docs' fileicons labeled %q", got)
+	}
+	if got := itemPath(groupPrefix + "Docs/fileicons"); got != "fileicons" {
+		t.Errorf("path of Docs' fileicons %q", got)
+	}
+
+	tree.state.Open.Clear()
+	tree.show("src/__tests__/app.tsx")
+	if !tree.state.Open.Has(groupPrefix+"Tests") || !tree.state.Open.Has(groupPrefix+"Tests/src/__tests__") {
+		t.Errorf("open %v after showing a test", slices.Collect(tree.state.Open.All()))
+	}
+
+	// Files of one kind take no group.
+	tree.set(foldGrouped([]string{"a.go", "b/c.go"}))
+	if got := tree.dirs[""]; !slices.Equal(got, []string{"b", "a.go"}) {
+		t.Errorf("root %q for code only", got)
 	}
 }

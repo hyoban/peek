@@ -13,11 +13,12 @@ import (
 // directory fold into it, as editors' compact folders do, so that a deep
 // path such as Java's or Kotlin's takes one row rather than a level each.
 type pathTree struct {
-	dirs   map[string][]string // a directory's entries, "" the root
-	labels map[string]string   // the names the rows show, by path
-	state  ui.OutlineState[string]
-	row    int
-	reveal string // the path to choose once its row shows
+	dirs    map[string][]string // a directory's entries, "" the root
+	labels  map[string]string   // the names the rows show, by path
+	parents map[string]string   // the directory each item is in
+	state   ui.OutlineState[string]
+	row     int
+	reveal  string // the path to choose once its row shows
 	// opened is what the app last opened: an item opened or closed
 	// otherwise was so by the outline's arrow or keys, or a click on a
 	// folder's row.
@@ -28,8 +29,9 @@ func newPathTree() pathTree { return pathTree{row: -1} }
 
 // folded is a tree of paths, built off the UI thread for a pathTree.
 type folded struct {
-	dirs   map[string][]string
-	labels map[string]string
+	dirs    map[string][]string
+	labels  map[string]string
+	parents map[string]string
 }
 
 // fold builds the tree of these files: directories first, then by name,
@@ -48,7 +50,7 @@ func fold(files []string) folded {
 			p = dir
 		}
 	}
-	f := folded{dirs: map[string][]string{}, labels: map[string]string{}}
+	f := folded{dirs: map[string][]string{}, labels: map[string]string{}, parents: map[string]string{}}
 	var walk func(parent string)
 	walk = func(parent string) {
 		for _, p := range raw[parent] {
@@ -56,6 +58,7 @@ func fold(files []string) folded {
 				p = raw[p][0]
 			}
 			f.dirs[parent] = append(f.dirs[parent], p)
+			f.parents[p] = parent
 			f.labels[p] = strings.TrimPrefix(strings.TrimPrefix(p, parent), "/")
 			if raw[p] != nil {
 				walk(p)
@@ -81,9 +84,73 @@ func fold(files []string) folded {
 	return f
 }
 
+// groupPrefix starts the items of a group of files and of the directories
+// in it, which a directory of the same path in another group would share.
+const groupPrefix = "\x00"
+
+var kindNames = [...]string{kindCode: "Code", kindTest: "Tests", kindDocs: "Docs"}
+
+// foldGrouped builds the tree of these files in a group of each kind, as
+// the diffs list them, where they are of more than one kind.
+func foldGrouped(files []string) folded {
+	byKind := map[fileKind][]string{}
+	for _, p := range files {
+		k := kindOf(p)
+		byKind[k] = append(byKind[k], p)
+	}
+	if len(byKind) < 2 {
+		return fold(files)
+	}
+	f := folded{dirs: map[string][]string{}, labels: map[string]string{}, parents: map[string]string{}}
+	for k, name := range kindNames {
+		if byKind[fileKind(k)] == nil {
+			continue
+		}
+		group := groupPrefix + name
+		g := fold(byKind[fileKind(k)])
+		key := func(p string) string {
+			switch {
+			case p == "":
+				return group
+			case g.dirs[p] != nil:
+				return group + "/" + p
+			}
+			return p
+		}
+		f.dirs[""] = append(f.dirs[""], group)
+		f.labels[group], f.parents[group] = name, ""
+		for dir, entries := range g.dirs {
+			for _, e := range entries {
+				f.dirs[key(dir)] = append(f.dirs[key(dir)], key(e))
+				f.parents[key(e)] = key(dir)
+			}
+		}
+		for p, label := range g.labels {
+			f.labels[key(p)] = label
+		}
+	}
+	return f
+}
+
+// isGroup reports whether the item is a group of files rather than a
+// directory or a file.
+func isGroup(item string) bool {
+	return strings.HasPrefix(item, groupPrefix) && !strings.Contains(item, "/")
+}
+
+// itemPath returns the path of the item, a directory in a group without
+// the group's name; "" for a group.
+func itemPath(item string) string {
+	if !strings.HasPrefix(item, groupPrefix) {
+		return item
+	}
+	_, p, _ := strings.Cut(item, "/")
+	return p
+}
+
 // set replaces the tree with a folded one, its directories closed.
 func (t *pathTree) set(f folded) {
-	t.dirs, t.labels = f.dirs, f.labels
+	t.dirs, t.labels, t.parents = f.dirs, f.labels, f.parents
 	t.state.Open.Clear()
 	t.row, t.reveal = -1, ""
 	t.remember()
@@ -159,10 +226,8 @@ func (t *pathTree) files() []string {
 // show opens the directories above the file and chooses it once its row
 // shows.
 func (t *pathTree) show(p string) {
-	for dir := path.Dir(p); dir != "." && dir != "/"; dir = path.Dir(dir) {
-		if t.isDir(dir) {
-			t.state.Open.Add(dir)
-		}
+	for dir, ok := t.parents[p]; ok && dir != ""; dir, ok = t.parents[dir] {
+		t.state.Open.Add(dir)
 	}
 	t.reveal = p
 	t.remember()
