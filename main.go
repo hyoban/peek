@@ -462,11 +462,8 @@ func emptyNote(c *ui.Context, note string) {
 
 func (a *app) codePane(c *ui.Context) {
 	detail := ""
-	switch {
-	case a.picture != nil:
+	if a.picture != nil {
 		detail = pictureSize(a.picture)
-	case a.openFile != "":
-		detail = "Read only"
 	}
 	column(c, a.openFile, detail, func() {
 		switch {
