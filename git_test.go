@@ -396,3 +396,32 @@ func TestImportsFolded(t *testing.T) {
 		}
 	}
 }
+
+// Choosing another commit in files mode keeps the files and the text of
+// the one shown until the new ones come, not to flash a spinner and an
+// empty pane.
+func TestFilesKeptWhileCommitLoads(t *testing.T) {
+	a := newApp(testRepo(t))
+	a.inline, a.mode = true, modeFiles
+	a.loadCommits()
+	blank := false
+	tt := ui.NewTester(func(c *ui.Context) {
+		a.view(c)
+		if a.openFile != "" && (a.allTree.dirs == nil || a.code == nil) {
+			blank = true
+		}
+	}, 1200, 800)
+	settle(tt)
+	if a.openFile == "" || a.code == nil {
+		t.Fatalf("open file %q (code %v) before choosing a commit", a.openFile, a.code != nil)
+	}
+	blank = false
+	a.commitRow = 1
+	settle(tt)
+	if blank {
+		t.Error("the files or the text went blank while the commit loaded")
+	}
+	if !a.allTree.has("old.txt") || a.openFile != "main.go" || a.code.Buffer.String() != "package main\n" {
+		t.Errorf("open %q, files %v, want main.go of the commit", a.openFile, a.allTree.dirs)
+	}
+}

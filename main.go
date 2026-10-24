@@ -636,9 +636,9 @@ func (a *app) loadCommit(hash string) {
 }
 
 // loadFiles lists the files of the commit for the files mode, keeping the
-// file open where the commit has it too.
+// file open where the commit has it too. The files and the text of the
+// commit shown before stay until the new ones come, not to flash empty.
 func (a *app) loadFiles(hash string) {
-	a.allTree.dirs = nil
 	a.background(func() func() {
 		files, err := listFiles(a.repo, hash)
 		tree := fold(files)
@@ -655,8 +655,9 @@ func (a *app) loadFiles(hash string) {
 			if keep == "" {
 				keep = a.file
 			}
-			a.openFile, a.code, a.picture, a.codeNote = "", nil, nil, ""
-			a.openInFiles(hash, keep)
+			if !a.openInFiles(hash, keep) {
+				a.openFile, a.code, a.picture, a.codeNote = "", nil, nil, ""
+			}
 		}
 	})
 }
