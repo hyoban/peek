@@ -13,4 +13,5 @@ var (
 	worktreeIcon = icon(`<path d="M10.5 2.5l3 3-7.5 7.5H3v-3z"/><path d="M8.5 4.5l3 3"/>`)
 	changesIcon  = icon(`<path d="M9.5 1.5h-5a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V4.5z"/><path d="M8 5.5v4M6 7.5h4M6 11.5h4"/>`)
 	browseIcon   = icon(`<path d="M5.5 4.5L2 8l3.5 3.5M10.5 4.5L14 8l-3.5 3.5"/>`)
+	chevronIcon  = icon(`<path d="M4 6l4 4 4-4" stroke-width="1.8"/>`)
 )

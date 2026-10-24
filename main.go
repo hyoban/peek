@@ -23,10 +23,11 @@ const (
 // app is the state the window shows: the history, the files of the chosen
 // commit, and the diff or the text of the chosen file.
 type app struct {
-	win     *mygo.Window
-	avatars *avatars // nil shows initials alone
-	repo    string
-	branch  string
+	win      *mygo.Window
+	projects *projects // the window's, nil in tests
+	avatars  *avatars  // nil shows initials alone
+	repo     string
+	branch   string
 	// inline runs loads on the UI thread, as tests and snapshots want,
 	// and redraw asks for the frame a window's Update would draw then.
 	inline, redraw bool
@@ -34,6 +35,7 @@ type app struct {
 	// theme is this pass's, and inactiveTheme the one of lists without
 	// the keyboard focus.
 	theme, inactiveTheme *ui.Theme
+	titleButton          ui.Handle // the project's name, under which the projects list
 
 	showHistory, showTree   bool
 	historyWidth, treeWidth float32
@@ -179,13 +181,7 @@ func (a *app) toolbar(c *ui.Context) {
 		}
 		a.toggle(c, "history", historyIcon, &a.showHistory, a.mode == modeChanges, historyLabel)
 		a.toggle(c, "tree", filesIcon, &a.showTree, true, "File Tree (⌘2)")
-		// The title and subtitle of the window, as Xcode's toolbar shows them.
-		ui.Column(c).Grow(1).Basis(0).MinWidth(0).Padding(0, 0, 0, t.Space(2)).Children(func() {
-			ui.Text(c, path.Base(a.repo)).FontWeight(700).SingleLine().Ellipsis("…")
-			if a.branch != "" {
-				ui.Text(c, a.branch).FontSize(smallSize).TextColor(t.TextMuted).SingleLine().Ellipsis("…")
-			}
-		})
+		ui.Row(c).Grow(1).Basis(0).MinWidth(0).Children(func() { a.projectTitle(c) })
 		a.modeSwitch(c)
 		ui.Row(c).Grow(1).Basis(0).MinWidth(0).Justify(ui.End).Children(func() {
 			if cm, ok := a.current(); ok {
@@ -234,6 +230,37 @@ func (a *app) modeSwitch(c *ui.Context) {
 				}
 			})
 		}
+	})
+}
+
+// projectTitle is the title and subtitle of the window, as Xcode's
+// toolbar shows them, which a click on switches the project.
+func (a *app) projectTitle(c *ui.Context) {
+	t := c.Theme()
+	b := ui.ButtonBase(c.Key("project")).Bind(&a.titleButton).Shrink(1).MinWidth(0).
+		Padding(2, t.Space(2)).Radius(7).Label("Switch Project").Tooltip(a.repo)
+	switch {
+	case b.Pressed():
+		b.Background(t.Text.Alpha(0.12))
+	case b.Hovered():
+		b.Background(t.Text.Alpha(0.07))
+	}
+	b.OnClick(func() {
+		if a.projects != nil {
+			r := a.titleButton.Bounds(c)
+			a.projects.switcher(r.X, r.Y+r.H+4)
+		}
+	})
+	b.Children(func() {
+		ui.Column(c).MinWidth(0).Children(func() {
+			ui.Row(c).MinWidth(0).Gap(t.Space(1)).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, path.Base(a.repo)).FontWeight(700).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
+				ui.Icon(c, chevronIcon).Size(11, 11).Shrink(0).TextColor(t.TextMuted)
+			})
+			if a.branch != "" {
+				ui.Text(c, a.branch).FontSize(smallSize).TextColor(t.TextMuted).SingleLine().Ellipsis("…")
+			}
+		})
 	})
 }
 
@@ -557,6 +584,7 @@ func (a *app) loadCommits() {
 	a.background(func() func() {
 		commits, err := loadCommits(a.repo, 500)
 		changes, _ := loadWorktreeChanges(a.repo)
+		branch := currentBranch(a.repo)
 		if n := len(changes); n > 0 {
 			wt := commit{Hash: worktree, Subject: "Uncommitted Changes", Summary: count(n, "file") + " changed"}
 			commits = append([]commit{wt}, commits...)
@@ -566,7 +594,7 @@ func (a *app) loadCommits() {
 				a.err = err.Error()
 				return
 			}
-			a.commits, a.worktreeChanges = commits, changes
+			a.commits, a.worktreeChanges, a.branch = commits, changes, branch
 			if len(commits) > 0 {
 				a.commitRow = 0
 			}
@@ -658,12 +686,10 @@ func (a *app) loadText(hash, p string) {
 	})
 }
 
-// openApp returns the app of the repository, with its branch and the
-// authors' pictures.
+// openApp returns the app of the repository, with the authors' pictures.
 func openApp(repo string) *app {
 	a := newApp(repo)
 	a.avatars = newAvatars()
-	a.branch = currentBranch(repo)
 	return a
 }
 
@@ -672,15 +698,27 @@ func main() {
 	if len(os.Args) > 1 {
 		dir = os.Args[1]
 	}
+	// Opened from Finder, the app starts outside any repository, and
+	// opens the last one instead, or asks for one.
 	repo, err := repoRoot(dir)
-	if err != nil {
+	if err != nil && len(os.Args) > 1 {
 		log.Fatal(err)
 	}
-	a := openApp(repo)
+	p := newProjects()
 	fileicons.Warm()
 	mygo.App.WhenReady(func() {
-		a.win = mygo.NewWindow(mygo.WindowOptions{
-			Title:     "peek — " + path.Base(repo),
+		mygo.App.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
+			{Role: mygo.RoleAppMenu},
+			{Role: mygo.RoleFileMenu, Submenu: []*mygo.MenuItem{
+				{Label: "Open Folder…", Accelerator: "CmdOrCtrl+O", Click: func(*mygo.MenuItem, *mygo.Window) { p.choose() }},
+				mygo.Separator(),
+				{Role: mygo.RoleClose},
+			}},
+			{Role: mygo.RoleEditMenu},
+			{Role: mygo.RoleWindowMenu},
+		}))
+		p.win = mygo.NewWindow(mygo.WindowOptions{
+			Title:     "peek",
 			Width:     1440,
 			Height:    900,
 			MinWidth:  640,
@@ -689,9 +727,16 @@ func main() {
 			StateKey:      "main",
 			TitleBarStyle: mygo.TitleBarHiddenInset,
 			Vibrancy:      mygo.VibrancySidebar,
-			Content:       ui.View(a.view),
+			Content:       ui.View(p.view),
 		})
-		a.loadCommits()
+		switch {
+		case err == nil:
+			p.open(repo)
+		case len(p.recent) > 0:
+			p.open(p.recent[0])
+		default:
+			p.choose()
+		}
 	})
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
