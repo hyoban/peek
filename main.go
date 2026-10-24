@@ -37,6 +37,7 @@ type app struct {
 	inline, redraw, building bool
 	published                []func()
 	err                      string
+	push                     pushState
 	// theme is this pass's, and inactiveTheme the one of lists without
 	// the keyboard focus.
 	theme, inactiveTheme *ui.Theme
@@ -157,6 +158,7 @@ func (a *app) view(c *ui.Context) {
 	ui.Column(c).Fill().Children(func() {
 		a.toolbar(c)
 		ui.Divider(c)
+		a.pushStatus(c)
 		ui.Row(c).Grow(1).FillWidth().MinHeight(0).Children(func() {
 			if history {
 				endSplit(c, &a.historyWidth, func() { a.history(c) }, rest).Fill()
@@ -213,6 +215,7 @@ func (a *app) toolbar(c *ui.Context) {
 			modeSwitch(c.Key("mode"), &a.modeChoice, "Changes", "Files").Label("Mode").
 				OnChange(func() { a.setMode(a.modeChoice) })
 			ui.Row(c).Grow(1).Basis(0).MinWidth(0)
+			a.pushButton(c)
 			a.paneButton(c, "history", historyIcon, &a.showHistory, "History")
 		}).Grow(1).MinWidth(0).Padding(0).Label("Toolbar")
 	})
@@ -752,6 +755,13 @@ func main() {
 			StateKey:      "main",
 			TitleBarStyle: mygo.TitleBarHiddenInset,
 			Content:       ui.View(p.view),
+		})
+		p.win.OnClosed(func() {
+			for _, a := range p.apps {
+				if a.push.cancel != nil {
+					a.push.cancel()
+				}
+			}
 		})
 		switch {
 		case err == nil:

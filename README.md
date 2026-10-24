@@ -29,6 +29,7 @@ All of the commit's files, to read any of them as it was then.
 - File icons from [file-icons](https://github.com/file-icons/atom)
 - Authors' avatars, and a link to the repository on GitHub
 - Switch between projects in one window
+- Commit all changes with a Codex-generated message and push from the toolbar
 - Follows the system's light and dark appearance
 
 ## Shortcuts
@@ -50,6 +51,28 @@ go run . path/to/repository
 ```
 
 Without a path, Peek opens the repository you are in, or the last one it opened.
+
+### Push with Codex
+
+Install the Codex CLI and sign in with `codex login`. Click **Push** in the
+toolbar to stage all changes, including untracked files (Git ignores still
+apply). Codex generates a commit message from the staged diff and recent
+commit subjects, following the repository's commit style. This sends that
+diff to your configured Codex provider and uses your existing Codex settings.
+
+Peek fetches the remote, commits, then pushes the current branch. If the remote
+explicitly rejects it because the branch is protected, Peek creates and switches
+to a `peek/push-…` branch and pushes that instead. A detached HEAD also gets a new
+branch. With no new changes, Push sends existing commits without calling Codex.
+Git's push-remote settings are respected; otherwise Peek uses `origin` or the
+only configured remote. No pull request is created.
+
+Progress and errors appear below the toolbar. Authentication, network and
+non-fast-forward failures stop the operation; Peek does not force-push or
+automatically merge. Failed attempts retain staged changes and any local commit
+for a retry. Hover the status to read the full error. Commit message generation
+supports staged diffs up to 256 KiB; larger changes can be committed manually
+before clicking Push.
 
 To build `Peek.app` and a `.dmg` into `build/`:
 
