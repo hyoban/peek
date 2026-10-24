@@ -26,20 +26,21 @@ func TestToggleMatrix(t *testing.T) {
 				a.mode, a.showHistory, a.showTree = mode, history, tree
 				settle(tt)
 				name := fmt.Sprintf("%s-mode%d-history%v-tree%v.png", out, mode, history, tree)
-				save(t, name, trafficLights(tt.Image()))
+				save(t, name, trafficLights(tt.Image(), 1))
 			}
 		}
 	}
 }
 
-// trafficLights paints the window controls where macOS puts them.
-func trafficLights(img *image.RGBA) *image.RGBA {
+// trafficLights paints the window controls where macOS puts them, on an
+// image drawn at the scale.
+func trafficLights(img *image.RGBA, scale int) *image.RGBA {
 	colors := []color.RGBA{{0xff, 0x5f, 0x57, 0xff}, {0xfe, 0xbc, 0x2e, 0xff}, {0x28, 0xc8, 0x40, 0xff}}
 	for i, col := range colors {
-		cx, cy := 20+6+i*20, titleBarHeight/2
-		for y := cy - 6; y <= cy+6; y++ {
-			for x := cx - 6; x <= cx+6; x++ {
-				if (x-cx)*(x-cx)+(y-cy)*(y-cy) <= 36 {
+		cx, cy, r := (20+6+i*20)*scale, titleBarHeight/2*scale, 6*scale
+		for y := cy - r; y <= cy+r; y++ {
+			for x := cx - r; x <= cx+r; x++ {
+				if (x-cx)*(x-cx)+(y-cy)*(y-cy) <= r*r {
 					img.Set(x, y, col)
 				}
 			}
