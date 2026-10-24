@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"strings"
 	"time"
 
 	"peek/fileicons"
@@ -28,6 +29,7 @@ type app struct {
 	avatars  *avatars  // nil shows initials alone
 	repo     string
 	branch   string
+	github   string // the repository's page on GitHub, "" for none
 	// inline runs loads on the UI thread, as tests and snapshots want,
 	// and redraw asks for the frame a window's Update would draw then.
 	// Those a pass starts wait in published for the next, as a window's
@@ -208,7 +210,12 @@ func (a *app) toolbar(c *ui.Context) {
 	}
 	row.Children(func() {
 		a.toggle(c, "tree", filesIcon, &a.showTree, true, "File Tree (⌘2)")
-		ui.Row(c).Grow(1).Basis(0).MinWidth(0).Children(func() { a.projectTitle(c) })
+		ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Gap(t.Space(1)).Children(func() {
+			a.projectTitle(c)
+			if a.github != "" {
+				a.linkButton(c, "github", githubIcon, "Open on GitHub", a.github)
+			}
+		})
 		a.modeSwitch(c)
 		ui.Row(c).Grow(1).Basis(0).MinWidth(0).Justify(ui.End).AlignItems(ui.Center).Children(func() {
 			if cm, ok := a.current(); ok {
@@ -294,6 +301,21 @@ func (a *app) projectTitle(c *ui.Context) {
 			}
 		})
 	})
+}
+
+// linkButton opens the page in the browser, its icon alone.
+func (a *app) linkButton(c *ui.Context, key string, svg *ui.SVG, label, url string) {
+	t := c.Theme()
+	services := c.Services()
+	b := ui.ButtonBase(c.Key(key)).Size(28, 28).Shrink(0).Radius(7).Center().
+		TextColor(t.TextMuted).Label(label).Tooltip(label + " — " + strings.TrimPrefix(url, "https://"))
+	switch {
+	case b.Pressed():
+		b.Background(t.Text.Alpha(0.12)).TextColor(t.Text)
+	case b.Hovered():
+		b.Background(t.Text.Alpha(0.07)).TextColor(t.Text)
+	}
+	b.Children(func() { ui.Icon(c, svg).Size(16, 16) }).OnClick(func() { services.OpenURL(url) })
 }
 
 // toggle shows or hides a column, its icon in the text's colour while the
@@ -624,7 +646,7 @@ func (a *app) loadCommits() {
 				a.err = h.err.Error()
 				return
 			}
-			a.commits, a.worktreeChanges, a.branch = h.commits, h.changes, h.branch
+			a.commits, a.worktreeChanges, a.branch, a.github = h.commits, h.changes, h.branch, h.github
 			if len(h.commits) > 0 {
 				a.commitRow = 0
 			}

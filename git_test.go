@@ -224,3 +224,38 @@ func TestArrowClickActsAsRowClick(t *testing.T) {
 		t.Errorf("choosing a folder closed the file shown, %q", a.openFile)
 	}
 }
+
+func TestGitHubPage(t *testing.T) {
+	for url, want := range map[string]string{
+		"git@github.com:hyoban/peek.git":         "https://github.com/hyoban/peek",
+		"git@github.com:hyoban/peek":             "https://github.com/hyoban/peek",
+		"https://github.com/hyoban/peek.git":     "https://github.com/hyoban/peek",
+		"https://github.com/hyoban/peek/":        "https://github.com/hyoban/peek",
+		"ssh://git@github.com/hyoban/peek.git":   "https://github.com/hyoban/peek",
+		"git@gitlab.com:hyoban/peek.git":         "",
+		"https://github.com/hyoban":              "",
+		"https://github.com.evil.com/a/b":        "",
+		"https://example.com/github.com/a/b.git": "",
+	} {
+		if got := githubPage(url); got != want {
+			t.Errorf("githubPage(%q) = %q, want %q", url, got, want)
+		}
+	}
+}
+
+// The button to GitHub shows where a remote is there, origin first.
+func TestGitHubButton(t *testing.T) {
+	repo := testRepo(t)
+	a, tt := testApp(t, repo, nil)
+	settle(tt)
+	if a.github != "" || tt.HasText("Open on GitHub") {
+		t.Fatal("GitHub button without a remote")
+	}
+	git(repo, "remote", "add", "upstream", "https://github.com/egoist/peek.git")
+	git(repo, "remote", "add", "origin", "git@github.com:hyoban/peek.git")
+	a.refresh()
+	settle(tt)
+	if a.github != "https://github.com/hyoban/peek" {
+		t.Errorf("github %q, want origin's page", a.github)
+	}
+}

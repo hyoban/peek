@@ -190,3 +190,43 @@ func listFiles(repo, hash string) ([]string, error) {
 func nulSeparated(out string) []string {
 	return strings.FieldsFunc(out, func(r rune) bool { return r == 0 })
 }
+
+// githubURL returns the GitHub page of the repository, from its origin's
+// URL or else another remote's, "" where none is on GitHub.
+func githubURL(repo string) string {
+	out, err := git(repo, "config", "--get-regexp", `^remote\..*\.url$`)
+	if err != nil {
+		return ""
+	}
+	var found string
+	for line := range strings.Lines(out) {
+		key, url, _ := strings.Cut(strings.TrimSpace(line), " ")
+		page := githubPage(url)
+		if page == "" {
+			continue
+		}
+		if key == "remote.origin.url" {
+			return page
+		}
+		if found == "" {
+			found = page
+		}
+	}
+	return found
+}
+
+// githubPage returns the page of a GitHub remote's URL, as SSH, scp-like
+// and HTTPS URLs name it, "" for another host's.
+func githubPage(url string) string {
+	rest, ok := "", false
+	for _, prefix := range []string{"git@github.com:", "ssh://git@github.com/", "https://github.com/", "http://github.com/", "git://github.com/"} {
+		if rest, ok = strings.CutPrefix(url, prefix); ok {
+			break
+		}
+	}
+	rest = strings.TrimSuffix(strings.TrimSuffix(rest, "/"), ".git")
+	if !ok || strings.Count(rest, "/") != 1 || strings.HasPrefix(rest, "/") || strings.HasSuffix(rest, "/") {
+		return ""
+	}
+	return "https://github.com/" + rest
+}

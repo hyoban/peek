@@ -13,6 +13,7 @@ type history struct {
 	commits []commit // the work tree's entry first
 	changes []change // the work tree's
 	branch  string
+	github  string // the repository's page on GitHub, "" for none
 	err     error
 }
 
@@ -27,7 +28,7 @@ func readHistory(repo string) history {
 	}
 	wt := commit{Hash: worktree, Subject: "Uncommitted Changes", Summary: summary}
 	commits = append([]commit{wt}, commits...)
-	return history{commits: commits, changes: changes, branch: currentBranch(repo), err: err}
+	return history{commits: commits, changes: changes, branch: currentBranch(repo), github: githubURL(repo), err: err}
 }
 
 // refresh reads the history and the work tree again, as the watch asks
@@ -60,7 +61,7 @@ func (a *app) applyHistory(h history) {
 	chosen, wasChosen := a.hashAt(a.commitRow)
 	shown, wasShown := a.hashAt(a.loadedRow)
 	filesShown := a.filesFor >= 0 && a.filesFor == a.loadedRow
-	a.commits, a.branch, a.err = h.commits, h.branch, ""
+	a.commits, a.branch, a.github, a.err = h.commits, h.branch, h.github, ""
 	a.commitRow = -1
 	if len(h.commits) > 0 {
 		a.commitRow = 0
