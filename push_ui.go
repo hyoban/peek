@@ -13,9 +13,21 @@ type pushState struct {
 	failed  bool
 	status  string
 	cancel  context.CancelFunc
+	until   time.Time // when the success label returns to Push
 }
 
 func (a *app) pushButton(c *ui.Context) {
+	if !a.push.running && !a.push.failed && a.push.status != "" {
+		if a.push.until.IsZero() {
+			a.push.until = c.Now().Add(3 * time.Second)
+		}
+		if c.Now().Before(a.push.until) {
+			c.After(a.push.until.Sub(c.Now()))
+		} else {
+			a.push.status = ""
+			a.push.until = time.Time{}
+		}
+	}
 	label, tooltip := "Push", "Commit all changes with Codex and push"
 	switch {
 	case a.push.running:

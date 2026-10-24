@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -213,12 +214,20 @@ func TestPushUI(t *testing.T) {
 	if err := tt.Click("Push"); err != nil {
 		t.Fatal(err)
 	}
-	settle(tt)
+	tt.Frame()
 	if a.push.running || a.push.failed || !tt.HasText("Pushed") {
 		t.Fatalf("push state %+v; texts %q", a.push, tt.Texts())
 	}
 	if a.commits[0].Summary != "No changes" || a.commits[1].Subject != "Update the files" {
 		t.Fatalf("stale history: %+v", a.commits)
+	}
+	tt.Advance(2 * time.Second)
+	if !tt.HasText("Pushed") {
+		t.Fatal("success label disappeared too soon")
+	}
+	tt.Advance(time.Second)
+	if !tt.HasText("Push") || tt.HasText("Pushed") {
+		t.Fatal("success label did not expire", tt.Texts())
 	}
 	cancelled := false
 	a.push = pushState{running: true, status: "Generating commit message with Codex…", cancel: func() { cancelled = true }}
@@ -231,6 +240,7 @@ func TestPushUI(t *testing.T) {
 	}
 	a.push = pushState{failed: true, status: "Test failure"}
 	tt.Frame()
+	tt.Advance(4 * time.Second)
 	if !tt.HasText("Push failed") {
 		t.Fatal(tt.Texts())
 	}
@@ -240,7 +250,7 @@ func TestPushUI(t *testing.T) {
 	if err := tt.Click("Push failed"); err != nil {
 		t.Fatal(err)
 	}
-	settle(tt)
+	tt.Frame()
 	if !tt.HasText("Pushed") {
 		t.Fatal("retry did not finish", tt.Texts())
 	}
