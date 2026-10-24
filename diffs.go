@@ -237,16 +237,14 @@ func (a *app) followScroll(c *ui.Context) {
 }
 
 func (a *app) diffPane(c *ui.Context) {
-	t := c.Theme()
-	header := func() {
-		if cm, ok := a.current(); ok {
-			ui.Text(c, cm.Subject).FontWeight(600).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
-		}
-		if n := len(a.diffs); n > 0 {
-			ui.Text(c, count(n, "file")).FontSize(smallSize).TextColor(t.TextMuted).SingleLine().Shrink(0)
-		}
+	title, detail := "", ""
+	if cm, ok := a.current(); ok {
+		title = cm.Subject
 	}
-	column(c, header, func() {
+	if n := len(a.diffs); n > 0 {
+		detail = count(n, "file")
+	}
+	column(c, title, detail, func() {
 		if len(a.diffs) == 0 {
 			emptyNote(c, "No changes")
 			return

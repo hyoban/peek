@@ -326,12 +326,19 @@ func (a *app) toggle(c *ui.Context, key string, svg *ui.SVG, on *bool, enabled b
 }
 
 // column builds one of the window's columns, all alike: the background,
-// a slim header, a divider, and the body.
-func column(c *ui.Context, header, body func()) {
+// a slim header with the title and, muted at the end, a detail such as a
+// count, a divider, and the body.
+func column(c *ui.Context, title, detail string, body func()) {
 	t := c.Theme()
 	ui.Column(c).Fill().Background(t.Background).Children(func() {
 		ui.Row(c).Height(38).Shrink(0).FillWidth().AlignItems(ui.Center).Gap(t.Space(2)).
-			Padding(0, t.Space(3)).Children(header)
+			Padding(0, t.Space(3)).Children(func() {
+			ui.Text(c, title).FontSize(smallSize).FontWeight(600).SingleLine().Ellipsis("…").
+				Grow(1).MinWidth(0).Tooltip(title)
+			if detail != "" {
+				ui.Text(c, detail).FontSize(smallSize).TextColor(t.TextMuted).SingleLine().Shrink(0)
+			}
+		})
 		ui.Divider(c)
 		body()
 	})
@@ -358,22 +365,12 @@ func rowInk(t *ui.Theme, selected, focused bool) ink {
 	return ink{text: t.AccentText, muted: t.AccentText.Alpha(0.72), onAccent: focused}
 }
 
-func sectionTitle(c *ui.Context, title string) {
-	ui.Text(c, title).FontSize(smallSize).FontWeight(600).TextColor(c.Theme().TextMuted).SingleLine()
-}
-
 func (a *app) history(c *ui.Context) {
-	t := c.Theme()
-	header := func() {
-		sectionTitle(c, "History")
-		ui.Spacer(c)
-		n := len(a.commits)
-		if n > 0 && a.commits[0].Hash == worktree {
-			n--
-		}
-		ui.Text(c, count(n, "commit")).FontSize(smallSize).TextColor(t.TextMuted).SingleLine()
+	n := len(a.commits)
+	if n > 0 && a.commits[0].Hash == worktree {
+		n--
 	}
-	column(c, header, func() {
+	column(c, "History", count(n, "commit"), func() {
 		switch {
 		case a.err != "":
 			emptyNote(c, a.err)
@@ -432,7 +429,7 @@ func (a *app) treePane(c *ui.Context) {
 	if a.mode == modeFiles {
 		title, key, tree, label = "Files", "all", &a.allTree, "Files"
 	}
-	column(c, func() { sectionTitle(c, title) }, func() {
+	column(c, title, "", func() {
 		if tree.dirs == nil {
 			emptyNote(c, "Loading…")
 			return
@@ -510,17 +507,6 @@ func statusMark(c *ui.Context, status string, onAccent bool) {
 		TextAlign(ui.Center).Width(16).Shrink(0)
 }
 
-// pathTitle shows a path in a column's header: its directory muted, its
-// name bold.
-func pathTitle(c *ui.Context, p string) {
-	t := c.Theme()
-	dir, name := path.Split(p)
-	ui.Row(c).Grow(1).MinWidth(0).Children(func() {
-		ui.Text(c, dir).TextColor(t.TextMuted).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
-		ui.Text(c, name).FontWeight(600).SingleLine().Shrink(0)
-	})
-}
-
 func emptyNote(c *ui.Context, note string) {
 	ui.Column(c).Grow(1).FillWidth().Center().Children(func() {
 		ui.Text(c, note).TextColor(c.Theme().TextMuted)
@@ -528,15 +514,11 @@ func emptyNote(c *ui.Context, note string) {
 }
 
 func (a *app) codePane(c *ui.Context) {
-	t := c.Theme()
-	header := func() {
-		if a.openFile == "" {
-			return
-		}
-		pathTitle(c, a.openFile)
-		ui.Text(c, "Read only").FontSize(smallSize).TextColor(t.TextMuted).SingleLine()
+	detail := ""
+	if a.openFile != "" {
+		detail = "Read only"
 	}
-	column(c, header, func() {
+	column(c, a.openFile, detail, func() {
 		switch {
 		case a.codeNote != "":
 			emptyNote(c, a.codeNote)
