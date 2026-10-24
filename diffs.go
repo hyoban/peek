@@ -132,8 +132,8 @@ func diffHeader(c *ui.Context, d *fileDiff) {
 		ui.Text(c, where).FontSize(smallSize).TextColor(t.TextMuted).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
 		if d.state != nil {
 			added, deleted := d.state.Stats()
-			ui.Textf(c, "+%d", added).FontSize(smallSize).Font("monospace").TextColor(statusColor(t, "A")).Shrink(0)
-			ui.Textf(c, "−%d", deleted).FontSize(smallSize).Font("monospace").TextColor(statusColor(t, "D")).Shrink(0)
+			ui.Textf(c, "+%d", added).FontSize(smallSize).Font(monoFamily).TextColor(statusColor(t, "A")).Shrink(0)
+			ui.Textf(c, "−%d", deleted).FontSize(smallSize).Font(monoFamily).TextColor(statusColor(t, "D")).Shrink(0)
 		}
 		statusMark(c, ch.Status, false)
 	})
@@ -213,7 +213,11 @@ func resetText(b *editor.Buffer, text string) {
 
 const maxTextSize = 8 << 20
 
-var codeFont = ui.Font{Family: "monospace", Size: codeSize}
+// monoFamily is the font of code: MonoLisa where it is installed, else
+// the system's monospaced font.
+const monoFamily = "MonoLisaCode, MonoLisa Variable, monospace"
+
+var codeFont = ui.Font{Family: monoFamily, Size: codeSize}
 
 // textNote tells why these texts do not show, "" where they do.
 func textNote(texts ...string) string {

@@ -226,7 +226,7 @@ func (a *app) toolbar(c *ui.Context) {
 				chip := ui.Text(c, label).FontSize(smallSize).TextColor(t.TextMuted).SingleLine().
 					Padding(2, t.Space(2)).Radius(999).Background(t.Text.Alpha(0.07)).Tooltip("The version shown")
 				if mono {
-					chip.Font("monospace")
+					chip.Font(monoFamily)
 				}
 			}
 		})
@@ -415,7 +415,7 @@ func (a *app) commitItem(row ui.ListRow) {
 					Tooltip(cm.Time.Format("Monday, January 2, 2006 at 15:04"))
 			})
 			ui.Text(c, cm.Subject).TextColor(text).SingleLine().Ellipsis("…")
-			ui.Text(c, cm.Short).FontSize(smallSize).Font("monospace").TextColor(muted).SingleLine()
+			ui.Text(c, cm.Short).FontSize(smallSize).Font(monoFamily).TextColor(muted).SingleLine()
 		})
 	})
 }
