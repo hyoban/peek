@@ -166,11 +166,6 @@ func (a *app) view(c *ui.Context) {
 			}
 		})
 	})
-	// The material shows through the root, cleared after the build:
-	// SetTheme, which the lists call for their focus, makes it opaque.
-	if c.Vibrancy() {
-		c.Root().Background(ui.Transparent)
-	}
 	a.sync(c)
 	if a.redraw {
 		a.redraw = false
@@ -202,12 +197,9 @@ func endSplit(c *ui.Context, size *float32, end, rest func()) ui.Element {
 func (a *app) toolbar(c *ui.Context) {
 	t := c.Theme()
 	bar := c.TitleBar()
-	row := ui.Row(c).Height(titleBarHeight).Shrink(0).FillWidth().AlignItems(ui.Center).
-		Gap(t.Space(2)).Padding(0, bar.Right+t.Space(3), 0, bar.Left+t.Space(3)).DragWindow()
-	if !c.Vibrancy() {
-		row.Background(t.Surface)
-	}
-	row.Children(func() {
+	ui.Row(c).Height(titleBarHeight).Shrink(0).FillWidth().AlignItems(ui.Center).
+		Gap(t.Space(2)).Padding(0, bar.Right+t.Space(3), 0, bar.Left+t.Space(3)).DragWindow().
+		Background(t.Surface).Children(func() {
 		a.toggle(c, "tree", filesIcon, &a.showTree, true, "File Tree (⌘2)")
 		ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Gap(t.Space(1)).Children(func() {
 			a.projectTitle(c)
@@ -334,8 +326,7 @@ func (a *app) toggle(c *ui.Context, key string, svg *ui.SVG, on *bool, enabled b
 }
 
 // column builds one of the window's columns, all alike: the background,
-// only the toolbar showing the material, a slim header, a divider, and
-// the body.
+// a slim header, a divider, and the body.
 func column(c *ui.Context, header, body func()) {
 	t := c.Theme()
 	ui.Column(c).Fill().Background(t.Background).Children(func() {
@@ -796,7 +787,6 @@ func main() {
 			// Opens where the user left it last time.
 			StateKey:      "main",
 			TitleBarStyle: mygo.TitleBarHiddenInset,
-			Vibrancy:      mygo.VibrancySidebar,
 			Content:       ui.View(p.view),
 		})
 		switch {

@@ -188,29 +188,3 @@ func TestGrouped(t *testing.T) {
 		t.Errorf("root %q for code only", got)
 	}
 }
-
-// TestToolbarMaterial checks that the material shows through the toolbar,
-// and only there, in either mode whichever columns show, though the lists
-// set their themes.
-func TestToolbarMaterial(t *testing.T) {
-	a, tt := testApp(t, testRepo(t), nil)
-	tt.SetVibrancy(true)
-	for _, mode := range []int{modeChanges, modeFiles} {
-		for _, history := range []bool{true, false} {
-			for _, tree := range []bool{true, false} {
-				a.setMode(mode)
-				a.showHistory, a.showTree = history, tree
-				settle(tt)
-				img := tt.Image()
-				for _, x := range []int{100, 600, 1100} {
-					if c := img.RGBAAt(x, 10); c.A != 0 {
-						t.Errorf("mode %d, history %v, tree %v: the toolbar at %d is %v, not the material", mode, history, tree, x, c)
-					}
-					if c := img.RGBAAt(x, 400); c.A != 255 {
-						t.Errorf("mode %d, history %v, tree %v: the columns at %d are %v, not solid", mode, history, tree, x, c)
-					}
-				}
-			}
-		}
-	}
-}
