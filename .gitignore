@@ -1,0 +1,4 @@
+/build/
+/.mygo/
+mygo_windows_*.syso
+/peek

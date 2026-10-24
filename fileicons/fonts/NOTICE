@@ -1,0 +1,8 @@
+The fonts here come with file-icons (https://github.com/file-icons/atom),
+converted from WOFF2 to TrueType, and with Octicons 4.4.0:
+
+- file-icons.ttf  file-icons, MIT (../LICENSE-file-icons.md)
+- devopicons.ttf  Devicons by Theodore Vorillas, MIT
+- mfixx.ttf       Font Mfizz by Fizzed, MIT
+- fontawesome.ttf Font Awesome 4.7 by Dave Gandy, SIL OFL 1.1
+- octicons.ttf    Octicons 4.4.0 by GitHub, MIT (LICENSE-octicons)
