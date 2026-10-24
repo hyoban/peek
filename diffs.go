@@ -21,7 +21,11 @@ type fileDiff struct {
 	loading bool
 	stale   bool // the file may have changed since it loaded
 	read    bool // marked read: its diff folds away under its header
+	opened  bool // read, its diff shown again by a click on its header
 }
+
+// folded reports whether the diff folds away under its header.
+func (d *fileDiff) folded() bool { return d.read && !d.opened }
 
 // The stacked diffs list two rows a file: its header, pinned at the top
 // while its diff scrolls under it, then its diff.
@@ -120,7 +124,7 @@ func (a *app) readKey(p string) string {
 
 // setRead marks the file's diff read or not, for as long as the app runs.
 func (a *app) setRead(d *fileDiff, read bool) {
-	d.read = read
+	d.read, d.opened = read, false
 	if a.read == nil {
 		a.read = map[string]bool{}
 	}
@@ -267,8 +271,20 @@ func (a *app) diffHeader(c *ui.Context, d *fileDiff) {
 	t := c.Theme()
 	ch := d.change
 	dir, name := path.Split(ch.Path)
-	ui.Row(c).FillWidth().Height(40).AlignItems(ui.Center).Gap(t.Space(2)).Padding(0, t.Space(4)).
-		Background(t.Surface).BorderColor(t.Border.Alpha(0.6)).BorderWidth(0, 0, 1).Children(func() {
+	bar := ui.Row(c).FillWidth().Height(40).AlignItems(ui.Center).Gap(t.Space(2)).Padding(0, t.Space(4)).
+		Background(t.Surface).BorderColor(t.Border.Alpha(0.6)).BorderWidth(0, 0, 1)
+	if d.read {
+		// A click on a read file's bar shows its diff again, or folds it,
+		// as GitHub's Viewed files open: still marked read.
+		bar.KeepFocus().Cursor(ui.CursorPointer).OnClick(func() { d.opened = !d.opened })
+	}
+	bar.Children(func() {
+		if d.read {
+			chevron := ui.Icon(c, chevronIcon).Size(12, 12).Shrink(0).TextColor(t.TextMuted)
+			if d.folded() {
+				chevron.Rotate(-90)
+			}
+		}
 		fileicons.View(c, ch.Path, 16, t.TextMuted, ui.Color{})
 		// The name first, then where it is, as Xcode's jump bar.
 		ui.Text(c, name).FontWeight(600).SingleLine().Shrink(0)
@@ -295,7 +311,7 @@ func (a *app) diffBody(c *ui.Context, d *fileDiff) {
 		a.loadDiff(d) // for its counts too, where it is read
 	}
 	switch {
-	case d.read:
+	case d.folded():
 		ui.Row(c).FillWidth().Height(0)
 	case d.note != "":
 		ui.Text(c, d.note).TextColor(t.TextMuted).Padding(t.Space(4), t.Space(3))

@@ -279,6 +279,40 @@ func TestReadDiffs(t *testing.T) {
 		t.Errorf("no Viewed box, texts %q", tt.Texts())
 	}
 
+	// A click on a read file's bar shows its diff, still read, and
+	// another folds it; Viewed folds it again.
+	docs := a.diffs[1]
+	if err := tt.Click("new.md"); err != nil {
+		t.Fatal(err)
+	}
+	settle(tt)
+	if !docs.read || docs.folded() {
+		t.Errorf("after a click on its bar new.md read %v, folded %v; want read and shown", docs.read, docs.folded())
+	}
+	if err := tt.Click("new.md"); err != nil {
+		t.Fatal(err)
+	}
+	settle(tt)
+	if !docs.folded() {
+		t.Error("a second click on its bar did not fold new.md")
+	}
+	// Its Viewed box, on the bar, marks it and does not open it too.
+	name, _ := tt.Find("new.md")
+	box, ok := tt.Find("Viewed")
+	if !ok {
+		t.Fatal("no Viewed box")
+	}
+	tt.ClickAt(box.X+box.W/2, name.Y+name.H/2)
+	settle(tt)
+	if docs.read || docs.opened {
+		t.Errorf("after its Viewed box new.md read %v, opened %v; want neither", docs.read, docs.opened)
+	}
+	docs.opened = true
+	a.setRead(docs, true)
+	if !docs.folded() {
+		t.Error("marking new.md viewed again did not fold it")
+	}
+
 	// The marks stay with the commit while another shows.
 	a.setRead(a.diffs[0], true)
 	a.setRead(a.diffs[2], false)
