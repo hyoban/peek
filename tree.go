@@ -278,12 +278,11 @@ func (t *pathTree) sync() bool {
 }
 
 func (t *pathTree) view(c *ui.Context, label string, item func(p string, selected bool)) ui.Element {
-	th := c.Theme()
 	t.state.List.Selected = &t.row
 	t.state.Indent = 12
 	chosen := t.chosen()
 	children := func(p string) []string { return t.dirs[p] }
 	return ui.Outline(c, &t.state, t.dirs[""], children, func(p string) {
 		item(p, p == chosen)
-	}).Grow(1).FillWidth().Padding(th.Space(1.5), th.Space(2)).Label(label)
+	}).Label(label)
 }

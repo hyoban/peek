@@ -333,11 +333,38 @@ func (a *app) toggle(c *ui.Context, key string, svg *ui.SVG, on *bool, enabled b
 	b.Children(func() { ui.Icon(c, svg).Size(17, 17) }).OnClick(func() { *on = !*on })
 }
 
-// columnHeader is the slim bar at the top of a column.
-func columnHeader(c *ui.Context, content func()) {
+// column builds one of the window's columns, all alike: the background,
+// only the toolbar showing the material, a slim header, a divider, and
+// the body.
+func column(c *ui.Context, header, body func()) {
 	t := c.Theme()
-	ui.Row(c).Height(38).Shrink(0).FillWidth().AlignItems(ui.Center).Gap(t.Space(2)).
-		Padding(0, t.Space(3)).Children(content)
+	ui.Column(c).Fill().Background(t.Background).Children(func() {
+		ui.Row(c).Height(38).Shrink(0).FillWidth().AlignItems(ui.Center).Gap(t.Space(2)).
+			Padding(0, t.Space(3)).Children(header)
+		ui.Divider(c)
+		body()
+	})
+}
+
+// sideList insets a list of a side column, the history or a tree, so
+// that its rows' highlights clear the divider and the column's edges.
+func sideList(c *ui.Context, list ui.Element) ui.Element {
+	t := c.Theme()
+	return list.Grow(1).FillWidth().Padding(t.Space(1.5), t.Space(2))
+}
+
+// ink is the colors of a row of a side list: the accent's text where it
+// is chosen, which shows on the accent where the list has the focus.
+type ink struct {
+	text, muted ui.Color
+	onAccent    bool // chosen in the list with the focus
+}
+
+func rowInk(t *ui.Theme, selected, focused bool) ink {
+	if !selected {
+		return ink{text: t.Text, muted: t.TextMuted}
+	}
+	return ink{text: t.AccentText, muted: t.AccentText.Alpha(0.72), onAccent: focused}
 }
 
 func sectionTitle(c *ui.Context, title string) {
@@ -346,31 +373,30 @@ func sectionTitle(c *ui.Context, title string) {
 
 func (a *app) history(c *ui.Context) {
 	t := c.Theme()
-	// Solid, as the tree: only the toolbar shows the material.
-	ui.Column(c).Fill().Background(t.Surface).Children(func() {
-		columnHeader(c, func() {
-			sectionTitle(c, "History")
-			ui.Spacer(c)
-			n := len(a.commits)
-			if n > 0 && a.commits[0].Hash == worktree {
-				n--
-			}
-			ui.Text(c, count(n, "commit")).FontSize(smallSize).TextColor(t.TextMuted).SingleLine()
-		})
+	header := func() {
+		sectionTitle(c, "History")
+		ui.Spacer(c)
+		n := len(a.commits)
+		if n > 0 && a.commits[0].Hash == worktree {
+			n--
+		}
+		ui.Text(c, count(n, "commit")).FontSize(smallSize).TextColor(t.TextMuted).SingleLine()
+	}
+	column(c, header, func() {
+		switch {
+		case a.err != "":
+			emptyNote(c, a.err)
+			return
+		case len(a.commits) == 0:
+			emptyNote(c, "Loading…")
+			return
+		}
 		a.commitList.Selected = &a.commitRow
 		a.commitList.Key = func(i int) any { return a.commits[i].Hash } // "" the work tree
 		a.commitList.Label = func(i int) string { return a.commits[i].Subject }
 		a.withFocus(c, a.commitList.FocusWithin(c), func() {
-			list := ui.List(c.Key("history"), &a.commitList, len(a.commits)).Grow(1).FillWidth().
-				Padding(0, t.Space(2), t.Space(2)).Gap(1).Label("History")
-			list.Rows(func(row ui.ListRow) { a.commitItem(row) })
-			list.Children(func() {
-				if a.err != "" {
-					ui.Text(c, a.err).TextColor(t.TextMuted).Padding(t.Space(3))
-				} else if len(a.commits) == 0 {
-					ui.Text(c, "Loading…").TextColor(t.TextMuted).Padding(t.Space(3))
-				}
-			})
+			list := ui.List(c.Key("history"), &a.commitList, len(a.commits)).Gap(1).Label("History")
+			sideList(c, list).Rows(func(row ui.ListRow) { a.commitItem(row) })
 		})
 	})
 }
@@ -379,16 +405,14 @@ func (a *app) commitItem(row ui.ListRow) {
 	c := row.Context
 	t := c.Theme()
 	cm := a.commits[row.Index]
-	text, muted := t.Text, t.TextMuted
-	if row.Selected() {
-		text, muted = t.AccentText, t.AccentText.Alpha(0.7)
-	}
+	in := rowInk(t, row.Selected(), row.ListFocused())
+	text, muted := in.text, in.muted
 	ui.Row(c).FillWidth().Gap(t.Space(2.5)).Padding(t.Space(2), t.Space(2)).AlignItems(ui.Start).Children(func() {
 		if cm.Hash == worktree {
 			orange := system(t, systemOrange)
 			badge := ui.Box(c).Size(30, 30).Shrink(0).Radius(999).Center().
 				Background(orange.Alpha(0.16)).TextColor(orange)
-			if row.Selected() && row.ListFocused() {
+			if in.onAccent {
 				badge.Background(t.AccentText.Alpha(0.2)).TextColor(t.AccentText)
 			}
 			badge.Children(func() { ui.Icon(c, worktreeIcon).Size(15, 15) })
@@ -413,17 +437,13 @@ func (a *app) commitItem(row ui.ListRow) {
 }
 
 func (a *app) treePane(c *ui.Context) {
-	t := c.Theme()
 	title, key, tree, label := "Changed Files", "changes", &a.changeTree, "Changes"
-	col := ui.Column(c).Fill().Background(t.Background)
 	if a.mode == modeFiles {
 		title, key, tree, label = "Files", "all", &a.allTree, "Files"
-		col.Background(t.Surface) // the editor's sidebar
 	}
-	col.Children(func() {
-		columnHeader(c, func() { sectionTitle(c, title) })
+	column(c, func() { sectionTitle(c, title) }, func() {
 		if tree.dirs == nil {
-			ui.Text(c, "Loading…").TextColor(t.TextMuted).Padding(t.Space(3))
+			emptyNote(c, "Loading…")
 			return
 		}
 		a.treeView(c.Key(key), tree, label)
@@ -433,18 +453,16 @@ func (a *app) treePane(c *ui.Context) {
 func (a *app) treeView(c *ui.Context, tree *pathTree, label string) {
 	focused := tree.state.List.FocusWithin(c)
 	a.withFocus(c, focused, func() {
-		tree.view(c, label, func(p string, selected bool) {
+		sideList(c, tree.view(c, label, func(p string, selected bool) {
 			a.treeItem(c, tree, p, selected, focused)
-		})
+		}))
 	})
 }
 
 func (a *app) treeItem(c *ui.Context, tree *pathTree, p string, selected, focused bool) {
 	t := c.Theme()
-	text, muted := t.Text, t.TextMuted
-	if selected {
-		text, muted = t.AccentText, t.AccentText.Alpha(0.75)
-	}
+	in := rowInk(t, selected, focused)
+	text, muted := in.text, in.muted
 	isFile := !tree.isDir(p)
 	ch, changed := a.changes[p]
 	if isFile && tree == &a.changeTree && a.readFile(p) && !selected {
@@ -472,20 +490,20 @@ func (a *app) treeItem(c *ui.Context, tree *pathTree, p string, selected, focuse
 	row.Children(func() {
 		if isFile {
 			var tint ui.Color
-			if selected && focused {
+			if in.onAccent {
 				tint = t.AccentText
 			}
 			fileicons.View(c, p, 16, muted, tint)
 		} else {
 			color := a.theme.Accent // folders in the accent, as Finder's sidebar
-			if selected && focused {
+			if in.onAccent {
 				color = muted
 			}
 			ui.Icon(c, folderIcon).Size(15, 15).Shrink(0).TextColor(color)
 		}
 		ui.Text(c, tree.labels[p]).TextColor(text).SingleLine().Ellipsis("…").Grow(1).MinWidth(0).Tooltip(itemPath(p))
 		if isFile && changed {
-			statusMark(c, ch.Status, selected && focused)
+			statusMark(c, ch.Status, in.onAccent)
 		}
 	})
 }
@@ -520,16 +538,14 @@ func emptyNote(c *ui.Context, note string) {
 
 func (a *app) codePane(c *ui.Context) {
 	t := c.Theme()
-	ui.Column(c).Fill().Background(t.Background).Children(func() {
-		columnHeader(c, func() {
-			if a.openFile == "" {
-				ui.Spacer(c)
-				return
-			}
-			pathTitle(c, a.openFile)
-			ui.Text(c, "Read only").FontSize(smallSize).TextColor(t.TextMuted).SingleLine()
-		})
-		ui.Divider(c)
+	header := func() {
+		if a.openFile == "" {
+			return
+		}
+		pathTitle(c, a.openFile)
+		ui.Text(c, "Read only").FontSize(smallSize).TextColor(t.TextMuted).SingleLine()
+	}
+	column(c, header, func() {
 		switch {
 		case a.codeNote != "":
 			emptyNote(c, a.codeNote)

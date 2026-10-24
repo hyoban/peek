@@ -234,16 +234,15 @@ func (a *app) followScroll(c *ui.Context) {
 
 func (a *app) diffPane(c *ui.Context) {
 	t := c.Theme()
-	ui.Column(c).Fill().Background(t.Background).Children(func() {
-		columnHeader(c, func() {
-			if cm, ok := a.current(); ok {
-				ui.Text(c, cm.Subject).FontWeight(600).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
-			}
-			if n := len(a.diffs); n > 0 {
-				ui.Text(c, count(n, "file")).FontSize(smallSize).TextColor(t.TextMuted).SingleLine().Shrink(0)
-			}
-		})
-		ui.Divider(c)
+	header := func() {
+		if cm, ok := a.current(); ok {
+			ui.Text(c, cm.Subject).FontWeight(600).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
+		}
+		if n := len(a.diffs); n > 0 {
+			ui.Text(c, count(n, "file")).FontSize(smallSize).TextColor(t.TextMuted).SingleLine().Shrink(0)
+		}
+	}
+	column(c, header, func() {
 		if len(a.diffs) == 0 {
 			emptyNote(c, "No changes")
 			return
