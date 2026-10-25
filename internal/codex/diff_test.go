@@ -2,6 +2,7 @@ package codex
 
 import (
 	"peek/internal/filekind"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -75,6 +76,30 @@ func TestGeneratedMarkerNeedsACommentLine(t *testing.T) {
 	} {
 		if got := diffGroup(fileDiff("x.go", body), nil) == groupBulk; got != want {
 			t.Errorf("%q generated = %v, want %v", body, got, want)
+		}
+	}
+}
+
+// A large diff keeps every hunk's @@ line, which names its function, and
+// the first changed lines of each, not only the start of the file.
+func TestCutDiffKeepsEveryHunk(t *testing.T) {
+	var body strings.Builder
+	for i := range 20 {
+		body.WriteString("@@ -1 +1 @@ func f" + strconv.Itoa(i) + "()\n context\n")
+		for range 50 {
+			body.WriteString("+changed in f" + strconv.Itoa(i) + "\n")
+		}
+	}
+	diff := fileDiff("a.go", "")
+	diff = diff[:strings.Index(diff, "@@")] + body.String()
+	cut := cutDiff(diff, 4096)
+	if len(cut) > 4096+200 || strings.Contains(cut, "\n context\n") || !strings.Contains(cut, "cut here") {
+		t.Fatalf("cut %d bytes:\n%s", len(cut), cut)
+	}
+	for i := range 20 {
+		f := "func f" + strconv.Itoa(i) + "()"
+		if !strings.Contains(cut, f) || !strings.Contains(cut, "+changed in f"+strconv.Itoa(i)) {
+			t.Fatalf("%s or its changes missing:\n%s", f, cut)
 		}
 	}
 }

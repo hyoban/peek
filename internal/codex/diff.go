@@ -72,12 +72,102 @@ func splitDiff(diff string) []string {
 	return files
 }
 
+// cutDiff cuts a file's diff to about limit bytes keeping its whole shape,
+// not only its start, which for a large change is the imports and the
+// first declarations alone: its header, every hunk's @@ line, which names
+// the function the hunk is in, and as many of each hunk's changed lines as
+// fit, the same number for every hunk, without the context lines.
 func cutDiff(text string, limit int) string {
+	header, hunks := splitHunks(text)
+	if len(hunks) == 0 {
+		return cutBytes(text, limit, "")
+	}
+	limit -= 160 // room for the note
+	most := 0
+	for _, h := range hunks {
+		most = max(most, len(h.changed))
+	}
+	// The most changed lines a hunk keeps, found by halving.
+	lo, hi := 0, most
+	for lo < hi {
+		n := (lo + hi + 1) / 2
+		if len(excerpt(header, hunks, n)) <= limit {
+			lo = n
+		} else {
+			hi = n - 1
+		}
+	}
+	cut, kept, total := excerpt(header, hunks, lo), 0, 0
+	for _, h := range hunks {
+		kept, total = kept+min(lo, len(h.changed)), total+len(h.changed)
+	}
+	note := "[This file's diff is cut here: " + strconv.Itoa(total-kept) + " of its " + strconv.Itoa(total) +
+		" changed lines and its context lines are left out; every hunk's @@ line is kept.]\n"
+	if kept == total {
+		note = "[This file's diff is cut here: its context lines are left out, its changed lines all kept.]\n"
+	}
+	if len(cut) > limit { // too many hunks for even their @@ lines
+		return cutBytes(cut, limit, note)
+	}
+	return cut + note
+}
+
+// cutBytes cuts text at the last line that ends within limit, and marks
+// the cut with note, or by how much where note is "".
+func cutBytes(text string, limit int, note string) string {
 	keep := text[:limit]
 	if i := strings.LastIndexByte(keep, '\n'); i >= 0 {
 		keep = keep[:i+1]
 	}
-	return keep + "[This file's diff is cut here; " + strconv.Itoa(len(text)-len(keep)) + " more bytes.]\n"
+	if note == "" {
+		note = "[This file's diff is cut here; " + strconv.Itoa(len(text)-len(keep)) + " more bytes.]\n"
+	}
+	return keep + note
+}
+
+// hunk is a hunk of a file's diff: its @@ line and its changed lines,
+// without the context ones.
+type hunk struct {
+	head    string
+	changed []string
+}
+
+// splitHunks reads a file's diff as its header, the lines before its first
+// hunk, and its hunks.
+func splitHunks(text string) (header string, hunks []hunk) {
+	at := strings.Index(text, "\n@@ ")
+	if at < 0 {
+		return text, nil
+	}
+	header = text[:at+1]
+	for _, line := range strings.SplitAfter(text[at+1:], "\n") {
+		switch {
+		case strings.HasPrefix(line, "@@ "):
+			hunks = append(hunks, hunk{head: line})
+		case strings.HasPrefix(line, "+"), strings.HasPrefix(line, "-"):
+			h := &hunks[len(hunks)-1]
+			h.changed = append(h.changed, line)
+		}
+	}
+	return header, hunks
+}
+
+// excerpt is the header and the hunks, each with its first n changed lines
+// and a note of how many more it has.
+func excerpt(header string, hunks []hunk, n int) string {
+	var b strings.Builder
+	b.WriteString(header)
+	for _, h := range hunks {
+		b.WriteString(h.head)
+		keep := min(n, len(h.changed))
+		for _, line := range h.changed[:keep] {
+			b.WriteString(line)
+		}
+		if more := len(h.changed) - keep; more > 0 {
+			b.WriteString("[" + strconv.Itoa(more) + " more changed lines]\n")
+		}
+	}
+	return b.String()
 }
 
 // diffPath reads the new path from a file's diff header, which is enough to

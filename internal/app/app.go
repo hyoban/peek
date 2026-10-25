@@ -71,8 +71,8 @@ type app struct {
 	// narrowing hid, which its widening shows again.
 	collapsedHistory, collapsedTree bool
 	fitWidth                        float32 // the window's width fit last
-	mode                    int
-	modeChoice              int // the mode switch's, which setMode follows
+	mode                            int
+	modeChoice                      int // the mode switch's, which setMode follows
 
 	commits    []git.Commit
 	commitList ui.ListState

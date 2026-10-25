@@ -15,7 +15,7 @@ import (
 )
 
 func TestCommitMessageEmbedsSmallChanges(t *testing.T) {
-	testutil.FakeReviewCodex(t, `{"message":"Update the files"}`)
+	testutil.FakeReviewCodex(t, `{"changes":["Update the files"],"subject":"Update the files"}`)
 	promptFile, cwdFile := filepath.Join(t.TempDir(), "prompt"), filepath.Join(t.TempDir(), "cwd")
 	t.Setenv("PEEK_TEST_REVIEW_PROMPT", promptFile)
 	t.Setenv("PEEK_TEST_CODEX_CWD", cwdFile)
@@ -107,7 +107,7 @@ func TestCodexSmoke(t *testing.T) {
 
 // The staged .gitattributes decides, though it is new in this commit.
 func TestCommitMessageFollowsStagedAttributes(t *testing.T) {
-	testutil.FakeReviewCodex(t, `{"message":"Update the files"}`)
+	testutil.FakeReviewCodex(t, `{"changes":["Update the files"],"subject":"Update the files"}`)
 	promptFile := filepath.Join(t.TempDir(), "prompt")
 	t.Setenv("PEEK_TEST_REVIEW_PROMPT", promptFile)
 	repo, _ := testutil.RemoteRepo(t)
@@ -135,7 +135,7 @@ func TestCommitMessageFollowsStagedAttributes(t *testing.T) {
 // Git before 2.40 rejects check-attr --source; Ship then groups by the
 // common rules rather than failing.
 func TestCommitMessageWithoutCheckAttrSource(t *testing.T) {
-	testutil.FakeReviewCodex(t, `{"message":"Update the files"}`)
+	testutil.FakeReviewCodex(t, `{"changes":["Update the files"],"subject":"Update the files"}`)
 	promptFile := filepath.Join(t.TempDir(), "prompt")
 	t.Setenv("PEEK_TEST_REVIEW_PROMPT", promptFile)
 	repo, _ := testutil.RemoteRepo(t)
@@ -157,5 +157,26 @@ func TestCommitMessageWithoutCheckAttrSource(t *testing.T) {
 	}
 	if prompt, err := os.ReadFile(promptFile); err != nil || !bytes.Contains(prompt, []byte("## Code\n")) || !bytes.Contains(prompt, []byte("// code")) {
 		t.Fatalf("diffs not grouped without check-attr: %v\n%s", err, prompt)
+	}
+}
+
+// One change is a subject alone; several are its body's list, wrapped.
+func TestCommitText(t *testing.T) {
+	if got := commitText(" Fix the crash ", []string{"Fix the crash"}); got != "Fix the crash" {
+		t.Errorf("one change: %q", got)
+	}
+	if got := commitText("", []string{"a", "b"}); got != "" {
+		t.Errorf("no subject: %q", got)
+	}
+	long := strings.Repeat("word ", 20)
+	got := commitText("Rework the window", []string{"- Add a menu", long})
+	want := "Rework the window\n\n- Add a menu\n- " + strings.Repeat("word ", 13) + "word\n  " + strings.TrimSpace(strings.Repeat("word ", 6)) + "\n"
+	if got != want {
+		t.Errorf("several changes:\n%q\nwant\n%q", got, want)
+	}
+	for _, line := range strings.Split(got, "\n") {
+		if len(line) > 72 {
+			t.Errorf("line over 72 columns: %q", line)
+		}
 	}
 }

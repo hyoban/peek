@@ -70,7 +70,7 @@ func RemoteRepo(t *testing.T) (string, string) {
 // FakeCodex puts a codex on the PATH that writes a commit message.
 func FakeCodex(t *testing.T) {
 	t.Helper()
-	FakeReviewCodex(t, `{"message":"Update the files"}`)
+	FakeReviewCodex(t, `{"changes":["Update the files"],"subject":"Update the files"}`)
 }
 
 // FakeGH puts a gh on the PATH that lists one pull request and checks
