@@ -57,7 +57,7 @@ func (a *app) branchLabel(c *ui.Context) {
 	t := c.Theme()
 	b := ui.ButtonBase(c.Key("branch")).Bind(&a.switcher.button).Shrink(2).MinWidth(0).Padding(t.Space(0.5), t.Space(1.5)).
 		Radius(t.Radius).TextColor(t.TextMuted).Label("Switch Branch").Tooltip(a.branch).
-		Disabled(a.push.running || a.review.running)
+		Disabled(a.push.running || a.review.running || a.pull.running)
 	switch {
 	case a.switcher.open || b.Pressed():
 		b.Background(t.SurfacePressed)
@@ -205,7 +205,7 @@ func (a *app) switchTo(target switchTarget) {
 		}
 		return
 	}
-	if s.running != "" || a.push.running || a.review.running || (target.pr == 0 && target.branch == a.branch) {
+	if s.running != "" || a.push.running || a.review.running || a.pull.running || (target.pr == 0 && target.branch == a.branch) {
 		if target.branch == a.branch {
 			s.open = false
 		}
@@ -330,7 +330,7 @@ func (a *app) switcherRow(c *ui.Context, target switchTarget, svg *ui.SVG, title
 		detail, tooltip = "Worktree", title+"\nOpen the worktree at "+target.worktree
 	}
 	b := ui.ButtonBase(c.Key(key)).FillWidth().Padding(t.Space(1), t.Space(2)).Radius(t.Radius).
-		Label(title).Tooltip(tooltip).Disabled(a.switcher.running != "")
+		Label(title).Tooltip(tooltip).Disabled(a.switcher.running != "" || a.pull.running)
 	switch {
 	case b.Pressed():
 		b.Background(t.SurfacePressed)

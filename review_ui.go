@@ -69,7 +69,7 @@ func (a *app) reviewButton(c *ui.Context) {
 	}
 	available := a.reviewSource.id != "" || a.reviewSourceErr != ""
 	completed := !a.review.stale && (a.review.result != nil || a.review.err != "")
-	disabled := a.push.running || (!a.review.running && (a.switcher.running != "" || !available && !completed))
+	disabled := a.push.running || (!a.review.running && (a.switcher.running != "" || a.pull.running || !available && !completed))
 	if a.review.stale && !available && !a.review.running {
 		label, tooltip = "Review", "Nothing to review"
 	}
@@ -98,7 +98,7 @@ func (a *app) reviewButton(c *ui.Context) {
 }
 
 func (a *app) startReview(services ui.Services) {
-	if a.review.running || a.push.running || a.switcher.running != "" {
+	if a.review.running || a.push.running || a.switcher.running != "" || a.pull.running {
 		return
 	}
 	if a.reviewSourceErr != "" {
@@ -218,7 +218,7 @@ func (a *app) reviewDetails(c *ui.Context) {
 			})
 		})
 		ui.Row(c).FillWidth().Shrink(0).Justify(ui.End).Gap(t.Space(2)).Children(func() {
-			ui.Button(c.Key("review-again"), "Review again").Disabled(a.push.running || a.review.running || a.reviewSource.id == "").
+			ui.Button(c.Key("review-again"), "Review again").Disabled(a.push.running || a.review.running || a.pull.running || a.reviewSource.id == "").
 				OnClick(func() { a.startReview(services) })
 			ui.Button(c.Key("close-review"), "Close").OnClick(func() { a.review.open = false })
 		})

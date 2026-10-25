@@ -40,7 +40,10 @@ type app struct {
 	published                []func()
 	err                      string
 	push                     pushState
-	canPush                  bool // work tree changes or commits not yet pushed
+	canPush                  bool   // work tree changes or commits not yet pushed
+	behind                   int    // the upstream's commits, as fetched, the branch has not
+	upstream                 string // the upstream's name, where the branch is behind it
+	pull                     pullState
 	review                   reviewState
 	reviewSource             reviewSnapshot
 	reviewSourceErr          string
@@ -220,6 +223,7 @@ func (a *app) toolbar(c *ui.Context) {
 			ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Gap(t.Space(1)).Children(func() {
 				a.projectTitle(c)
 				a.branchLabel(c)
+				a.pullButton(c)
 				if a.github != "" {
 					a.linkButton(c, "github", githubIcon, "Open on GitHub", a.github)
 				}
@@ -656,7 +660,7 @@ func (a *app) loadCommits() {
 				return
 			}
 			a.commits, a.worktreeChanges, a.branch, a.github = h.commits, h.changes, h.branch, h.github
-			a.canPush = h.canPush
+			a.canPush, a.behind, a.upstream = h.canPush, h.behind, h.upstream
 			a.updateReviewSource(h.review, h.reviewErr)
 			if len(h.commits) > 0 {
 				a.commitRow = 0

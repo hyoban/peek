@@ -14,6 +14,8 @@ type history struct {
 	branch    string
 	github    string // the repository's page on GitHub, "" for none
 	canPush   bool
+	behind    int    // the upstream's commits the branch has not
+	upstream  string // the upstream's name, where it is behind
 	review    reviewSnapshot
 	reviewErr string
 	err       error
@@ -31,12 +33,13 @@ func readHistory(repo string) history {
 	wt := commit{Hash: worktree, Subject: "Uncommitted Changes", Summary: summary}
 	commits = append([]commit{wt}, commits...)
 	review, reviewErr := readReviewSnapshot(repo)
+	behind, upstream := behindUpstream(repo)
 	var reviewNote string
 	if reviewErr != nil {
 		reviewNote = reviewErr.Error()
 	}
 	return history{commits: commits, changes: changes, branch: currentBranch(repo), github: githubURL(repo),
-		canPush: len(changes) > 0 || hasUnpushedCommits(repo), review: review, reviewErr: reviewNote, err: err}
+		canPush: len(changes) > 0 || hasUnpushedCommits(repo), behind: behind, upstream: upstream, review: review, reviewErr: reviewNote, err: err}
 }
 
 // refresh reads the history and the work tree again, as the watch asks
@@ -70,7 +73,10 @@ func (a *app) applyHistory(h history) {
 	shown, wasShown := a.hashAt(a.loadedRow)
 	filesShown := a.filesFor >= 0 && a.filesFor == a.loadedRow
 	a.commits, a.branch, a.github, a.err = h.commits, h.branch, h.github, ""
-	a.canPush = h.canPush
+	a.canPush, a.behind, a.upstream = h.canPush, h.behind, h.upstream
+	if h.behind == 0 {
+		a.pull.err = "" // up to date after all, as pulled elsewhere
+	}
 	a.updateReviewSource(h.review, h.reviewErr)
 	a.commitRow = -1
 	if len(h.commits) > 0 {
@@ -233,6 +239,23 @@ func (p *projects) watch(a *app) {
 	ctx, cancel := context.WithCancel(context.Background())
 	p.unwatch = cancel
 	win := p.win
+	// The remote, at once and every while, for its new commits.
+	go func() {
+		tick := time.NewTicker(fetchEvery)
+		defer tick.Stop()
+		for {
+			win.Update(func() {
+				if p.cur == a {
+					a.fetchRemote()
+				}
+			})
+			select {
+			case <-ctx.Done():
+				return
+			case <-tick.C:
+			}
+		}
+	}()
 	go func() {
 		w, err := mygo.WatchFiles(ctx, a.repo, mygo.FileWatchOptions{
 			Recursive: true,

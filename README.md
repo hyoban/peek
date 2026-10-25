@@ -30,6 +30,7 @@ All of the commit's files, to read any of them as it was then.
 - Authors' avatars, and a link to the repository on GitHub
 - Switch between projects in one window
 - Switch branches, or check out a pull request by number or link with the [GitHub CLI](https://cli.github.com), from the branch in the toolbar
+- Fetches the branch's remote every few minutes, shows how many new commits it has beside the branch, and pulls them by fast-forward with a click
 - Commit all changes with a Codex-generated message and push from the toolbar
 - Follows the system's light and dark appearance
 
