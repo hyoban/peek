@@ -34,45 +34,51 @@ func TestAnswerUI(t *testing.T) {
 	testutil.FakeReviewCodex(t, `{"answer":"It **adds** the docs."}`)
 	prompt := filepath.Join(t.TempDir(), "prompt")
 	t.Setenv("PEEK_TEST_REVIEW_PROMPT", prompt)
+	t.Setenv("PEEK_TEST_CODEX_THREAD", "thread-1")
+	args := filepath.Join(t.TempDir(), "args")
+	t.Setenv("PEEK_TEST_CODEX_ARGS", args)
 	a, tt := testApp(t, repo, nil)
 	askCodex(t, tt, "Explain")
-	if a.answer.running || a.answer.scope != "Uncommitted changes" || a.answer.title != "Explain" || a.ask.open {
-		t.Fatalf("answer %+v, texts %q", a.answer, tt.Texts())
+	conv := a.shownConversation()
+	if a.answer.running || a.ask.open || conv == nil || conv.Title != "Explain" || conv.Scope != "Uncommitted changes" || conv.Session != "thread-1" {
+		t.Fatalf("conversation %+v, texts %q", conv, tt.Texts())
 	}
 	if got, _ := os.ReadFile(prompt); !strings.HasPrefix(string(got), askTemplates[0].request+"\n") {
 		t.Fatalf("prompt %q, want the template's request", got)
 	}
-	// The popover shows the answer again.
-	if err := tt.Click("Ask Codex"); err != nil {
+	// It shows in place of the diffs, listed in the sidebar.
+	if !tt.HasText("adds") || !tt.HasText(askTemplates[0].request) || !tt.HasText("Conversations") {
+		t.Fatalf("the conversation does not show, texts %q", tt.Texts())
+	}
+	// A reply follows up in Codex's conversation.
+	os.WriteFile(os.Getenv("PEEK_TEST_REVIEW_RESPONSE"), []byte(`{"answer":"Only docs."}`), 0o600)
+	if err := tt.Click("Reply"); err != nil {
 		t.Fatal(err)
 	}
-	if !tt.HasText("Explain") || !tt.HasText("Uncommitted changes") {
-		t.Fatalf("the popover does not offer the answer, texts %q", tt.Texts())
-	}
-	if err := tt.Click("Show"); err != nil {
-		t.Fatal(err)
-	}
-	if !tt.HasText("adds") || a.ask.open {
-		t.Fatalf("the sheet does not show the answer, texts %q", tt.Texts())
-	}
-	if err := tt.Click("Done"); err != nil {
-		t.Fatal(err)
-	}
-	// The changes changed, it is out of date.
-	if err := os.WriteFile(filepath.Join(repo, "docs/new.md"), []byte("new content\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	a.refresh()
+	tt.Type("Anything else?")
+	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
-	if err := tt.Click("Ask Codex"); err != nil {
+	if len(conv.Turns) != 2 || conv.Turns[1].Answer != "Only docs." || !tt.HasText("Only docs.") || a.reply != "" {
+		t.Fatalf("follow-up %+v, texts %q", conv.Turns, tt.Texts())
+	}
+	runs, _ := os.ReadFile(args)
+	if lines := strings.Split(strings.TrimSpace(string(runs)), "\n"); len(lines) != 2 || !strings.Contains(lines[1], "resume") || !strings.Contains(lines[1], "thread-1") {
+		t.Fatalf("codex ran with %q", lines)
+	}
+	if got, _ := os.ReadFile(prompt); !strings.HasPrefix(string(got), "Anything else?\n") || strings.Contains(string(got), "Scope:") {
+		t.Fatalf("follow-up prompt %q", got)
+	}
+	// The files show again in their navigator.
+	if err := tt.Click("File Navigator"); err != nil {
 		t.Fatal(err)
 	}
-	if !tt.HasText("Out of date") {
-		t.Fatalf("a stale answer shows, texts %q", tt.Texts())
+	if a.shownConversation() != nil || tt.HasText("Only docs.") {
+		t.Fatalf("the conversation still shows, texts %q", tt.Texts())
 	}
 }
 
-// A request of the user's own goes as it is, Return sending it.
+// A request of the user's own goes as it is, Return sending it, titled
+// after it.
 func TestAskOwnRequest(t *testing.T) {
 	repo := testutil.Repo(t)
 	testutil.FakeReviewCodex(t, `{"answer":"Two files."}`)
@@ -90,10 +96,38 @@ func TestAskOwnRequest(t *testing.T) {
 	tt.Type("Briefly.")
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
-	if a.answer.title != "Answer" || a.answer.text != "Two files." || a.ask.open || a.ask.text != "" {
-		t.Fatalf("answer %+v, ask %+v", a.answer, a.ask)
+	conv := a.shownConversation()
+	if conv == nil || conv.Title != "Which files change?" || conv.Turns[0].Answer != "Two files." || a.ask.open || a.ask.text != "" {
+		t.Fatalf("conversation %+v, ask %+v", conv, a.ask)
 	}
 	if got, _ := os.ReadFile(prompt); !strings.HasPrefix(string(got), "Which files change?\nBriefly.\n") {
 		t.Fatalf("prompt %q, want the user's request", got)
+	}
+}
+
+// Conversations are kept for the next launch, a request under way as the
+// app quit stopped.
+func TestConversationsKept(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "conversations.json")
+	a := newApp("/tmp/repo")
+	a.convFile = file
+	conv := a.newConversation("Explain", "Uncommitted changes", "Explain it.")
+	conv.Session = "thread-1"
+	conv.Turns = append(conv.Turns, &turn{Request: "More?"})
+	conv.Turns[0].Answer = "It does."
+	a.saveConversations()
+	b := newApp("/tmp/repo")
+	b.convFile = file
+	b.loadConversations()
+	if len(b.conversations) != 1 || b.conversations[0].Session != "thread-1" || b.conversations[0].Turns[0].Answer != "It does." ||
+		b.conversations[0].Turns[1].Err != "Stopped" {
+		t.Fatalf("kept %+v", b.conversations)
+	}
+	b.deleteConversation(b.conversations[0])
+	c := newApp("/tmp/repo")
+	c.convFile = file
+	c.loadConversations()
+	if len(c.conversations) != 0 {
+		t.Fatalf("deleted conversation kept: %+v", c.conversations)
 	}
 }

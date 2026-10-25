@@ -38,10 +38,17 @@ func (a *app) toolbarSpec(c *ui.Context) *mygo.Toolbar {
 	busy := a.push.running || a.review.running || a.pull.running
 	// The sidebar's button at the start, beside the window's buttons,
 	// where it stays as the sidebar slides, as Xcode's navigator's; the
-	// project and its branch then, as the text's title.
+	// project and its branch then, as the text's title. The sidebar's
+	// navigators are its segments, as Xcode's navigators and coding
+	// assistant: the one shown chosen again hides the sidebar.
+	navigator := -1
+	if a.showTree {
+		navigator = a.navigator
+	}
 	items := []mygo.ToolbarItem{
-		{ID: "sidebar", Symbol: "sidebar.left", Label: showOrHide(a.showTree, "Sidebar"), ToolTip: showOrHide(a.showTree, "Sidebar"),
-			Click: func() { a.toggle(&a.showTree, &a.collapsedTree) }},
+		{ID: "navigator", Kind: mygo.ToolbarSegmented, Segments: []string{"Files", "Conversations"},
+			SegmentSymbols: []string{"list.bullet", "bubble.left.and.text.bubble.right"}, Selected: navigator, Label: "Navigator",
+			ToolTip: "Show the files or the conversations with Codex, or hide the sidebar", Select: a.chooseNavigator},
 		{ID: "sidebar-end", Kind: mygo.ToolbarFlexibleSpace},
 	}
 	items = append(items,

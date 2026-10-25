@@ -11,6 +11,7 @@ import (
 	"peek/internal/testutil"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 )
 
@@ -178,5 +179,28 @@ func TestCommitText(t *testing.T) {
 		if len(line) > 72 {
 			t.Errorf("line over 72 columns: %q", line)
 		}
+	}
+}
+
+// A turn starts a conversation Codex keeps, and the next resumes it.
+func TestTurn(t *testing.T) {
+	testutil.FakeReviewCodex(t, `{"answer":"ok"}`)
+	argsFile := filepath.Join(t.TempDir(), "args")
+	t.Setenv("PEEK_TEST_CODEX_ARGS", argsFile)
+	t.Setenv("PEEK_TEST_CODEX_THREAD", "thread-1")
+	repo := testutil.Repo(t)
+	schema := `{"type":"object"}`
+	data, session, err := Turn(context.Background(), repo, "", schema, "First", time.Minute, nil)
+	if err != nil || string(data) != `{"answer":"ok"}` || session != "thread-1" {
+		t.Fatalf("first turn %q, %q, %v", data, session, err)
+	}
+	if _, session, err = Turn(context.Background(), repo, session, schema, "Next", time.Minute, nil); err != nil || session != "thread-1" {
+		t.Fatalf("next turn %q, %v", session, err)
+	}
+	args, _ := os.ReadFile(argsFile)
+	lines := strings.Split(strings.TrimSpace(string(args)), "\n")
+	if len(lines) != 2 || strings.Contains(lines[0], "--ephemeral") || !strings.Contains(lines[0], "--sandbox read-only") ||
+		!strings.HasPrefix(lines[1], "exec resume -c sandbox_mode=\"read-only\"") || !strings.HasSuffix(lines[1], "thread-1 -") {
+		t.Fatalf("codex ran with %q", lines)
 	}
 }

@@ -63,24 +63,3 @@ func (a *app) codexProgress(ctx context.Context, k *codexTask, current func() bo
 func (a *app) changing() bool {
 	return a.push.running || a.pull.running || a.switcher.running != ""
 }
-
-// resultSheet shows what Codex answered in a sheet: its title and scope
-// over body, Copy apart at the start, copying text, and the button named
-// again, which asks once more, before Done.
-func (a *app) resultSheet(c *ui.Context, ch *child, open *bool, title, scope string, body func(c *ui.Context), text, again string, disabled bool, onAgain func()) {
-	services := c.Services()
-	a.sheet(c, ch, open, title, 620, 480, func(c *ui.Context) {
-		t := c.Theme()
-		ui.Text(c, title).FontWeight(600).FontSize(fontSize + 3).Shrink(0)
-		ui.Text(c, scope).TextColor(t.TextMuted).Shrink(0)
-		ui.Scroll(c).Grow(1).FillWidth().MinHeight(0).Children(func() {
-			ui.Column(c).FillWidth().Gap(t.Space(3)).Children(func() { body(c) })
-		})
-	}, func(c *ui.Context) {
-		// Copy apart at the start, as a sheet's secondary action, and the
-		// default button last.
-		ui.Button(c.Key("copy:"+title), "Copy").Disabled(text == "").OnClick(func() { services.WriteClipboard(text) })
-		ui.Spacer(c)
-		ui.Button(c.Key("again:"+title), again).Disabled(disabled).OnClick(onAgain)
-	})
-}

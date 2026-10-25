@@ -5,8 +5,8 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// child is a window of AppKit's own over the project's window, a popover
-// or a sheet, which shows while the *open it was opened for is true. Its
+// child is a window of AppKit's own over the project's window, a
+// popover, which shows while the *open it was opened for is true. Its
 // view and the window's show the same state, so each redraws the other
 // after a pass of its own; the pass a redraw asks for asks for none
 // back, which would go on forever.
@@ -101,20 +101,3 @@ func (a *app) popover(ch *child, open *bool, anchor mygo.Rectangle, width int, b
 
 // popoverPadding is the room between a popover's edge and its content.
 const popoverPadding = 8
-
-// nativeSheet shows build in a sheet of AppKit's while *open is true,
-// width by height: it slides from under the toolbar, the window waiting
-// behind it.
-func (a *app) nativeSheet(ch *child, open *bool, width, height int, build func(c *ui.Context)) {
-	a.follow(ch, open, func(view func(c *ui.Context)) *mygo.Window {
-		return mygo.NewWindow(mygo.WindowOptions{
-			Width:          width,
-			Height:         height,
-			UseContentSize: true,
-			DisableResize:  true,
-			Parent:         a.win,
-			Modal:          true,
-			Content:        ui.View(view),
-		})
-	}, build)
-}

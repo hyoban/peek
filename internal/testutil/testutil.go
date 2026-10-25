@@ -133,6 +133,7 @@ func FakeReviewCodex(t *testing.T, response string) {
 	}
 	t.Setenv("PEEK_TEST_REVIEW_RESPONSE", file)
 	script := `#!/bin/sh
+if [ -n "$PEEK_TEST_CODEX_ARGS" ]; then printf '%s\n' "$*" >> "$PEEK_TEST_CODEX_ARGS"; fi
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --output-last-message) shift; output="$1" ;;
@@ -146,6 +147,9 @@ if [ -n "$PEEK_TEST_REVIEW_PROMPT" ]; then
   cat > "$PEEK_TEST_REVIEW_PROMPT"
 else
   cat >/dev/null
+fi
+if [ -n "$PEEK_TEST_CODEX_THREAD" ] && [ "$json" = 1 ]; then
+  printf '{"type":"thread.started","thread_id":"%s"}\n' "$PEEK_TEST_CODEX_THREAD"
 fi
 if [ -n "$PEEK_TEST_CODEX_EVENTS" ]; then
   test "$json" = 1 || exit 3

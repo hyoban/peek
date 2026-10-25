@@ -62,6 +62,16 @@ type app struct {
 	answer                   answerState
 	ask                      askState
 	lastCodex                codexResult // which result came last
+	// conversations are those with Codex about the repository, newest
+	// first, kept in convFile; convRow is the one chosen, and navigator
+	// which the sidebar lists, the files or the conversations.
+	conversations []*conversation
+	convList      ui.ListState
+	convRow       int
+	convFile      string
+	navigator     int
+	reply         string    // the request to follow up with
+	replyField    ui.Handle // its field
 	// reviewSource is what a review is of where the work tree or a commit
 	// shows: the uncommitted changes, else the commits not pushed yet.
 	reviewSource    review.Snapshot
@@ -83,7 +93,7 @@ type app struct {
 	// over the room the columns leave it.
 	nativeBar bool
 	// The windows of AppKit's own the sheets and the switcher show in.
-	reviewSheet, answerSheet, switcherPopover, askPopoverWin child
+	switcherPopover, askPopoverWin child
 
 	showHistory, showTree   bool
 	historyWidth, treeWidth float32
@@ -157,6 +167,7 @@ func newApp(repo string) *app {
 		changeTree:   newPathTree(),
 		allTree:      newPathTree(),
 		ask:          askState{template: -1},
+		convRow:      -1,
 	}
 }
 
@@ -227,9 +238,12 @@ func (a *app) view(c *ui.Context) {
 	content := func() {
 		ui.Column(c).Fill().Background(a.theme.Background).Children(func() {
 			a.toolbar(c, !tree, !history)
-			if a.mode == modeFiles {
+			switch conv := a.shownConversation(); {
+			case conv != nil:
+				a.conversationPane(c, conv)
+			case a.mode == modeFiles:
 				a.codePane(c)
-			} else {
+			default:
 				a.diffPane(c)
 			}
 		})
@@ -253,8 +267,6 @@ func (a *app) view(c *ui.Context) {
 	a.branchSwitcher(c)
 	a.alerts(c)
 	a.askPopover(c)
-	a.reviewDetails(c)
-	a.answerDetails(c)
 	a.sync(c)
 	// Over the window's material the sidebar shows it, and the other
 	// columns draw their own backgrounds, as AppKit's source lists do: the
@@ -853,6 +865,19 @@ func authors(cm git.Commit) string {
 }
 
 func (a *app) treePane(c *ui.Context) {
+	toolbar := func() {
+		a.toolbarPart(c, true, false, func() {
+			a.repository(c)
+			toolGroup(c, "Sidebar Toolbar", func() {
+				a.paneButton(c, "sidebar", sidebarIcon, &a.showTree, &a.collapsedTree, "Sidebar")
+			})
+		})
+		a.navigatorBar(c)
+	}
+	if a.navigator == navConversations {
+		sideColumn(c, sidebarBackground(c), toolbar, "Conversations", mutedDetail(c, ""), func() { a.conversationsPane(c) })
+		return
+	}
 	title, key, tree, label := "Changed Files", "changes", &a.changeTree, "Changes"
 	if a.mode == modeFiles {
 		title, key, tree, label = "Files", "all", &a.allTree, "Files"
@@ -870,14 +895,7 @@ func (a *app) treePane(c *ui.Context) {
 			lineCounts(c, added, deleted, false)
 		}
 	}
-	sideColumn(c, sidebarBackground(c), func() {
-		a.toolbarPart(c, true, false, func() {
-			a.repository(c)
-			toolGroup(c, "Sidebar Toolbar", func() {
-				a.paneButton(c, "sidebar", sidebarIcon, &a.showTree, &a.collapsedTree, "Sidebar")
-			})
-		})
-	}, title, detail, func() {
+	sideColumn(c, sidebarBackground(c), toolbar, title, detail, func() {
 		switch {
 		case tree.dirs == nil:
 			loading(c)
@@ -1098,6 +1116,9 @@ func (a *app) sync(c *ui.Context) {
 		}
 	}
 	if a.commitRow >= 0 && a.commitRow < len(a.commits) && a.commitRow != a.loadedRow {
+		if a.loadedRow >= 0 {
+			a.navigator = navFiles // the entry chosen shows its changes
+		}
 		a.loadedRow = a.commitRow
 		a.loadCommit(a.commits[a.commitRow].Hash)
 	}

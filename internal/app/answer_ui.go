@@ -7,25 +7,14 @@ import (
 	"peek/internal/review"
 	"strings"
 	"time"
-
-	"github.com/egoist/mygo/ui"
-	"github.com/egoist/mygo/ui/markdown"
 )
 
-// answerState is Codex's answer to what the user asked of the entry of
-// the history it was of: the uncommitted changes, a commit, or the
-// branch's changes.
+// answerState is Codex's work on a request of a conversation, answered
+// in Markdown: conv's turn at index turn.
 type answerState struct {
 	codexTask
-	open bool
-	hash string // the entry's
-	// sourceID is what the entry's changes were as asked about, which
-	// tells an answer about the uncommitted changes out of date.
-	sourceID, scope string
-	// title names the answer, its template's or Answer, and request is
-	// what was asked.
-	title, request string
-	text, err      string
+	conv *conversation
+	turn int
 }
 
 // answerSource is what a question about the entry would be of: its
@@ -52,82 +41,81 @@ func (a *app) answerable() (cm git.Commit, id, scope string) {
 	return cm, id, scope
 }
 
-// answerFresh reports whether the answer is of the entry shown as it
-// is now.
-func (a *app) answerFresh() bool {
-	cm, id, _ := a.answerable()
-	e := &a.answer
-	return id != "" && e.hash == cm.Hash && e.sourceID == id && (e.text != "" || e.err != "")
-}
-
-// startAnswer has Codex answer the request about the changes of the
-// entry shown, the answer titled title.
+// startAnswer starts a conversation of the request about the changes of
+// the entry shown, titled title, or after the request where it is "".
 func (a *app) startAnswer(title, request string) {
-	cm, id, scope := a.answerable()
+	_, id, scope := a.answerable()
 	request = strings.TrimSpace(request)
 	if a.codexRunning() || id == "" || request == "" || a.changing() {
 		return
 	}
+	if title == "" {
+		title = conversationTitle(request)
+	}
+	a.runAnswer(a.newConversation(title, scope, request))
+}
+
+// followUp asks Codex the request in the conversation, which it answers
+// with the conversation's earlier requests in mind.
+func (a *app) followUp(conv *conversation, request string) {
+	if a.codexRunning() || a.changing() || strings.TrimSpace(request) == "" {
+		return
+	}
+	conv.Turns = append(conv.Turns, &turn{Request: request})
+	a.showConversation(conv)
+	a.saveConversations()
+	a.runAnswer(conv)
+}
+
+// runAnswer has Codex answer the last request of the conversation: in
+// its session where it has one, else about the changes of the entry
+// shown.
+func (a *app) runAnswer(conv *conversation) {
+	cm, _, _ := a.answerable()
 	snapshot := a.reviewSource
 	if git.IsRange(cm.Hash) {
 		snapshot = a.branchReview
 	}
+	i := len(conv.Turns) - 1
+	request, session := conv.Turns[i].Request, conv.Session
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	a.answer = answerState{codexTask: codexTask{running: true, cancel: cancel, phase: "Starting…", detail: "Starting Codex"},
-		hash: cm.Hash, sourceID: id, scope: scope, title: title, request: request}
-	progress := a.codexProgress(ctx, &a.answer.codexTask, func() bool { return a.answer.sourceID == id })
+		conv: conv, turn: i}
+	progress := a.codexProgress(ctx, &a.answer.codexTask, func() bool { return a.answer.conv == conv && a.answer.turn == i })
 	repo := a.repo
 	a.background(func() func() {
 		defer cancel()
 		var text string
 		var err error
-		if !git.IsRange(cm.Hash) && cm.Hash != git.Worktree {
+		if session == "" && !git.IsRange(cm.Hash) && cm.Hash != git.Worktree {
 			snapshot, err = review.CommitSnapshot(repo, cm.Hash)
 		}
 		if err == nil {
-			text, err = review.Ask(ctx, repo, snapshot, request, progress)
+			text, session, err = review.Ask(ctx, repo, session, snapshot, request, progress)
 		}
 		return func() {
 			e := &a.answer
-			if e.sourceID != id || !e.running {
+			if e.conv != conv || e.turn != i || !e.running {
 				return
 			}
 			e.finish()
+			if session != "" {
+				conv.Session = session
+			}
+			tn := conv.Turns[i]
 			switch {
 			case errors.Is(err, context.Canceled):
-				*e = answerState{}
-				return
+				tn.Err = "Stopped"
 			case err != nil:
-				e.err = err.Error()
+				tn.Err = err.Error()
 			default:
-				e.text = text
+				tn.Answer = text
 			}
-			a.lastCodex = codexAnswer
-			a.notify(e.heading(), e.scope, func() { e.open = true })
+			a.saveConversations()
+			if !errors.Is(err, context.Canceled) {
+				a.lastCodex = codexAnswer
+				a.notify(conv.Title, conv.Scope, func() { a.showConversation(conv) })
+			}
 		}
-	})
-}
-
-// heading is the answer's, as its sheet and notification name it.
-func (e *answerState) heading() string {
-	if e.err != "" {
-		return e.title + " error"
-	}
-	return e.title
-}
-
-// answerDetails is the answer in a sheet, as its Markdown reads, to copy
-// or ask for again.
-func (a *app) answerDetails(c *ui.Context) {
-	e := &a.answer
-	a.resultSheet(c, &a.answerSheet, &e.open, e.heading(), e.scope, func(c *ui.Context) {
-		if e.err != "" {
-			ui.Text(c, e.err).Selectable()
-			return
-		}
-		markdown.View(c, e.text, &markdown.Options{Theme: &markdown.Theme{CodeFont: monoFamily}, WrapCode: true})
-	}, strings.TrimSpace(e.text), "Ask Again", a.changing() || a.codexRunning(), func() {
-		e.open = false
-		a.startAnswer(e.title, e.request)
 	})
 }

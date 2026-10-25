@@ -204,8 +204,66 @@ func JSON(ctx context.Context, repo, schemaText, prompt string, timeout time.Dur
 	return run(ctx, repo, schemaText, prompt, timeout, events)
 }
 
+// Turn runs a turn of a conversation with Codex over the repository, in a
+// read-only sandbox, as JSON does: a new conversation where session is "",
+// else the one of that id, resumed with its earlier turns in mind. Codex
+// keeps the conversation, whose id it returns, for the next turn.
+func Turn(ctx context.Context, repo, session, schemaText, prompt string, timeout time.Duration, events io.Writer) ([]byte, string, error) {
+	w := &sessionWriter{to: events, id: session}
+	var data []byte
+	var err error
+	if session == "" {
+		data, err = exec1(ctx, repo, schemaText, prompt, timeout, w, false, nil)
+	} else {
+		// A resumed session takes the folder it runs in, and its sandbox
+		// from the configuration.
+		data, err = exec1(ctx, repo, schemaText, prompt, timeout, w, false,
+			[]string{"resume", "-c", `sandbox_mode="read-only"`, "--skip-git-repo-check"}, session)
+	}
+	return data, w.id, err
+}
+
+// sessionWriter passes Codex's events on, reading the id of the
+// conversation from the event that starts it.
+type sessionWriter struct {
+	to   io.Writer
+	id   string
+	line []byte
+}
+
+func (w *sessionWriter) Write(p []byte) (int, error) {
+	for _, b := range p {
+		if b != '\n' {
+			if len(w.line) < 4096 {
+				w.line = append(w.line, b)
+			}
+			continue
+		}
+		var event struct {
+			Type     string `json:"type"`
+			ThreadID string `json:"thread_id"`
+		}
+		if json.Unmarshal(w.line, &event) == nil && event.Type == "thread.started" && event.ThreadID != "" {
+			w.id = event.ThreadID
+		}
+		w.line = w.line[:0]
+	}
+	if w.to != nil {
+		return w.to.Write(p)
+	}
+	return len(p), nil
+}
+
 // run is JSON with extra arguments for codex exec.
 func run(ctx context.Context, repo, schemaText, prompt string, timeout time.Duration, events io.Writer, extra ...string) ([]byte, error) {
+	return exec1(ctx, repo, schemaText, prompt, timeout, events, true, nil, extra...)
+}
+
+// exec1 runs codex exec over the repository with the prompt, its answer
+// of the schema: ephemeral, kept by Codex for no later turn, or not;
+// with the arguments of a subcommand first, as resume, where sub is not
+// nil, and extra last, before the prompt read from its input.
+func exec1(ctx context.Context, repo, schemaText, prompt string, timeout time.Duration, events io.Writer, ephemeral bool, sub []string, extra ...string) ([]byte, error) {
 	if repo == "" {
 		return nil, fmt.Errorf("a repository is required for Codex")
 	}
@@ -225,14 +283,22 @@ func run(ctx context.Context, repo, schemaText, prompt string, timeout time.Dura
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	args := []string{"exec", "--ephemeral", "--sandbox", "read-only",
-		"--skip-git-repo-check", "--cd", repo, "--color", "never",
-		"--output-schema", schema, "--output-last-message", output}
+	args := []string{"exec"}
+	if sub != nil {
+		args = append(args, sub...)
+	} else {
+		args = append(args, "--sandbox", "read-only", "--skip-git-repo-check", "--cd", repo, "--color", "never")
+	}
+	if ephemeral {
+		args = append(args, "--ephemeral")
+	}
+	args = append(args, "--output-schema", schema, "--output-last-message", output)
 	if events != nil {
 		args = append(args, "--json")
 	}
 	args = append(args, extra...)
 	cmd := exec.CommandContext(ctx, bin, append(args, "-")...)
+	cmd.Dir = repo
 	if events != nil {
 		cmd.Stdout = events
 	}

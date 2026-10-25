@@ -22,61 +22,35 @@ func TestReviewUI(t *testing.T) {
 	a, tt := testApp(t, repo, nil)
 	tt.SetClipboard("Keep this clipboard")
 	askCodex(t, tt, "Review")
-	if a.review.running || !tt.HasText("Passed") || a.review.open {
+	conv := a.shownConversation()
+	if a.review.running || !tt.HasText("Passed") || conv == nil || conv.Title != "Review" || conv.Turns[0].Review == nil {
 		t.Fatalf("unexpected result: %+v, %q", a.review, tt.Texts())
 	}
 	if tt.Clipboard() != "Keep this clipboard" {
 		t.Fatal("passing review changed the clipboard")
 	}
-	if err := tt.Click("Passed"); err != nil {
-		t.Fatal(err)
-	}
-	if err := tt.Click("Show"); err != nil {
-		t.Fatal(err)
-	}
-	if !tt.HasText("No actionable defects found.") {
-		t.Fatal("missing review details")
-	}
-	if err := tt.Click("Done"); err != nil {
-		t.Fatal(err)
+	// The review shows in its conversation.
+	if !tt.HasText("No actionable defects found.") || !tt.HasText("Review passed") {
+		t.Fatal("missing review details", tt.Texts())
 	}
 	if err := os.WriteFile(filepath.Join(repo, "docs/new.md"), []byte("new content\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	a.refresh()
 	tt.Frame()
-	if tt.HasText("Passed") {
+	if _, ok := tt.Find("Passed"); ok {
 		t.Fatal("stale verdict still shown", tt.Texts())
-	}
-	if err := tt.Click("Ask Codex"); err != nil {
-		t.Fatal(err)
-	}
-	if !tt.HasText("Out of date") {
-		t.Fatal("stale review not marked", tt.Texts())
-	}
-	if err := tt.Click("Show"); err != nil {
-		t.Fatal(err)
 	}
 	if err := os.WriteFile(os.Getenv("PEEK_TEST_REVIEW_RESPONSE"), []byte(testutil.FailingReview), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := tt.Click("Review Again"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Frame()
-	if !tt.HasText("Not Passed") {
+	askCodex(t, tt, "Review")
+	if !tt.HasText("Not Passed") || len(a.conversations) != 2 {
 		t.Fatal("missing failing verdict", tt.Texts())
 	}
 	wantClipboard := "Review not passed\nUncommitted changes\n\nEmpty inputs now crash.\n\n[P2] Handle empty inputs\ncalc.py:2\nRestore the guard so an empty list does not divide by zero."
 	if got := tt.Clipboard(); got != "Keep this clipboard" {
 		t.Fatalf("failing review changed the clipboard: %q", got)
-	}
-	tt.SetClipboard("Copied something else")
-	if err := tt.Click("Not Passed"); err != nil {
-		t.Fatal(err)
-	}
-	if err := tt.Click("Show"); err != nil {
-		t.Fatal(err)
 	}
 	if !tt.HasText("calc.py:2") || !tt.HasText("[P2] Handle empty inputs") {
 		t.Fatal("missing findings", tt.Texts())
@@ -91,11 +65,8 @@ func TestReviewUI(t *testing.T) {
 	if err := os.WriteFile(os.Getenv("PEEK_TEST_REVIEW_RESPONSE"), []byte("not JSON"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := tt.Click("Review Again"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Frame()
-	if !tt.HasText("Review Error") || tt.HasText("Passed") {
+	askCodex(t, tt, "Review")
+	if !tt.HasText("Review Error") || tt.HasText("Not Passed") {
 		t.Fatal("invalid result treated as a verdict", tt.Texts())
 	}
 	if tt.Clipboard() != "Copied something else" {
@@ -205,7 +176,10 @@ func TestReviewSnapshot(t *testing.T) {
 	if err := json.Unmarshal([]byte(testutil.FailingReview), &result); err != nil {
 		t.Fatal(err)
 	}
-	a.review = reviewState{result: &result, scope: "Uncommitted changes", open: true}
+	a.review = reviewState{result: &result, scope: "Uncommitted changes"}
+	a.lastCodex = codexReview
+	conv := a.newConversation("Review", "Uncommitted changes", reviewTemplate().request)
+	conv.Turns[0].Review = &result
 	tt := ui.NewTester(a.view, 1280, 800)
 	tt.SetScale(2)
 	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Left: 68})

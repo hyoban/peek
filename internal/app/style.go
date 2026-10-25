@@ -130,48 +130,6 @@ func activity(c *ui.Context, key, text, tooltip, stop string, cancel func()) {
 		Children(func() { ui.Icon(c, stopIcon).Size(12, 12) }).OnClick(cancel)
 }
 
-// sheet shows a dialog while *open is true, as AppKit's sheets: AppKit's
-// own, in a window of its own, where there are windows, else attached
-// under the toolbar, what is behind it waiting and a click there doing
-// nothing. Escape and Return close it, Done being its default button,
-// last of the buttons that buttons builds.
-func (a *app) sheet(c *ui.Context, ch *child, open *bool, label string, width, height float32, body, buttons func(c *ui.Context)) {
-	content := func(c *ui.Context, panel ui.Element) {
-		t := c.Theme()
-		panel.Gap(t.Space(3)).Padding(t.Space(5)).Role(ui.RoleDialog).Label(label).Children(func() {
-			body(c)
-			ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Center).Gap(t.Space(2)).Children(func() {
-				buttons(c)
-				ui.PrimaryButton(c.Key("done"), "Done").OnClick(func() { *open = false })
-			})
-		})
-	}
-	if a.native() {
-		a.nativeSheet(ch, open, int(width), int(height), func(c *ui.Context) {
-			content(c, ui.Column(c).Fill().MinHeight(0))
-			if c.Shortcut(0, ui.KeyEscape) || c.Shortcut(0, ui.KeyEnter) {
-				*open = false
-			}
-		})
-		return
-	}
-	if !*open {
-		return
-	}
-	t := c.Theme()
-	ui.Overlay(c, func() {
-		back := ui.Column(c.Key("sheet:"+label)).Absolute().Left(0).Top(0).Right(0).Bottom(0).
-			AlignItems(ui.Center).Padding(titleBarHeight, t.Space(4), t.Space(4), t.Space(4)).Modal()
-		back.Children(func() {
-			content(c, ui.Column(c).Width(width).Height(height).Shrink(1).MinHeight(0).MaxWidthPercent(100).
-				Radius(12).Background(t.Background).Border(1, t.Border).Shadow(0, 10, 30, 0, ui.RGBA(0, 0, 0, 0.25)))
-		})
-		if back.OverlayShortcut(0, ui.KeyEscape) || back.OverlayShortcut(0, ui.KeyEnter) {
-			*open = false
-		}
-	})
-}
-
 // alertState is an alert about what failed meanwhile, such as a push,
 // over the window until the user answers it; shown, once AppKit shows it.
 type alertState struct {

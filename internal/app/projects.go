@@ -241,6 +241,8 @@ func (p *projects) open(repo string) {
 	if a == nil {
 		a = newApp(repo)
 		a.projects, a.avatars, a.inline, a.win = p, p.avatars, p.inline, p.win
+		a.convFile = conversationsFile(p.dir, repo)
+		a.loadConversations()
 		if cur := p.cur; cur != nil { // the columns as they are
 			a.showHistory, a.showTree = cur.showHistory, cur.showTree
 			a.historyWidth, a.treeWidth = cur.historyWidth, cur.treeWidth

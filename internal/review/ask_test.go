@@ -38,7 +38,7 @@ func TestAsk(t *testing.T) {
 		t.Fatal(err)
 	}
 	var phases []string
-	text, err := Ask(context.Background(), repo, snapshot, "Explain the changes.", func(phase, _ string) { phases = append(phases, phase) })
+	text, _, err := Ask(context.Background(), repo, "", snapshot, "Explain the changes.", func(phase, _ string) { phases = append(phases, phase) })
 	if err != nil || text != "It **starts** the program." {
 		t.Fatalf("answer %q, %v", text, err)
 	}
@@ -51,7 +51,7 @@ func TestAsk(t *testing.T) {
 		t.Errorf("prompt %s", prompt)
 	}
 	testutil.FakeReviewCodex(t, `{"answer":" "}`)
-	if _, err := Ask(context.Background(), repo, snapshot, "Explain the changes.", nil); err == nil {
+	if _, _, err := Ask(context.Background(), repo, "", snapshot, "Explain the changes.", nil); err == nil {
 		t.Error("an empty answer is no error")
 	}
 }

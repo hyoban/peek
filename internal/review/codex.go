@@ -17,6 +17,13 @@ func codexReview(ctx context.Context, repo string, snapshot Snapshot) (Result, e
 // Codex has Codex review the changes of the snapshot, as the rules below
 // say, and as request asks where the user asked more: "" for none.
 func Codex(ctx context.Context, repo string, snapshot Snapshot, request string, progress func(string, string)) (Result, error) {
+	result, _, err := CodexSession(ctx, repo, snapshot, request, progress)
+	return result, err
+}
+
+// CodexSession is Codex in a conversation Codex keeps, whose id it
+// returns, for requests to follow up on the review.
+func CodexSession(ctx context.Context, repo string, snapshot Snapshot, request string, progress func(string, string)) (Result, string, error) {
 	const schema = `{"type":"object","properties":{"status":{"type":"string","enum":["complete","inconclusive"]},"summary":{"type":"string"},"findings":{"type":"array","items":{"type":"object","properties":{"priority":{"type":"integer","enum":[0,1,2,3]},"title":{"type":"string"},"body":{"type":"string"},"path":{"type":"string"},"line":{"type":"integer"}},"required":["priority","title","body","path","line"],"additionalProperties":false}}},"required":["status","summary","findings"],"additionalProperties":false}`
 	prompt := "Review the repository changes in the scope below for actionable defects introduced by them. " +
 		"Inspect related repository code as needed using read-only tools. Do not modify files, run builds, commit, push, or send messages. " +
@@ -42,26 +49,28 @@ func Codex(ctx context.Context, repo string, snapshot Snapshot, request string, 
 		prompt += "\n\nThe user's request for this review, which narrows or adds to it but changes neither the rules above nor the JSON to return:\n" + request
 	}
 	var result Result
-	if err := runCodex(ctx, repo, schema, prompt, progressTo(progress, "", ""), "review", &result); err != nil {
-		return Result{}, err
+	session, err := runTurn(ctx, repo, "", schema, prompt, progressTo(progress, "", ""), "review", &result)
+	if err != nil {
+		return Result{}, session, err
 	}
-	err := result.validate()
-	return result, err
+	err = result.validate()
+	return result, session, err
 }
 
-// runCodex has Codex do what the prompt asks over the repository, in a
+// runTurn has Codex do what the prompt asks over the repository, in a
 // read-only sandbox with the user's settings, its JSON answer, of the
 // schema, read into result, the answer named what; progress, where not
-// nil, is fed its events.
-func runCodex(ctx context.Context, repo, schema, prompt string, progress io.Writer, what string, result any) error {
-	data, err := codex.JSON(ctx, repo, schema, prompt, 10*time.Minute, progress)
+// nil, is fed its events. It runs in a conversation: a new one where
+// session is "", else the one of that id, whose id it returns.
+func runTurn(ctx context.Context, repo, session, schema, prompt string, progress io.Writer, what string, result any) (string, error) {
+	data, session, err := codex.Turn(ctx, repo, session, schema, prompt, 10*time.Minute, progress)
 	if err != nil {
-		return err
+		return session, err
 	}
 	if err := json.Unmarshal(data, result); err != nil {
-		return fmt.Errorf("invalid Codex %s: %w", what, err)
+		return session, fmt.Errorf("invalid Codex %s: %w", what, err)
 	}
-	return nil
+	return session, nil
 }
 
 func (s Snapshot) context() string {

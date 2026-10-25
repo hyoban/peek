@@ -111,7 +111,7 @@ func (a *app) sendAsk() {
 	case tp != nil:
 		a.startAnswer(tp.name, text)
 	default:
-		a.startAnswer("Answer", text)
+		a.startAnswer("", text)
 	}
 	a.ask = askState{template: -1, field: a.ask.field, button: a.ask.button}
 }
@@ -195,14 +195,13 @@ func (a *app) askPopover(c *ui.Context) {
 	a.popover(&a.askPopoverWin, &a.ask.open, anchor, askWidth+2*popoverPadding, func(c *ui.Context) { a.askPanel(c) })
 }
 
-// askPanel is the conversation popover's content, as Xcode's: the last
-// result to show again, the request, which Return sends and Shift-Return
-// breaks, and under it the templates, what it is of, and Send.
+// askPanel is the conversation popover's content, as Xcode's: the
+// request, which Return sends and Shift-Return breaks, and under it the
+// templates, what it is of, and Send, which starts the conversation.
 func (a *app) askPanel(c *ui.Context) {
 	t := c.Theme()
 	s := &a.ask
 	ui.Column(c).Width(askWidth).Gap(t.Space(2)).Padding(t.Space(1)).Children(func() {
-		a.lastResult(c)
 		field := ui.TextAreaBase(c.Key("ask-request"), &s.text).Bind(&s.field).FillWidth().MinHeight(64).MaxHeight(200).
 			FontSize(fontSize + 2).Placeholder("New conversation with Codex").Label("Request")
 		field.OnTextKey(func(k ui.TextKey) bool {
@@ -237,45 +236,7 @@ func (a *app) askPanel(c *ui.Context) {
 				detail = tp.name + " · " + scope
 			}
 			ui.Text(c, detail).TextColor(t.TextMuted).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
-			send := ui.ButtonBase(c.Key("ask-send")).Shrink(0).Size(28, 28).Radius(14).Label("Send").Tooltip("Send").
-				Disabled(!a.canAsk()).AlignItems(ui.Center).Justify(ui.Center).OnClick(a.sendAsk)
-			if a.canAsk() {
-				send.Background(t.Accent).TextColor(t.AccentText)
-			} else {
-				send.Background(t.Text.Alpha(0.08)).TextColor(t.TextMuted)
-			}
-			send.Children(func() { ui.Icon(c, sendIcon).Size(14, 14) })
+			sendButton(c, "ask-send", "Send", a.canAsk(), a.sendAsk)
 		})
 	})
-}
-
-// lastResult is the result of Codex's that came last, above the request,
-// to show again.
-func (a *app) lastResult(c *ui.Context) {
-	t := c.Theme()
-	var heading, scope string
-	var open *bool
-	var stale bool
-	switch {
-	case a.lastCodex == codexReview && (a.review.result != nil || a.review.err != ""):
-		heading, scope, open, stale = a.review.title(), a.review.scope, &a.review.open, a.review.stale
-	case a.lastCodex == codexAnswer && (a.answer.text != "" || a.answer.err != ""):
-		heading, scope, open, stale = a.answer.heading(), a.answer.scope, &a.answer.open, !a.answerFresh()
-	default:
-		return
-	}
-	if stale {
-		scope += " · Out of date"
-	}
-	ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(t.Space(2)).Children(func() {
-		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
-			ui.Text(c, heading).FontWeight(600).SingleLine().Ellipsis("…")
-			ui.Text(c, scope).FontSize(smallSize).TextColor(t.TextMuted).SingleLine().Ellipsis("…")
-		})
-		ui.Button(c.Key("ask-show"), "Show").Shrink(0).OnClick(func() {
-			a.ask.open = false
-			*open = true
-		})
-	})
-	ui.Divider(c)
 }
