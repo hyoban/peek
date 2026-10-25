@@ -1,7 +1,8 @@
 // Package fileicons gives files the icons of file-icons
 // (https://github.com/file-icons/atom): a glyph of an icon font, tinted
 // with a colour of the file's kind, picked by the same rules, in the same
-// order, as file-icons picks them by a file's path and name.
+// order, as file-icons picks them by a file's path and name; or those of
+// the icon theme VS Code is set to, where FollowVSCode finds it.
 //
 // gen/update.sh rebuilds tables.go and fonts from the latest file-icons.
 package fileicons
@@ -29,13 +30,15 @@ type glyph struct {
 }
 
 // Icon is the icon of a file: a character of an icon font, and the colour
-// of its kind, zero for none.
+// of its kind, zero for none; or an SVG in its own colours, of VS Code's
+// icon theme.
 type Icon struct {
 	Name  string
 	Font  string
 	Char  string
 	Scale float32 // of the row's size
 	Color ui.Color
+	SVG   *ui.SVG
 }
 
 //go:embed fonts/*.ttf
@@ -113,6 +116,12 @@ func match(p string) int {
 // coloured for a dark theme or a light one: a page of text where no rule
 // matches, as file-icons falls back to.
 func For(p string, dark bool) Icon {
+	if t := vscode.Load(); t != nil {
+		id := t.icon(p, dark)
+		if s := t.svg(id); s != nil {
+			return Icon{Name: id, Scale: 1, SVG: s}
+		}
+	}
 	name, colour := "text", ""
 	if i := match(p); i >= 0 {
 		r := rules[i]
@@ -133,11 +142,25 @@ func For(p string, dark bool) Icon {
 	return icon
 }
 
+// Folder returns the icon of the folder at p, a path within the
+// repository, open or closed, in VS Code's icon theme: nil where Peek does
+// not follow one, or its icon cannot be read.
+func Folder(p string, open, dark bool) *ui.SVG {
+	t := vscode.Load()
+	if t == nil {
+		return nil
+	}
+	return t.svg(t.folder(p, open, dark))
+}
+
 // View draws the icon of the file at p in a square of size, in its colour,
 // or tint where that is not zero, as on a row chosen; muted is the colour
-// of an icon without one.
+// of an icon without one. An SVG keeps its colours, as VS Code keeps them.
 func View(c *ui.Context, p string, size float32, muted, tint ui.Color) ui.Element {
 	icon := For(p, c.Theme().Dark)
+	if icon.SVG != nil {
+		return ui.Image(c, icon.SVG).Size(size, size).Shrink(0)
+	}
 	color := icon.Color
 	switch {
 	case tint != (ui.Color{}):

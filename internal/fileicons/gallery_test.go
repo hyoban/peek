@@ -9,11 +9,16 @@ import (
 )
 
 // TestGallery draws the icons of common files, light and dark, to check
-// their sizes and alignment: PEEK_GALLERY=/tmp/icons go test -run Gallery
+// their sizes and alignment: PEEK_GALLERY=/tmp/icons go test -run Gallery,
+// and PEEK_VSCODE=1 for those of VS Code's icon theme.
 func TestGallery(t *testing.T) {
 	out := os.Getenv("PEEK_GALLERY")
 	if out == "" {
 		t.Skip("PEEK_GALLERY not set")
+	}
+	if os.Getenv("PEEK_VSCODE") != "" {
+		FollowVSCode()
+		defer vscode.Store(nil)
 	}
 	files := []string{"main.go", "go.mod", "package.json", "README.md", "LICENSE", "Dockerfile", ".gitignore",
 		"App.tsx", "index.ts", "a.test.ts", "index.js", "x.kt", "strings.xml", "style.css", "config.yml",
@@ -28,9 +33,20 @@ func TestGallery(t *testing.T) {
 					ui.Text(c, f).FontSize(15)
 				})
 			}
+			// And folders, closed and open, where VS Code's theme has them.
+			for _, d := range []string{"src", "internal", "docs", ".github", "fonts", "lib"} {
+				for _, open := range []bool{false, true} {
+					if icon := Folder(d, open, c.Theme().Dark); icon != nil {
+						ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+							ui.Image(c, icon).Size(16, 16).Shrink(0)
+							ui.Text(c, d).FontSize(15)
+						})
+					}
+				}
+			}
 		})
 	}
-	tt := ui.NewTester(view, 760, 340)
+	tt := ui.NewTester(view, 760, 400)
 	tt.SetScale(2)
 	for _, dark := range []bool{false, true} {
 		tt.SetDark(dark)

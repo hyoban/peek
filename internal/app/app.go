@@ -597,6 +597,8 @@ func (a *app) treeItem(c *ui.Context, tree *pathTree, p string, selected, focuse
 				tint = t.AccentText
 			}
 			fileicons.View(c, p, 16, muted, tint)
+		} else if icon := fileicons.Folder(p, tree.state.Open.Has(p), t.Dark); icon != nil {
+			ui.Image(c, icon).Size(16, 16).Shrink(0)
 		} else {
 			color := a.theme.Accent // folders in the accent, as Finder's sidebar
 			if in.onAccent {
@@ -887,6 +889,7 @@ func Run(args []string) {
 		log.Fatal(err)
 	}
 	p := newProjects()
+	fileicons.FollowVSCode()
 	fileicons.Warm()
 	mygo.App.WhenReady(func() {
 		mygo.App.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
