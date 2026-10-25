@@ -13,7 +13,7 @@ type pushState struct {
 	failed  bool
 	status  string
 	cancel  context.CancelFunc
-	until   time.Time // when the success label returns to Push
+	until   time.Time // when the success label returns to Ship
 }
 
 func (a *app) pushButton(c *ui.Context) {
@@ -28,25 +28,25 @@ func (a *app) pushButton(c *ui.Context) {
 			a.push.until = time.Time{}
 		}
 	}
-	label, tooltip := "Push", "Commit all changes with Codex and push"
+	label, tooltip := "Ship", "Commit all changes with Codex and push"
 	switch {
 	case a.push.running:
-		label = "Pushing…"
+		label = "Shipping…"
 		if phase, _, ok := strings.Cut(a.push.status, " "); ok {
 			label = phase + "…"
 		}
 		tooltip = a.push.status + "\nClick to cancel"
 	case a.push.failed:
-		label, tooltip = "Push failed", a.push.status
+		label, tooltip = "Ship failed", a.push.status
 		if a.canPush {
 			tooltip += "\nClick to retry"
 		}
 	case a.push.status != "":
-		label, tooltip = "Pushed", a.push.status
+		label, tooltip = "Shipped", a.push.status
 	}
 	disabled := a.review.running || (!a.canPush && !a.push.running)
 	if disabled && a.push.status == "" {
-		tooltip = "Nothing to push"
+		tooltip = "Nothing to ship"
 	}
 	ui.Button(c.Key("push"), label).Shrink(0).Disabled(disabled).Tooltip(tooltip).OnClick(func() {
 		if a.push.running {
@@ -62,7 +62,7 @@ func (a *app) startPush() {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	a.push = pushState{running: true, status: "Preparing to push…", cancel: cancel}
+	a.push = pushState{running: true, status: "Preparing to ship…", cancel: cancel}
 	repo, win, inline := a.repo, a.win, a.inline
 	progress := func(status string) {
 		if !inline {

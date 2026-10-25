@@ -18,7 +18,7 @@ type commitSnapshot struct {
 
 type messageGenerator func(context.Context, string, commitSnapshot) (string, error)
 
-// Use the same destination as Push, rather than the pull upstream, which
+// Use the same destination as Ship, rather than the pull upstream, which
 // may be different for a fork. Read cached remote refs without network I/O.
 func hasUnpushedCommits(repo string) bool {
 	g := func(args ...string) (string, error) {
@@ -115,7 +115,7 @@ func pushRepository(ctx context.Context, repo string, generate messageGenerator,
 			return "", err
 		}
 		if currentTree != tree {
-			return "", fmt.Errorf("the index or branch changed while Codex was working; retry Push")
+			return "", fmt.Errorf("the index or branch changed while Codex was working; retry Ship")
 		}
 		if err := samePushHead(g, branch, head); err != nil {
 			return "", err
@@ -135,7 +135,7 @@ func pushRepository(ctx context.Context, repo string, generate messageGenerator,
 	if branch == "" {
 		return pushNewBranch(g, remote, progress)
 	}
-	progress("Pushing " + remote + "/" + target + "…")
+	progress("Shipping " + remote + "/" + target + "…")
 	args := []string{"-c", "push.followTags=false", "push", "--porcelain"}
 	// Keep a fork's pull upstream when pushing to a different remote.
 	if upstream, _ := g("config", "--get", "branch."+branch+".merge"); upstream == "" {
@@ -151,14 +151,14 @@ func pushRepository(ctx context.Context, repo string, generate messageGenerator,
 		}
 		return pushNewBranch(g, remote, progress)
 	}
-	return "Pushed to " + remote + "/" + target, nil
+	return "Shipped to " + remote + "/" + target, nil
 }
 
 func samePushHead(g func(...string) (string, error), branch, head string) error {
 	currentHead, _ := g("rev-parse", "--verify", "HEAD")
 	currentBranch, _ := g("symbolic-ref", "--quiet", "--short", "HEAD")
 	if currentHead != head || currentBranch != branch {
-		return fmt.Errorf("the branch changed during Push; retry Push")
+		return fmt.Errorf("the branch changed during Ship; retry Ship")
 	}
 	return nil
 }
@@ -203,7 +203,7 @@ func pushDestination(g func(...string) (string, error), branch string) (remote, 
 		return "", "", e
 	}
 	if len(strings.Split(urls, "\n")) != 1 || config("remote."+remote+".mirror") == "true" {
-		return "", "", fmt.Errorf("Push requires a single destination without remote mirroring")
+		return "", "", fmt.Errorf("Ship requires a single destination without remote mirroring")
 	}
 	target = branch
 	if branch != "" && remote == tracking {
@@ -233,11 +233,11 @@ func pushNewBranch(g func(...string) (string, error), remote string, progress fu
 	if _, err := g("switch", "-c", branch); err != nil {
 		return "", err
 	}
-	progress("Pushing " + remote + "/" + branch + "…")
+	progress("Shipping " + remote + "/" + branch + "…")
 	if _, err := g("-c", "push.followTags=false", "push", "--porcelain", "--set-upstream", "--", remote, "HEAD:refs/heads/"+branch); err != nil {
 		return "", fmt.Errorf("push failed; the commit is kept on %s: %w", branch, err)
 	}
-	return "Pushed to new branch " + remote + "/" + branch, nil
+	return "Shipped to new branch " + remote + "/" + branch, nil
 }
 
 func pushGit(ctx context.Context, repo string, args ...string) (string, error) {

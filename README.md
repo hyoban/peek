@@ -52,9 +52,9 @@ go run . path/to/repository
 
 Without a path, Peek opens the repository you are in, or the last one it opened.
 
-### Push with Codex
+### Ship with Codex
 
-Install the Codex CLI and sign in with `codex login`. Click **Push** in the
+Install the Codex CLI and sign in with `codex login`. Click **Ship** in the
 toolbar to stage all changes, including untracked files (Git ignores still
 apply). Peek supplies the repository, HEAD and fixed staged tree IDs. Codex
 reads the staged changes and recent commit subjects itself in a read-only sandbox,
@@ -65,11 +65,11 @@ committing, Peek verifies that the branch, HEAD and staged tree are unchanged.
 Peek fetches the remote, commits, then pushes the current branch. If the remote
 explicitly rejects it because the branch is protected, Peek creates and switches
 to a `peek/push-…` branch and pushes that instead. A detached HEAD also gets a new
-branch. With no new changes, Push sends existing commits without calling Codex.
+branch. With no new changes, Ship sends existing commits without calling Codex.
 Git's push-remote settings are respected; otherwise Peek uses `origin` or the
 only configured remote. No pull request is created.
 
-The Push button shows progress and the result; hover it for details. Click it
+The Ship button shows progress and the result; hover it for details. Click it
 while running to cancel, or after a failure to retry. Authentication, network and
 non-fast-forward failures stop the operation; Peek does not force-push or
 automatically merge. Failed attempts retain staged changes and any local commit
@@ -96,7 +96,7 @@ review scope and fixed commit IDs; Codex reads the Git diffs and relevant files
 itself in a read-only sandbox, using your configured provider. File contents
 and binary assets are not embedded in the prompt. Peek fingerprints changed
 files with streaming hashes to detect outdated reviews.
-It leaves the index and working tree unchanged. Review is independent of Push;
+It leaves the index and working tree unchanged. Review is independent of Ship;
 a failed review does not prevent a later push. The two operations cannot run
 at the same time. Review has no assembled-diff size limit; Git metadata output
 is still bounded. Dirty submodules must be committed or cleaned before

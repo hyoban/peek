@@ -67,7 +67,7 @@ func TestPushAllChanges(t *testing.T) {
 		return testMessage(ctx, directory, snapshot)
 	}
 	status, err := pushRepository(context.Background(), repo, generate, ignoreProgress)
-	if err != nil || status != "Pushed to origin/main" {
+	if err != nil || status != "Shipped to origin/main" {
 		t.Fatalf("%q, %v", status, err)
 	}
 	if got := pushTestGit(t, repo, "status", "--porcelain"); got != "" {
@@ -219,32 +219,32 @@ func TestPushUI(t *testing.T) {
 	repo, _ := pushTestRepo(t)
 	fakeCodex(t)
 	a, tt := testApp(t, repo, nil)
-	if err := tt.Click("Push"); err != nil {
+	if err := tt.Click("Ship"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.push.running || a.push.failed || !tt.HasText("Pushed") {
+	if a.push.running || a.push.failed || !tt.HasText("Shipped") {
 		t.Fatalf("push state %+v; texts %q", a.push, tt.Texts())
 	}
 	if a.commits[0].Summary != "No changes" || a.commits[1].Subject != "Update the files" {
 		t.Fatalf("stale history: %+v", a.commits)
 	}
 	tt.Advance(2 * time.Second)
-	if !tt.HasText("Pushed") {
+	if !tt.HasText("Shipped") {
 		t.Fatal("success label disappeared too soon")
 	}
 	tt.Advance(time.Second)
-	if !tt.HasText("Push") || tt.HasText("Pushed") {
+	if !tt.HasText("Ship") || tt.HasText("Shipped") {
 		t.Fatal("success label did not expire", tt.Texts())
 	}
 	if a.canPush {
-		t.Fatal("Push still enabled after syncing")
+		t.Fatal("Ship still enabled after syncing")
 	}
-	_ = tt.Click("Push")
+	_ = tt.Click("Ship")
 	a.startPush()
 	tt.Frame()
 	if a.push.status != "" {
-		t.Fatal("Push ran with nothing to push")
+		t.Fatal("Ship ran with nothing to push")
 	}
 	cancelled := false
 	a.push = pushState{running: true, status: "Generating commit message with Codex…", cancel: func() { cancelled = true }}
@@ -261,22 +261,22 @@ func TestPushUI(t *testing.T) {
 	a.refresh()
 	tt.Frame()
 	if !a.canPush {
-		t.Fatal("Push did not enable for new changes")
+		t.Fatal("Ship did not enable for new changes")
 	}
 	a.push = pushState{failed: true, status: "Test failure"}
 	tt.Frame()
 	tt.Advance(4 * time.Second)
-	if !tt.HasText("Push failed") {
+	if !tt.HasText("Ship failed") {
 		t.Fatal(tt.Texts())
 	}
 	for range 3 {
 		tt.Frame()
 	}
-	if err := tt.Click("Push failed"); err != nil {
+	if err := tt.Click("Ship failed"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !tt.HasText("Pushed") {
+	if !tt.HasText("Shipped") {
 		t.Fatal("retry did not finish", tt.Texts())
 	}
 }
@@ -289,8 +289,8 @@ func TestPushButtonLayouts(t *testing.T) {
 		tt := ui.NewTester(a.view, width, 800)
 		tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Left: 78})
 		settle(tt)
-		if !tt.HasText("Push") {
-			t.Fatalf("no Push button at width %d", width)
+		if !tt.HasText("Ship") {
+			t.Fatalf("no Ship button at width %d", width)
 		}
 		mode, ok := tt.Find("Changes")
 		if !ok {
@@ -298,9 +298,9 @@ func TestPushButtonLayouts(t *testing.T) {
 		}
 		for _, state := range []pushState{
 			{running: true, status: "Generating commit message with Codex…"},
-			{running: true, status: "Pushing origin/main…"},
+			{running: true, status: "Shipping origin/main…"},
 			{failed: true, status: "Test failure"},
-			{status: "Pushed to origin/main"},
+			{status: "Shipped to origin/main"},
 			{},
 		} {
 			a.push = state
