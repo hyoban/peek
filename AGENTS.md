@@ -8,6 +8,11 @@ builds Codex reviews on both, `fileicons` draws file icons, `filekind`
 tells code from tests, docs and generated files, and `testutil`
 holds the repositories and fake CLIs the tests share.
 
+## Design
+
+Follow Apple's design for native Mac apps: the window, controls, menus and
+behavior should look and work as macOS's own do.
+
 ## After every change
 
 Once the tests pass, build the app again, put it in place of the installed
