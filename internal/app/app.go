@@ -93,7 +93,7 @@ type app struct {
 	// over the room the columns leave it.
 	nativeBar bool
 	// The windows of AppKit's own the sheets and the switcher show in.
-	switcherPopover, askPopoverWin child
+	switcherPopover child
 
 	showHistory, showTree   bool
 	historyWidth, treeWidth float32
@@ -266,7 +266,6 @@ func (a *app) view(c *ui.Context) {
 	}
 	a.branchSwitcher(c)
 	a.alerts(c)
-	a.askPopover(c)
 	a.sync(c)
 	// Over the window's material the sidebar shows it, and the other
 	// columns draw their own backgrounds, as AppKit's source lists do: the

@@ -3,14 +3,15 @@ package app
 import (
 	"peek/internal/review"
 	"strings"
+	"time"
 
-	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
 
-// askTemplate is a request to Codex the conversation popover offers, to
-// send as it is or edit: review ones have Codex review the changes, its
-// findings deciding whether they pass, and the others answer in Markdown.
+// askTemplate is a request to Codex a new conversation's field offers,
+// to send as it is or edit: review ones have Codex review the changes,
+// its findings deciding whether they pass, and the others answer in
+// Markdown.
 type askTemplate struct {
 	name, request string
 	review        bool
@@ -23,16 +24,11 @@ var askTemplates = []askTemplate{
 	{name: "Suggest Tests", request: "Suggest the tests these changes need, and where in the repository they belong."},
 }
 
-// askState is the conversation popover's, as Xcode's coding assistant
-// starts a conversation: the request being written, and the template it
-// came from, -1 for none.
+// askState is the field's under a conversation: the template the
+// request came from, -1 for none, and that it is to take the keys.
 type askState struct {
-	open     bool
-	text     string
 	template int
-	field    ui.Handle // the request's, which takes the keys as it opens
 	focus    bool
-	button   ui.Handle // the toolbar's button, under which it shows
 }
 
 // codexResult tells which of Codex's results came last.
@@ -56,8 +52,9 @@ func (a *app) askTemplateOf() *askTemplate {
 	return nil
 }
 
-// askScope is what the request would be of: the changes a review is of,
-// as the history's selection has them, or the entry shown.
+// askScope is what a new conversation's request would be of: the
+// changes a review is of, as the history's selection has them, or the
+// entry shown.
 func (a *app) askScope() (id, scope string) {
 	if tp := a.askTemplateOf(); tp != nil && tp.review {
 		target, err := a.reviewTarget()
@@ -70,38 +67,63 @@ func (a *app) askScope() (id, scope string) {
 	return id, scope
 }
 
-// openAsk shows the conversation popover, its field taking the keys.
-func (a *app) openAsk() {
-	if a.codexRunning() {
-		return
+// newDraft shows a new conversation, as Xcode's New Conversation does:
+// empty, in the list of conversations, its field taking the keys. A new
+// one not started yet shows again rather than another.
+func (a *app) newDraft() {
+	conv := a.draft()
+	if conv == nil {
+		conv = &conversation{ID: newConversationID(), Title: "New Conversation", Created: time.Now()}
+		a.conversations = append([]*conversation{conv}, a.conversations...)
+		a.reply, a.ask.template = "", -1
 	}
-	a.ask.open, a.ask.focus = true, true
-	if a.ask.text == "" {
-		a.ask.template = -1
+	a.showConversation(conv)
+	a.ask.focus = true
+}
+
+// draft is the new conversation not started yet, nil for none.
+func (a *app) draft() *conversation {
+	for _, conv := range a.conversations {
+		if len(conv.Turns) == 0 {
+			return conv
+		}
 	}
+	return nil
 }
 
 // chooseTemplate puts the template's request in the field, to send or
 // edit.
 func (a *app) chooseTemplate(i int) {
-	a.ask.template, a.ask.text, a.ask.focus = i, askTemplates[i].request, true
+	a.ask.template, a.reply, a.ask.focus = i, askTemplates[i].request, true
 }
 
-// canAsk reports whether the request can go to Codex now.
-func (a *app) canAsk() bool {
-	id, _ := a.askScope()
-	return strings.TrimSpace(a.ask.text) != "" && id != "" && !a.codexRunning() && !a.changing()
+// canSend reports whether the field's request can go to Codex now, in
+// the conversation.
+func (a *app) canSend(conv *conversation) bool {
+	if strings.TrimSpace(a.reply) == "" || a.codexRunning() || a.changing() {
+		return false
+	}
+	if len(conv.Turns) == 0 {
+		id, _ := a.askScope()
+		return id != ""
+	}
+	return true
 }
 
-// sendAsk sends the request to Codex, as a review where its template is
-// one, and closes the popover, the request cleared for the next.
-func (a *app) sendAsk() {
-	if !a.canAsk() {
+// send sends the field's request to Codex: one starting the conversation
+// as a review where its template is one, else a question about the
+// changes, and one following up in it otherwise. The field empties for
+// the next.
+func (a *app) send(conv *conversation) {
+	if !a.canSend(conv) {
 		return
 	}
-	text := strings.TrimSpace(a.ask.text)
+	text := strings.TrimSpace(a.reply)
 	tp := a.askTemplateOf()
+	a.reply, a.ask.template = "", -1
 	switch {
+	case len(conv.Turns) > 0:
+		a.followUp(conv, text)
 	case tp != nil && tp.review:
 		request := text
 		if request == tp.request {
@@ -113,12 +135,11 @@ func (a *app) sendAsk() {
 	default:
 		a.startAnswer("", text)
 	}
-	a.ask = askState{template: -1, field: a.ask.field, button: a.ask.button}
 }
 
 // codexTool is the toolbar's button of Codex: the request under way,
-// which it stops, or the button opening the conversation popover, titled
-// with the verdict of the review where it came last.
+// which it stops, or New Conversation, titled with the verdict of the
+// review where it came last.
 func (a *app) codexTool(c *ui.Context) toolButton {
 	if a.review.running {
 		return a.review.activity(c, "Reviewing…", "Codex is reviewing the changes", "Stop Review")
@@ -126,13 +147,7 @@ func (a *app) codexTool(c *ui.Context) toolButton {
 	if a.answer.running {
 		return a.answer.activity(c, "Thinking…", "Codex is answering", "Stop Codex")
 	}
-	b := toolButton{tooltip: "New conversation with Codex", click: func() {
-		if a.ask.open {
-			a.ask.open = false
-			return
-		}
-		a.openAsk()
-	}}
+	b := toolButton{tooltip: "New conversation with Codex", click: a.newDraft}
 	// A review of other changes than those selected waits for them, as
 	// the branch's while the work tree shows.
 	target, _ := a.reviewTarget()
@@ -156,87 +171,5 @@ func (a *app) codexButton(c *ui.Context) {
 	if label == "" {
 		label = "Ask Codex"
 	}
-	ui.Button(c.Key("codex"), label).Shrink(0).Label("Ask Codex").Tooltip(b.tooltip).Bind(&a.ask.button).OnClick(b.click)
-}
-
-// askWidth is the width of the conversation popover's content.
-const askWidth = 400
-
-// askPopover shows the conversation popover under the toolbar's button:
-// in an NSPopover, where there are windows, as the branch switcher.
-func (a *app) askPopover(c *ui.Context) {
-	if a.codexRunning() {
-		a.ask.open = false
-	}
-	var anchor mygo.Rectangle
-	switch {
-	case a.nativeBar:
-		r, ok := a.win.ToolbarItemBounds("codex")
-		if !ok && a.askPopoverWin.win == nil {
-			a.ask.open = false // nowhere to show it from
-			return
-		}
-		anchor = r
-	case a.native():
-		e := c.Resolve(a.ask.button)
-		if !e.Valid() {
-			return
-		}
-		b := e.Bounds()
-		anchor = mygo.Rectangle{X: int(b.X), Y: int(b.Y), Width: int(b.W), Height: int(b.H)}
-	default:
-		e := c.Resolve(a.ask.button)
-		if !e.Valid() {
-			return
-		}
-		ui.Popover(c.Key("ask"), e, &a.ask.open, func() { a.askPanel(c) })
-		return
-	}
-	a.popover(&a.askPopoverWin, &a.ask.open, anchor, askWidth+2*popoverPadding, func(c *ui.Context) { a.askPanel(c) })
-}
-
-// askPanel is the conversation popover's content, as Xcode's: the
-// request, which Return sends and Shift-Return breaks, and under it the
-// templates, what it is of, and Send, which starts the conversation.
-func (a *app) askPanel(c *ui.Context) {
-	t := c.Theme()
-	s := &a.ask
-	ui.Column(c).Width(askWidth).Gap(t.Space(2)).Padding(t.Space(1)).Children(func() {
-		field := ui.TextAreaBase(c.Key("ask-request"), &s.text).Bind(&s.field).FillWidth().MinHeight(64).MaxHeight(200).
-			FontSize(fontSize + 2).Placeholder("New conversation with Codex").Label("Request")
-		field.OnTextKey(func(k ui.TextKey) bool {
-			if k.Key != ui.KeyEnter || k.Mods != 0 {
-				return false // Shift-Return breaks the line
-			}
-			a.sendAsk()
-			return true
-		})
-		if field.Changed() && strings.TrimSpace(s.text) == "" {
-			s.template = -1
-		}
-		if s.focus {
-			s.focus = false
-			s.field.Focus(c)
-		}
-		ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(t.Space(2)).Children(func() {
-			templates := ui.ButtonBase(c.Key("ask-templates")).Shrink(0).Padding(t.Space(1)).Radius(t.Radius).
-				Label("Templates").Tooltip("Templates")
-			flat(templates, t, false)
-			templates.Children(func() { ui.Icon(c, templatesIcon).Size(18, 18) })
-			templates.Menu(func(m *ui.Menu) {
-				for i, tp := range askTemplates {
-					if m.Item(tp.name).Checked(s.template == i).Chosen() {
-						a.chooseTemplate(i)
-					}
-				}
-			})
-			_, scope := a.askScope()
-			detail := scope
-			if tp := a.askTemplateOf(); tp != nil {
-				detail = tp.name + " · " + scope
-			}
-			ui.Text(c, detail).TextColor(t.TextMuted).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
-			sendButton(c, "ask-send", "Send", a.canAsk(), a.sendAsk)
-		})
-	})
+	ui.Button(c.Key("codex"), label).Shrink(0).Label("Ask Codex").Tooltip(b.tooltip).OnClick(b.click)
 }

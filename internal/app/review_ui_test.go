@@ -397,7 +397,7 @@ func TestReviewOwnRequest(t *testing.T) {
 	if err := tt.ChooseMenuItem("Review"); err != nil {
 		t.Fatal(err)
 	}
-	a.ask.text += " Mind the docs."
+	a.reply += " Mind the docs."
 	if err := tt.Click("Send"); err != nil {
 		t.Fatal(err)
 	}

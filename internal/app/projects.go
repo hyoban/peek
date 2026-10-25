@@ -474,7 +474,7 @@ func (p *projects) setMenu() {
 			}
 			a.startAnswer(askTemplates[0].name, askTemplates[0].request)
 		}),
-		ask: item("New Conversation with Codex…", "Shift+Cmd+A", func(a *app) { a.openAsk() }),
+		ask: item("New Conversation", "Shift+Cmd+A", func(a *app) { a.newDraft() }),
 		branch: item("Switch Branch…", "Cmd+B", func(a *app) {
 			a.openSwitcher()
 			a.switcher.focus = true
@@ -606,7 +606,7 @@ func (p *projects) syncMenu() {
 	}
 	_, answerable, _ := a.answerable()
 	m.explain.show(explain, a.answer.running || answerable != "" && !busy && !a.review.running, false)
-	m.ask.show("New Conversation with Codex…", !busy && !a.codexRunning(), false)
+	m.ask.show("New Conversation", true, false)
 	m.branch.show("Switch Branch…", a.branch != "" && !busy, false)
 	m.github.show("Open on GitHub", a.githubPage() != "", false)
 	m.finder.show("Show in Finder", true, false)

@@ -47,16 +47,22 @@ const (
 )
 
 // newConversation starts a conversation of the request about the scope,
-// titled title, first in the list, and shows it.
+// titled title, and shows it: the new one shown where it is not started
+// yet, else another, first in the list.
 func (a *app) newConversation(title, scope, request string) *conversation {
-	now := time.Now()
-	conv := &conversation{ID: fmt.Sprintf("%d", now.UnixNano()), Title: title, Created: now, Scope: scope,
-		Turns: []*turn{{Request: request}}}
-	a.conversations = append([]*conversation{conv}, a.conversations...)
+	conv := a.shownConversation()
+	if conv == nil || len(conv.Turns) > 0 {
+		conv = &conversation{ID: newConversationID()}
+		a.conversations = append([]*conversation{conv}, a.conversations...)
+	}
+	conv.Title, conv.Created, conv.Scope, conv.Turns = title, time.Now(), scope, []*turn{{Request: request}}
 	a.showConversation(conv)
 	a.saveConversations()
 	return conv
 }
+
+// newConversationID is the ID of a conversation made now.
+func newConversationID() string { return fmt.Sprintf("%d", time.Now().UnixNano()) }
 
 // conversationTitle is the title of a conversation of the request: its
 // first line, cut short.
@@ -153,7 +159,13 @@ func (a *app) saveConversations() {
 	if a.convFile == "" {
 		return
 	}
-	data, err := json.MarshalIndent(a.conversations, "", "\t")
+	var started []*conversation // not those not started yet
+	for _, conv := range a.conversations {
+		if len(conv.Turns) > 0 {
+			started = append(started, conv)
+		}
+	}
+	data, err := json.MarshalIndent(started, "", "\t")
 	if err != nil {
 		return
 	}
@@ -223,11 +235,11 @@ func capsuleButton(c *ui.Context, key, label string) ui.Element {
 }
 
 // conversationsPane is the sidebar's list of conversations, newest first,
-// under New Conversation, which starts one in the popover.
+// under New Conversation, which shows a new one, empty, to write in.
 func (a *app) conversationsPane(c *ui.Context) {
 	t := c.Theme()
 	ui.Row(c).Shrink(0).FillWidth().Padding(t.Space(1), t.Space(3)).Children(func() {
-		capsuleButton(c, "new-conversation", "New Conversation").Disabled(a.codexRunning() || a.changing()).OnClick(a.openAsk)
+		capsuleButton(c, "new-conversation", "New Conversation").OnClick(a.newDraft)
 	})
 	if len(a.conversations) == 0 {
 		emptyNote(c, "No Conversations")
@@ -252,7 +264,11 @@ func (a *app) conversationItem(row ui.ListRow, conv *conversation) {
 	item := ui.Row(c).FillWidth().Gap(t.Space(2)).Padding(t.Space(1.5), t.Space(2)).AlignItems(ui.Center).Children(func() {
 		ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
 			ui.Text(c, conv.Title).TextColor(in.text).SingleLine().Ellipsis("…").FillWidth()
-			ui.Text(c, shortDate(conv.Created, time.Now())+" · "+conv.Scope).FontSize(smallSize).TextColor(in.muted).
+			detail := shortDate(conv.Created, time.Now())
+			if conv.Scope != "" {
+				detail += " · " + conv.Scope
+			}
+			ui.Text(c, detail).FontSize(smallSize).TextColor(in.muted).
 				SingleLine().Ellipsis("…").FillWidth()
 		})
 		if a.running(conv) {
@@ -319,7 +335,7 @@ func (a *app) conversationPane(c *ui.Context, conv *conversation) {
 				})
 			})
 		})
-		a.replyBar(c, conv)
+		a.composer(c, conv)
 	})
 }
 
@@ -393,42 +409,66 @@ func reviewView(c *ui.Context, r *review.Result) {
 	}
 }
 
-// replyBar is the field to follow up with, as Xcode's: a rounded box
-// floating over the bottom of the transcript, which Return sends, its
-// round button sending, or stopping Codex where it works.
-func (a *app) replyBar(c *ui.Context, conv *conversation) {
+// composer is the field under a conversation, as Xcode's: a rounded box
+// floating over the bottom of the transcript, the request over a row of
+// the templates, where the conversation is new, what it is of, and the
+// round button sending it, or stopping Codex where it works. Return
+// sends and Shift-Return breaks the line.
+func (a *app) composer(c *ui.Context, conv *conversation) {
 	t := c.Theme()
-	running := a.running(conv)
-	can := strings.TrimSpace(a.reply) != "" && !a.codexRunning() && !a.changing()
-	send := func() {
-		if strings.TrimSpace(a.reply) == "" || a.codexRunning() || a.changing() {
-			return
+	draft := len(conv.Turns) == 0
+	placeholder, scope := "Reply to Codex", conv.Scope
+	if draft {
+		placeholder = "New conversation with Codex"
+		_, scope = a.askScope()
+		if tp := a.askTemplateOf(); tp != nil {
+			scope = tp.name + " · " + scope
 		}
-		request := strings.TrimSpace(a.reply)
-		a.reply = ""
-		a.followUp(conv, request)
 	}
 	ui.Row(c).Shrink(0).FillWidth().Justify(ui.Center).Padding(0, t.Space(6), t.Space(4), t.Space(6)).Children(func() {
-		box := ui.Row(c).Grow(1).MaxWidth(transcriptWidth).AlignItems(ui.End).Gap(t.Space(2)).Padding(t.Space(2.5), t.Space(2.5), t.Space(2.5), t.Space(4)).
+		box := ui.Column(c).Grow(1).MaxWidth(transcriptWidth).Gap(t.Space(2)).Padding(t.Space(3), t.Space(3), t.Space(2.5), t.Space(4)).
 			Radius(18).Background(t.Surface).Border(1, t.Border).Shadow(0, 4, 16, 0, ui.RGBA(0, 0, 0, 0.12))
 		box.Children(func() {
-			field := ui.TextAreaBase(c.Key("reply"), &a.reply).Bind(&a.replyField).Grow(1).MinHeight(22).MaxHeight(160).
-				Padding(t.Space(1), 0).Placeholder("Reply to Codex").Label("Reply")
+			field := ui.TextAreaBase(c.Key("message"), &a.reply).Bind(&a.replyField).FillWidth().MinHeight(22).MaxHeight(200).
+				Placeholder(placeholder).Label("Message")
 			field.OnTextKey(func(k ui.TextKey) bool {
 				if k.Key != ui.KeyEnter || k.Mods != 0 {
 					return false
 				}
-				send()
+				a.send(conv)
 				return true
 			})
-			if running {
-				stopButton(c, func() {
-					a.answer.stop()
-					a.review.stop()
-				})
-				return
+			if field.Changed() && strings.TrimSpace(a.reply) == "" {
+				a.ask.template = -1
 			}
-			sendButton(c, "reply-send", "Send Reply", can, send)
+			if a.ask.focus {
+				a.ask.focus = false
+				a.replyField.Focus(c)
+			}
+			ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(t.Space(2)).Children(func() {
+				if draft {
+					templates := ui.ButtonBase(c.Key("templates")).Shrink(0).Size(28, 28).Radius(14).AlignItems(ui.Center).
+						Justify(ui.Center).Label("Templates").Tooltip("Templates").TextColor(t.TextMuted)
+					flat(templates, t, false)
+					templates.Children(func() { ui.Icon(c, templatesIcon).Size(18, 18) })
+					templates.Menu(func(m *ui.Menu) {
+						for i, tp := range askTemplates {
+							if m.Item(tp.name).Checked(a.ask.template == i).Chosen() {
+								a.chooseTemplate(i)
+							}
+						}
+					})
+				}
+				ui.Text(c, scope).FontSize(smallSize).TextColor(t.TextMuted).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
+				if a.running(conv) {
+					stopButton(c, func() {
+						a.answer.stop()
+						a.review.stop()
+					})
+					return
+				}
+				sendButton(c, "send", "Send", a.canSend(conv), func() { a.send(conv) })
+			})
 		})
 	})
 }

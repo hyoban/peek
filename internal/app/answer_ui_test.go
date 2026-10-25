@@ -10,8 +10,8 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// askCodex sends the template's request to Codex through the
-// conversation popover, as the user does.
+// askCodex sends the template's request to Codex in a new conversation,
+// as the user does.
 func askCodex(t *testing.T, tt *ui.Tester, template string) {
 	t.Helper()
 	if err := tt.Click("Ask Codex"); err != nil {
@@ -40,7 +40,7 @@ func TestAnswerUI(t *testing.T) {
 	a, tt := testApp(t, repo, nil)
 	askCodex(t, tt, "Explain")
 	conv := a.shownConversation()
-	if a.answer.running || a.ask.open || conv == nil || conv.Title != "Explain" || conv.Scope != "Uncommitted changes" || conv.Session != "thread-1" {
+	if a.answer.running || a.reply != "" || conv == nil || conv.Title != "Explain" || conv.Scope != "Uncommitted changes" || conv.Session != "thread-1" {
 		t.Fatalf("conversation %+v, texts %q", conv, tt.Texts())
 	}
 	if got, _ := os.ReadFile(prompt); !strings.HasPrefix(string(got), askTemplates[0].request+"\n") {
@@ -52,7 +52,7 @@ func TestAnswerUI(t *testing.T) {
 	}
 	// A reply follows up in Codex's conversation.
 	os.WriteFile(os.Getenv("PEEK_TEST_REVIEW_RESPONSE"), []byte(`{"answer":"Only docs."}`), 0o600)
-	if err := tt.Click("Reply"); err != nil {
+	if err := tt.Click("Message"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Type("Anything else?")
@@ -88,7 +88,7 @@ func TestAskOwnRequest(t *testing.T) {
 	if err := tt.Click("Ask Codex"); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := tt.Find("Request"); !ok {
+	if conv := a.shownConversation(); conv == nil || len(conv.Turns) != 0 || !tt.Focused("Message") {
 		t.Fatalf("no request to write, texts %q", tt.Texts())
 	}
 	tt.Type("Which files change?")
@@ -97,8 +97,8 @@ func TestAskOwnRequest(t *testing.T) {
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
 	conv := a.shownConversation()
-	if conv == nil || conv.Title != "Which files change?" || conv.Turns[0].Answer != "Two files." || a.ask.open || a.ask.text != "" {
-		t.Fatalf("conversation %+v, ask %+v", conv, a.ask)
+	if conv == nil || conv.Title != "Which files change?" || conv.Turns[0].Answer != "Two files." || a.reply != "" || a.draft() != nil {
+		t.Fatalf("conversation %+v, field %q", conv, a.reply)
 	}
 	if got, _ := os.ReadFile(prompt); !strings.HasPrefix(string(got), "Which files change?\nBriefly.\n") {
 		t.Fatalf("prompt %q, want the user's request", got)
@@ -129,5 +129,30 @@ func TestConversationsKept(t *testing.T) {
 	c.loadConversations()
 	if len(c.conversations) != 0 {
 		t.Fatalf("deleted conversation kept: %+v", c.conversations)
+	}
+}
+
+// New Conversation shows an empty one, the same until it starts, which is
+// not kept.
+func TestNewConversation(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "conversations.json")
+	a := newApp("/tmp/repo")
+	a.convFile = file
+	a.newDraft()
+	draft := a.shownConversation()
+	a.newDraft()
+	if draft == nil || a.shownConversation() != draft || len(a.conversations) != 1 || !a.ask.focus {
+		t.Fatalf("conversations %+v", a.conversations)
+	}
+	a.saveConversations()
+	b := newApp("/tmp/repo")
+	b.convFile = file
+	b.loadConversations()
+	if len(b.conversations) != 0 {
+		t.Fatalf("an empty conversation was kept: %+v", b.conversations)
+	}
+	// Started, it is the one New Conversation showed.
+	if conv := a.newConversation("Explain", "Uncommitted changes", "Explain it."); conv != draft || len(a.conversations) != 1 {
+		t.Fatalf("started %+v, conversations %+v", conv, a.conversations)
 	}
 }
