@@ -25,7 +25,7 @@ All of the commit's files, to read any of them as it was then.
 ## Features
 
 - The uncommitted changes always at the top of the history
-- Changed files grouped into code, tests and docs, with their added and deleted lines, and each diff marked viewed once read
+- Changed files grouped into code, tests, docs and lockfiles or generated files, with their added and deleted lines, and each diff marked viewed once read
 - Syntax-highlighted diffs, with unmodified lines and imports folded away
 - Pictures shown as pictures, and Markdown files as a preview with the repository's images, with a toggle to the source
 - File and folder icons from the icon theme VS Code is set to, when it draws SVGs (as [Flow Icons](https://github.com/thang-nm/Flow-Icons) does), or else from [file-icons](https://github.com/file-icons/atom)

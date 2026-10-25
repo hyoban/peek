@@ -2,7 +2,6 @@ package codex
 
 import (
 	"context"
-	"path"
 	"peek/internal/filekind"
 	"peek/internal/git"
 	"regexp"
@@ -10,26 +9,19 @@ import (
 	"strings"
 )
 
-// Groups of files in the order rankDiffs embeds them: the change list's
-// groups, then lockfiles and generated files, which say little for their
-// size. Each file's diff is cut to its group's cap.
-const groupBulk = len(filekind.Names)
+// Groups of files in the order rankDiffs embeds them, the change list's,
+// lockfiles and generated files last. Each file's diff is cut to its
+// group's cap.
+const groupBulk = int(filekind.Generated)
 
 var (
-	groupNames = append(filekind.Names[:], "Lockfiles and generated files")
+	groupNames = [...]string{filekind.Code: "Code", filekind.Test: "Tests", filekind.Docs: "Docs", groupBulk: "Lockfiles and generated files"}
 	groupCaps  = [...]int{filekind.Code: 8 * 1024, filekind.Test: 8 * 1024, filekind.Docs: 8 * 1024, groupBulk: 2 * 1024}
 )
 
 // generatedMarker finds the comment line that marks a generated file, Go's
 // convention or the @generated tag, on either side of the diff.
 var generatedMarker = regexp.MustCompile(`(?m)^[-+ ](// Code generated .* DO NOT EDIT\.$|\s*(//|#|/?\*+|--)\s*@generated\b)`)
-
-var lockfiles = map[string]bool{
-	"package-lock.json": true, "npm-shrinkwrap.json": true, "pnpm-lock.yaml": true, "yarn.lock": true,
-	"bun.lock": true, "bun.lockb": true, "go.sum": true, "cargo.lock": true, "gemfile.lock": true,
-	"poetry.lock": true, "uv.lock": true, "pipfile.lock": true, "composer.lock": true,
-	"podfile.lock": true, "package.resolved": true, "flake.lock": true, "mix.lock": true,
-}
 
 // rankDiffs splits a diff by file and keeps what fits the budget, in the
 // change list's groups and under their names, then lockfiles and generated
@@ -112,20 +104,14 @@ func diffPaths(diff string) []string {
 
 func diffGroup(text string, generated map[string]bool) int {
 	p := diffPath(text)
-	name := strings.ToLower(path.Base(p))
 	if g, ok := generated[p]; ok {
 		if g {
 			return groupBulk
 		}
-	} else if ext := path.Ext(name); lockfiles[name] || ext == ".lock" || ext == ".map" || ext == ".snap" ||
-		strings.HasSuffix(name, ".min.js") || strings.HasSuffix(name, ".min.css") ||
-		strings.HasSuffix(name, ".pb.go") || strings.HasSuffix(name, "_pb2.py") ||
-		strings.HasSuffix(name, ".g.dart") || strings.HasSuffix(name, ".freezed.dart") ||
-		strings.Contains(name, ".generated.") ||
-		generatedMarker.MatchString(text) {
+	} else if filekind.IsGenerated(p) || generatedMarker.MatchString(text) {
 		return groupBulk
 	}
-	return int(filekind.Of(p))
+	return int(filekind.Written(p))
 }
 
 // generatedAttrs reads linguist-generated for these paths from the

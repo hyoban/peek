@@ -49,7 +49,7 @@ func (a *app) resetDiffs() {
 }
 
 // newDiff is the diff of a changed file of the commit, read where it was
-// marked so, or else where it is a test or docs.
+// marked so, or else where it is a test, docs or generated.
 func (a *app) newDiff(ch git.Change) *fileDiff {
 	read, ok := a.read[a.readKey(ch.Path)]
 	if !ok {
@@ -58,8 +58,8 @@ func (a *app) newDiff(ch git.Change) *fileDiff {
 	return &fileDiff{change: ch, read: read}
 }
 
-// openChanges opens the change tree, but for the groups of tests and
-// docs, which start closed as their diffs start read.
+// openChanges opens the change tree, but for the groups of tests, docs
+// and generated files, which start closed as their diffs start read.
 func (a *app) openChanges() {
 	t := &a.changeTree
 	t.openAll()
