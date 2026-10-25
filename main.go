@@ -416,15 +416,14 @@ func (a *app) commitItem(row ui.ListRow) {
 		} else {
 			ui.Avatar(c, cm.Author, nil).Size(30, 30).Radius(15).Shrink(0)
 		}
-		// What first, then when, then who.
+		// What first, across the whole line, then when and who under it.
+		// The hash is in the details.
 		ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
-			ui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(ui.Baseline).Children(func() {
-				ui.Text(c, cm.Subject).FontWeight(600).TextColor(text).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
+			ui.Text(c, cm.Subject).FontWeight(600).TextColor(text).SingleLine().Ellipsis("…").FillWidth()
+			ui.Row(c).FillWidth().Gap(t.Space(1.5)).AlignItems(ui.Baseline).Children(func() {
 				ui.Text(c, shortDate(cm.Time, time.Now())).FontSize(smallSize).TextColor(muted).SingleLine().Shrink(0)
-			})
-			ui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(ui.Baseline).Children(func() {
+				ui.Text(c, "·").FontSize(smallSize).TextColor(muted).Shrink(0)
 				ui.Text(c, cm.Author).FontSize(smallSize).TextColor(muted).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
-				ui.Text(c, cm.Short).FontSize(smallSize).Font(monoFamily).TextColor(muted).SingleLine().Shrink(0)
 			})
 		})
 	})
