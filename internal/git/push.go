@@ -83,13 +83,24 @@ func Push(ctx context.Context, repo string, generate MessageGenerator, progress 
 		return "", err
 	}
 	// Fetch before committing so offline and authentication failures do not
-	// create a commit. Git still checks for concurrent remote updates on push.
+	// create a commit, but while Codex writes the message rather than before.
+	// Git still checks for concurrent remote updates on push.
 	progress("Fetching " + remote + "…")
-	if _, err := g("fetch", "--no-tags", "--", remote); err != nil {
-		return "", err
-	}
-	if err := samePushHead(g, branch, head); err != nil {
-		return "", err
+	fetched := make(chan error, 1)
+	go func() {
+		_, err := g("fetch", "--no-tags", "--", remote)
+		fetched <- err
+	}()
+	waitFetch := func() error {
+		if fetched == nil {
+			return nil
+		}
+		err := <-fetched
+		fetched = nil
+		if err != nil {
+			return err
+		}
+		return samePushHead(g, branch, head)
 	}
 	progress("Staging all changes…")
 	if _, err := g("add", "--all"); err != nil {
@@ -105,6 +116,9 @@ func Push(ctx context.Context, repo string, generate MessageGenerator, progress 
 		message, err := generate(ctx, repo, Snapshot{Head: head, Tree: tree})
 		if err != nil {
 			return "", fmt.Errorf("generate commit message: %w", err)
+		}
+		if err := waitFetch(); err != nil {
+			return "", err
 		}
 		message = strings.TrimSpace(message)
 		if message == "" || strings.ContainsRune(message, 0) {
@@ -128,6 +142,9 @@ func Push(ctx context.Context, repo string, generate MessageGenerator, progress 
 		if err != nil {
 			return "", err
 		}
+	}
+	if err := waitFetch(); err != nil {
+		return "", err
 	}
 	if err := samePushHead(g, branch, head); err != nil {
 		return "", err
