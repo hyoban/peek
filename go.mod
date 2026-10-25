@@ -5,7 +5,7 @@ go 1.27.3
 tool github.com/egoist/mygo/cmd/mygo
 
 require (
-	github.com/egoist/mygo v0.6.3
+	github.com/egoist/mygo v0.6.4
 	golang.org/x/net v0.59.0
 )
 
@@ -16,7 +16,6 @@ require (
 	golang.org/x/text v0.43.0 // indirect
 )
 
-// The fork's fold-imports branch, on its italic-tokens branch, draws
-// TokenStyle.Italic and Bold, for comments in italics, until MyGo does
-// (egoist/mygo#703), and folds a file's imports.
-replace github.com/egoist/mygo => github.com/hyoban/mygo v0.6.4-0.20261024174704-e6e7a17f7400
+// The fork's native-tooltips branch, on 0.6.4, leaves Tooltip's tips to
+// AppKit, which shows them as its own, until MyGo does.
+replace github.com/egoist/mygo => github.com/hyoban/mygo v0.6.4-0.20261025074610-39f0299f2677
