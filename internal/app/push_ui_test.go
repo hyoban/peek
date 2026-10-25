@@ -45,7 +45,7 @@ func TestPushUI(t *testing.T) {
 	cancelled := false
 	a.push = pushState{running: true, status: "Generating commit message with Codex…", cancel: func() { cancelled = true }}
 	tt.Frame()
-	if !tt.HasText("Generating…") {
+	if !tt.HasText("Shipping…") || tt.HasText("Generating…") {
 		t.Fatal("no activity", tt.Texts())
 	}
 	if err := tt.Click("Stop Shipping"); err != nil {
