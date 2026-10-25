@@ -69,6 +69,13 @@ func TestReviewUI(t *testing.T) {
 	if !tt.HasText("calc.py:2") || !tt.HasText("[P2] Handle empty inputs") {
 		t.Fatal("missing findings", tt.Texts())
 	}
+	if err := tt.Click("Copy"); err != nil {
+		t.Fatal(err)
+	}
+	if got := tt.Clipboard(); got != wantClipboard {
+		t.Fatalf("Copy did not copy the review: %q", got)
+	}
+	tt.SetClipboard("Copied something else")
 	if err := os.WriteFile(os.Getenv("PEEK_TEST_REVIEW_RESPONSE"), []byte("not JSON"), 0o600); err != nil {
 		t.Fatal(err)
 	}

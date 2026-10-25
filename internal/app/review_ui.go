@@ -141,7 +141,7 @@ func (a *app) startReview(services ui.Services) {
 			} else if !a.review.stale {
 				a.review.result = &result
 				if result.Verdict == "failed" {
-					services.WriteClipboard("Review not passed\n" + snapshot.Scope + "\n\n" + result.Text())
+					services.WriteClipboard(a.review.text())
 				}
 			}
 			a.refresh()
@@ -149,18 +149,30 @@ func (a *app) startReview(services ui.Services) {
 	})
 }
 
+func (r *reviewState) title() string {
+	switch {
+	case r.result == nil:
+		return "Review error"
+	case r.result.Verdict == "failed":
+		return "Review not passed"
+	}
+	return "Review passed"
+}
+
+// text is the review as copied to the clipboard.
+func (r *reviewState) text() string {
+	body := r.err
+	if r.result != nil {
+		body = r.result.Text()
+	}
+	return r.title() + "\n" + r.scope + "\n\n" + body
+}
+
 func (a *app) reviewDetails(c *ui.Context) {
 	t := c.Theme()
 	services := c.Services()
 	ui.Modal(c.Key("review-details"), &a.review.open, func() {
-		title := "Review error"
-		if a.review.result != nil {
-			title = "Review passed"
-			if a.review.result.Verdict == "failed" {
-				title = "Review not passed"
-			}
-		}
-		ui.Text(c, title).FontWeight(600).FontSize(fontSize + 3).Shrink(0)
+		ui.Text(c, a.review.title()).FontWeight(600).FontSize(fontSize + 3).Shrink(0)
 		ui.Text(c, a.review.scope).TextColor(t.TextMuted).Shrink(0)
 		ui.Scroll(c).Grow(1).FillWidth().MinHeight(0).Children(func() {
 			ui.Column(c).FillWidth().Gap(t.Space(3)).Children(func() {
@@ -185,6 +197,7 @@ func (a *app) reviewDetails(c *ui.Context) {
 		ui.Row(c).FillWidth().Shrink(0).Justify(ui.End).Gap(t.Space(2)).Children(func() {
 			ui.Button(c.Key("review-again"), "Review again").Disabled(a.push.running || a.review.running || a.pull.running || a.reviewSource.ID == "").
 				OnClick(func() { a.startReview(services) })
+			ui.Button(c.Key("copy-review"), "Copy").OnClick(func() { services.WriteClipboard(a.review.text()) })
 			ui.Button(c.Key("close-review"), "Close").OnClick(func() { a.review.open = false })
 		})
 	}).Width(620).Height(480)
