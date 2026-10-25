@@ -60,7 +60,8 @@ type app struct {
 	pull                     pullState
 	review                   reviewState
 	answer                   answerState
-	ask                      askState
+	ask                      askState    // the popover's
+	compose                  askState    // a new conversation's field's
 	lastCodex                codexResult // which result came last
 	// conversations are those with Codex about the repository, newest
 	// first, kept in convFile; convRow is the one chosen, and navigator
@@ -93,7 +94,7 @@ type app struct {
 	// over the room the columns leave it.
 	nativeBar bool
 	// The windows of AppKit's own the sheets and the switcher show in.
-	switcherPopover child
+	switcherPopover, askPopoverWin child
 
 	showHistory, showTree   bool
 	historyWidth, treeWidth float32
@@ -167,6 +168,7 @@ func newApp(repo string) *app {
 		changeTree:   newPathTree(),
 		allTree:      newPathTree(),
 		ask:          askState{template: -1},
+		compose:      askState{template: -1},
 		convRow:      -1,
 	}
 }
@@ -264,6 +266,7 @@ func (a *app) view(c *ui.Context) {
 	} else {
 		rest()
 	}
+	a.askPopover(c)
 	a.branchSwitcher(c)
 	a.alerts(c)
 	a.sync(c)

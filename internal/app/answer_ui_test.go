@@ -17,7 +17,7 @@ func askCodex(t *testing.T, tt *ui.Tester, template string) {
 	if err := tt.Click("Ask Codex"); err != nil {
 		t.Fatal(err)
 	}
-	if err := tt.Click("Templates"); err != nil {
+	if err := tt.Click("Shortcuts"); err != nil {
 		t.Fatal(err)
 	}
 	if err := tt.ChooseMenuItem(template); err != nil {
@@ -88,7 +88,7 @@ func TestAskOwnRequest(t *testing.T) {
 	if err := tt.Click("Ask Codex"); err != nil {
 		t.Fatal(err)
 	}
-	if conv := a.shownConversation(); conv == nil || len(conv.Turns) != 0 || !tt.Focused("Message") {
+	if _, ok := tt.Find("Request"); !ok || !tt.Focused("Request") {
 		t.Fatalf("no request to write, texts %q", tt.Texts())
 	}
 	tt.Type("Which files change?")
@@ -97,8 +97,8 @@ func TestAskOwnRequest(t *testing.T) {
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
 	conv := a.shownConversation()
-	if conv == nil || conv.Title != "Which files change?" || conv.Turns[0].Answer != "Two files." || a.reply != "" || a.draft() != nil {
-		t.Fatalf("conversation %+v, field %q", conv, a.reply)
+	if conv == nil || conv.Title != "Which files change?" || conv.Turns[0].Answer != "Two files." || a.ask.open || a.ask.text != "" {
+		t.Fatalf("conversation %+v, popover %+v", conv, a.ask)
 	}
 	if got, _ := os.ReadFile(prompt); !strings.HasPrefix(string(got), "Which files change?\nBriefly.\n") {
 		t.Fatalf("prompt %q, want the user's request", got)
@@ -141,7 +141,7 @@ func TestNewConversation(t *testing.T) {
 	a.newDraft()
 	draft := a.shownConversation()
 	a.newDraft()
-	if draft == nil || a.shownConversation() != draft || len(a.conversations) != 1 || !a.ask.focus {
+	if draft == nil || a.shownConversation() != draft || len(a.conversations) != 1 || !a.compose.focus {
 		t.Fatalf("conversations %+v", a.conversations)
 	}
 	a.saveConversations()
@@ -154,5 +154,36 @@ func TestNewConversation(t *testing.T) {
 	// Started, it is the one New Conversation showed.
 	if conv := a.newConversation("Explain", "Uncommitted changes", "Explain it."); conv != draft || len(a.conversations) != 1 {
 		t.Fatalf("started %+v, conversations %+v", conv, a.conversations)
+	}
+}
+
+// The sidebar's New Conversation shows a new one to write in, its
+// templates in its own field.
+func TestStartInConversation(t *testing.T) {
+	repo := testutil.Repo(t)
+	testutil.FakeReviewCodex(t, `{"answer":"A summary."}`)
+	a, tt := testApp(t, repo, nil)
+	if err := tt.Click("Conversation Navigator"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("New Conversation"); err != nil {
+		t.Fatal(err)
+	}
+	draft := a.shownConversation()
+	if draft == nil || len(draft.Turns) != 0 || a.ask.open || !tt.Focused("Message") {
+		t.Fatalf("no new conversation to write in: %+v, texts %q", draft, tt.Texts())
+	}
+	if err := tt.Click("Shortcuts"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem("Summarize"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("Send Message"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.shownConversation() != draft || draft.Title != "Summarize" || draft.Turns[0].Answer != "A summary." || a.reply != "" {
+		t.Fatalf("conversation %+v", draft)
 	}
 }

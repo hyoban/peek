@@ -23,9 +23,9 @@ var (
 	previewIcon  = icon(`<path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/>`)
 	splitIcon    = icon(`<rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M8 2.5v11M3.5 6h2.5M10 6h2.5M3.5 9h2.5M10 9h2.5"/>`)
 	unifiedIcon  = icon(`<rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M4 5.5h8M4 8h8M4 10.5h5"/>`)
-	// templatesIcon is the conversation's templates', two switches, as
-	// Xcode's options of a conversation; sendIcon sends it.
-	templatesIcon   = icon(`<rect x="1.5" y="2.5" width="13" height="5" rx="2.5"/><circle cx="11.5" cy="5" r="1.2"/><rect x="1.5" y="8.5" width="13" height="5" rx="2.5"/><circle cx="4.5" cy="11" r="1.2"/>`)
+	// shortcutsIcon is the shortcuts' to a request, a bolt, as quick
+	// actions'; sendIcon sends it.
+	shortcutsIcon   = icon(`<path d="M9 1.8L3.6 9h4.1l-.9 5.2L12.4 7H8.2z" fill="currentColor" stroke-width="1"/>`)
 	copyIcon        = icon(`<rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V3.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/>`)
 	checkCircleIcon = icon(`<circle cx="8" cy="8" r="6.5"/><path d="M5.2 8.2l2 2 3.8-4.2" stroke-width="1.6"/>`)
 	warningIcon     = icon(`<path d="M8 2.2L14.3 13a.6.6 0 0 1-.5.9H2.2a.6.6 0 0 1-.5-.9z"/><path d="M8 6.5v3" stroke-width="1.6"/><circle cx="8" cy="11.6" r=".4" fill="currentColor"/>`)

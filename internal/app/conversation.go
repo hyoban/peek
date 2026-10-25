@@ -420,10 +420,7 @@ func (a *app) composer(c *ui.Context, conv *conversation) {
 	placeholder, scope := "Reply to Codex", conv.Scope
 	if draft {
 		placeholder = "New conversation with Codex"
-		_, scope = a.askScope()
-		if tp := a.askTemplateOf(); tp != nil {
-			scope = tp.name + " · " + scope
-		}
+		scope = scopeDetail(&a.compose, a)
 	}
 	ui.Row(c).Shrink(0).FillWidth().Justify(ui.Center).Padding(0, t.Space(6), t.Space(4), t.Space(6)).Children(func() {
 		box := ui.Column(c).Grow(1).MaxWidth(transcriptWidth).Gap(t.Space(2)).Padding(t.Space(3), t.Space(3), t.Space(2.5), t.Space(4)).
@@ -439,25 +436,15 @@ func (a *app) composer(c *ui.Context, conv *conversation) {
 				return true
 			})
 			if field.Changed() && strings.TrimSpace(a.reply) == "" {
-				a.ask.template = -1
+				a.compose.template = -1
 			}
-			if a.ask.focus {
-				a.ask.focus = false
+			if a.compose.focus {
+				a.compose.focus = false
 				a.replyField.Focus(c)
 			}
 			ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(t.Space(2)).Children(func() {
 				if draft {
-					templates := ui.ButtonBase(c.Key("templates")).Shrink(0).Size(28, 28).Radius(14).AlignItems(ui.Center).
-						Justify(ui.Center).Label("Templates").Tooltip("Templates").TextColor(t.TextMuted)
-					flat(templates, t, false)
-					templates.Children(func() { ui.Icon(c, templatesIcon).Size(18, 18) })
-					templates.Menu(func(m *ui.Menu) {
-						for i, tp := range askTemplates {
-							if m.Item(tp.name).Checked(a.ask.template == i).Chosen() {
-								a.chooseTemplate(i)
-							}
-						}
-					})
+					templatesButton(c, &a.compose, &a.reply)
 				}
 				ui.Text(c, scope).FontSize(smallSize).TextColor(t.TextMuted).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
 				if a.running(conv) {
@@ -467,7 +454,7 @@ func (a *app) composer(c *ui.Context, conv *conversation) {
 					})
 					return
 				}
-				sendButton(c, "send", "Send", a.canSend(conv), func() { a.send(conv) })
+				sendButton(c, "send", "Send Message", a.canSend(conv), func() { a.send(conv) })
 			})
 		})
 	})

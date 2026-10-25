@@ -391,13 +391,13 @@ func TestReviewOwnRequest(t *testing.T) {
 	if err := tt.Click("Ask Codex"); err != nil {
 		t.Fatal(err)
 	}
-	if err := tt.Click("Templates"); err != nil {
+	if err := tt.Click("Shortcuts"); err != nil {
 		t.Fatal(err)
 	}
 	if err := tt.ChooseMenuItem("Review"); err != nil {
 		t.Fatal(err)
 	}
-	a.reply += " Mind the docs."
+	a.ask.text += " Mind the docs."
 	if err := tt.Click("Send"); err != nil {
 		t.Fatal(err)
 	}
