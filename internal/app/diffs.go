@@ -29,11 +29,12 @@ type fileDiff struct {
 // folded reports whether the diff folds away under its header.
 func (d *fileDiff) folded() bool { return d.read && !d.opened }
 
-// The stacked diffs list two rows a file: its header, pinned at the top
-// while its diff scrolls under it, then its diff.
-func diffFile(row int) int   { return row / 2 }
-func headerRow(file int) int { return file * 2 }
-func isHeader(row int) bool  { return row%2 == 0 }
+// The stacked diffs list the commit's message first, then two rows a
+// file: its header, pinned at the top while its diff scrolls under it,
+// then its diff.
+func diffFile(row int) int   { return max(row-1, 0) / 2 }
+func headerRow(file int) int { return file*2 + 1 }
+func isHeader(row int) bool  { return row%2 == 1 }
 
 // resetDiffs lists the files changed, in the tree's order, their diffs
 // not loaded yet, scrolled to the top.
@@ -220,19 +221,23 @@ func (a *app) diffPane(c *ui.Context) {
 	if n := len(a.diffs); n > 0 {
 		detail = count(n, "file")
 	}
-	jumpBar(c, title, a.github, func() {
-		mutedDetail(c, detail)()
-		a.infoButton(c)
-	}, func() {
+	jumpBar(c, title, a.github, mutedDetail(c, detail), func() {
 		if len(a.diffs) == 0 {
 			emptyNote(c, "No changes")
 			return
 		}
 		a.diffList.Header = isHeader
 		a.diffList.Key = func(row int) any {
+			if row == 0 {
+				return "message"
+			}
 			return fmt.Sprintf("%v:%s", isHeader(row), a.diffs[diffFile(row)].change.Path)
 		}
-		ui.List(c.Key("diffs"), &a.diffList, len(a.diffs)*2, func(row int) {
+		ui.List(c.Key("diffs"), &a.diffList, len(a.diffs)*2+1, func(row int) {
+			if row == 0 {
+				a.commitMessage(c)
+				return
+			}
 			d := a.diffs[diffFile(row)]
 			if isHeader(row) {
 				a.diffHeader(c, d)
@@ -240,6 +245,42 @@ func (a *app) diffPane(c *ui.Context) {
 			}
 			a.diffBody(c, d)
 		}).Grow(1).FillWidth().Label("Diffs")
+	})
+}
+
+// commitMessage is the first row of the diffs, as Mail shows a message's
+// header over it: who made the commit and when, its hash, and its message,
+// to read at a glance, its subject being the jump bar's. The work tree has
+// none.
+func (a *app) commitMessage(c *ui.Context) {
+	cm, ok := a.current()
+	if !ok || cm.Hash == git.Worktree {
+		ui.Row(c).FillWidth().Height(0)
+		return
+	}
+	t := c.Theme()
+	services := c.Services()
+	ui.Column(c).FillWidth().Gap(t.Space(3)).Padding(t.Space(3), t.Space(4), t.Space(4), t.Space(4)).Children(func() {
+		ui.Row(c).FillWidth().Gap(t.Space(4)).AlignItems(ui.Start).Children(func() {
+			ui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(1.5)).Children(func() {
+				a.personLine(c, git.Person{Name: cm.Author, Email: cm.Email}, "")
+				for _, co := range cm.CoAuthors {
+					a.personLine(c, co, "Co-author")
+				}
+			})
+			ui.Column(c).Shrink(0).AlignItems(ui.End).Gap(t.Space(0.5)).Children(func() {
+				ui.Text(c, cm.Time.Format("Monday, January 2, 2006 at 15:04")).FontSize(smallSize).TextColor(t.TextMuted).SingleLine()
+				ui.Text(c, cm.Short).FontSize(smallSize).Font(monoFamily).TextColor(t.TextMuted).SingleLine().
+					Tooltip(cm.Hash).ContextMenu(func(m *ui.Menu) {
+					if m.Item("Copy Commit Hash").Chosen() {
+						services.WriteClipboard(cm.Hash)
+					}
+				})
+			})
+		})
+		if body := strings.TrimSpace(cm.Body); body != "" {
+			ui.Text(c, body).TextColor(t.Text).Selectable().FillWidth()
+		}
 	})
 }
 

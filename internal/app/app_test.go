@@ -227,30 +227,6 @@ func TestColumnsCollapse(t *testing.T) {
 	}
 }
 
-// The jump bar's info button shows the commit's details in a popover, as
-// does Show Info in its row's context menu.
-func TestCommitInfo(t *testing.T) {
-	a, tt := testApp(t, testutil.Repo(t), nil)
-	settle(tt)
-	if _, ok := tt.Find("Show Info"); ok {
-		t.Fatal("info button on the work tree")
-	}
-	a.commitRow = 1
-	settle(tt)
-	cm, _ := a.current()
-	if err := tt.Click("Show Info"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Frame()
-	if !a.info.open || !tt.HasText(cm.Hash) {
-		t.Fatalf("info %+v, texts %q", a.info, tt.Texts())
-	}
-	tt.Key(0, ui.KeyEscape)
-	tt.Frame()
-	if a.info.open {
-		t.Fatal("Escape left the popover open")
-	}
-}
 
 // The search above the history keeps the commits each of its words is
 // in, by subject, author or the start of the hash, and the choice in the
@@ -325,5 +301,24 @@ func TestHistorySearch(t *testing.T) {
 	tt.Frame()
 	if a.search.query != "grace" {
 		t.Fatalf("the list's key reached the field: %q", a.search.query)
+	}
+}
+
+// The commit's message shows at the top of its diffs, with who made it
+// and its hash, without asking; the work tree has none.
+func TestCommitMessageShows(t *testing.T) {
+	repo := testutil.Repo(t)
+	testutil.Git(t, repo, "add", "--all")
+	testutil.Git(t, repo, "commit", "-q", "-m", "Add the docs", "-m", "Explain why the docs moved.")
+	a, tt := testApp(t, repo, nil)
+	settle(tt)
+	if tt.HasText("Explain why the docs moved.") {
+		t.Fatal("a message shown for the work tree")
+	}
+	a.commitRow = 1
+	settle(tt)
+	cm, _ := a.current()
+	if cm.Subject != "Add the docs" || !tt.HasText("Explain why the docs moved.") || !tt.HasText(cm.Short) || !tt.HasText("Ada") {
+		t.Fatalf("commit %q, texts %q", cm.Subject, tt.Texts())
 	}
 }

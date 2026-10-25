@@ -335,10 +335,10 @@ func (p *projects) openFolder(dir string, parent *mygo.Window) bool {
 // the focus: checked, named for what choosing them does, or disabled
 // where it cannot.
 type menuItems struct {
-	changes, files, sidebar, history, info, viewed *menuItem
-	find                                           *menuItem
-	refresh, pull, ship, review, branch            *menuItem
-	github, finder                                 *menuItem
+	changes, files, sidebar, history, viewed *menuItem
+	find                                     *menuItem
+	refresh, pull, ship, review, branch      *menuItem
+	github, finder                           *menuItem
 }
 
 // menuItem is an item of the menu bar, and what it last showed, so that
@@ -401,7 +401,6 @@ func (p *projects) setMenu() {
 			Click: do(func(a *app) { a.setMode(modeFiles) })}),
 		sidebar: item("Hide Sidebar", "Ctrl+Cmd+S", func(a *app) { a.toggle(&a.showTree, &a.collapsedTree) }),
 		history: item("Hide History", "Ctrl+Cmd+I", func(a *app) { a.toggle(&a.showHistory, &a.collapsedHistory) }),
-		info:    item("Show Commit Info", "Cmd+I", func(a *app) { a.info.open = !a.info.open }),
 		viewed: item("Mark as Viewed", "Alt+Cmd+V", func(a *app) {
 			if d := a.diffOf[a.file]; d != nil {
 				a.setRead(d, !d.read)
@@ -461,7 +460,7 @@ func (p *projects) setMenu() {
 			mygo.Separator(),
 			m.sidebar.MenuItem, m.history.MenuItem,
 			mygo.Separator(),
-			m.info.MenuItem, m.viewed.MenuItem,
+			m.viewed.MenuItem,
 			mygo.Separator(),
 			{Role: mygo.RoleToggleFullScreen},
 		}},
@@ -488,19 +487,17 @@ func (p *projects) syncMenu() {
 		return
 	}
 	if a == nil {
-		for _, item := range []*menuItem{m.changes, m.files, m.sidebar, m.history, m.info, m.viewed, m.find,
+		for _, item := range []*menuItem{m.changes, m.files, m.sidebar, m.history, m.viewed, m.find,
 			m.refresh, m.pull, m.ship, m.review, m.branch, m.github, m.finder} {
 			item.show(item.shownLabel, false, item.shownChecked)
 		}
 		return
 	}
-	cm, hasCommit := a.current()
 	busy := a.push.running || a.review.running || a.pull.running || a.switcher.running != ""
 	m.changes.show("Changes", true, a.mode == modeChanges)
 	m.files.show("Files", true, a.mode == modeFiles)
 	m.sidebar.show(showOrHide(a.showTree, "Sidebar"), true, false)
 	m.history.show(showOrHide(a.showHistory, "History"), true, false)
-	m.info.show("Show Commit Info", hasCommit && cm.Hash != git.Worktree, a.info.open)
 	d := a.diffOf[a.file]
 	viewed := "Mark as Viewed"
 	if d != nil && d.read {

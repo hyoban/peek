@@ -63,7 +63,6 @@ type app struct {
 	// focus and inactiveTheme the one of lists without it.
 	theme, listTheme, inactiveTheme *ui.Theme
 	titleButton                     ui.Handle // the project's name, under which the projects list
-	info                            infoState
 	search                          searchState
 	alert                           alertState
 
@@ -209,7 +208,6 @@ func (a *app) view(c *ui.Context) {
 		rest()
 	}
 	a.branchSwitcher(c)
-	a.commitInfo(c)
 	a.alerts(c)
 	a.reviewDetails(c)
 	a.sync(c)
@@ -680,16 +678,11 @@ func (a *app) commitItem(row ui.ListRow, i int) {
 	}
 }
 
-// commitMenu is the context menu of a commit's row: its details, which
-// the jump bar's button shows too, copying its hash or message, and its
-// page on GitHub.
+// commitMenu is the context menu of a commit's row: copying its hash or
+// message, and its page on GitHub.
 func (a *app) commitMenu(c *ui.Context, item ui.Element, i int, cm git.Commit) {
 	services := c.Services()
 	item.ContextMenu(func(m *ui.Menu) {
-		if m.Item("Show Info").Chosen() {
-			a.commitRow, a.info.open = i, true
-		}
-		m.Separator()
 		if m.Item("Copy Commit Hash").Chosen() {
 			services.WriteClipboard(cm.Hash)
 		}
@@ -702,64 +695,6 @@ func (a *app) commitMenu(c *ui.Context, item ui.Element, i int, cm git.Commit) {
 				services.OpenURL(a.github + "/commit/" + cm.Hash)
 			}
 		}
-	})
-}
-
-// infoState is the popover of the commit shown, under the jump bar's
-// button: who and when in full, the whole hash and the message.
-type infoState struct {
-	open   bool
-	button ui.Handle
-}
-
-// infoButton shows the commit's details, as the info buttons of Mac apps.
-func (a *app) infoButton(c *ui.Context) {
-	cm, ok := a.current()
-	if !ok || cm.Hash == git.Worktree {
-		return
-	}
-	t := c.Theme()
-	b := ui.ButtonBase(c.Key("info")).Bind(&a.info.button).Size(22, 22).Shrink(0).Center().Radius(5).
-		Label("Show Info").Tooltip("Show Info")
-	flat(b, t, a.info.open)
-	b.OnClick(func() { a.info.open = !a.info.open })
-	b.Children(func() { ui.Icon(c, infoIcon).Size(15, 15).TextColor(t.TextMuted) })
-}
-
-// commitInfo is the popover of infoButton, out of the jump bar.
-func (a *app) commitInfo(c *ui.Context) {
-	cm, ok := a.current()
-	anchor := c.Resolve(a.info.button)
-	if !ok || cm.Hash == git.Worktree || !anchor.Valid() {
-		a.info.open = false
-		return
-	}
-	t := c.Theme()
-	services := c.Services()
-	ui.Popover(c.Key("commit-info"), anchor, &a.info.open, func() {
-		ui.Column(c).Width(t.Space(84)).Gap(t.Space(2)).Children(func() {
-			ui.Text(c, cm.Subject).FontWeight(600).TextColor(t.Text).Selectable()
-			ui.Column(c).FillWidth().Gap(t.Space(1.5)).Children(func() {
-				a.personLine(c, git.Person{Name: cm.Author, Email: cm.Email}, "")
-				for _, co := range cm.CoAuthors {
-					a.personLine(c, co, "Co-author")
-				}
-			})
-			ui.Column(c).FillWidth().Gap(t.Space(0.5)).Children(func() {
-				ui.Text(c, cm.Time.Format("Monday, January 2, 2006 at 15:04")).FontSize(smallSize).TextColor(t.TextMuted)
-				ui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, cm.Hash).FontSize(smallSize).Font(monoFamily).TextColor(t.TextMuted).
-						SingleLine().Ellipsis("…").Selectable().Grow(1).MinWidth(0)
-					ui.Button(c.Key("copy-hash"), "Copy").FontSize(smallSize).Shrink(0).
-						OnClick(func() { services.WriteClipboard(cm.Hash) })
-				})
-			})
-			if cm.Body != "" {
-				ui.Scroll(c.Key("body")).FillWidth().MaxHeight(240).Children(func() {
-					ui.Text(c, cm.Body).FontSize(smallSize).TextColor(t.Text).Selectable().FillWidth()
-				})
-			}
-		})
 	})
 }
 

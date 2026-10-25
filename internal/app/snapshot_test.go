@@ -41,7 +41,7 @@ func TestSnapshot(t *testing.T) {
 		settle(tt)
 	}
 	if os.Getenv("PEEK_SCROLL") != "" {
-		a.diffList.ScrollTo(3, ui.Start)
+		a.diffList.ScrollTo(headerRow(1)+1, ui.Start)
 		settle(tt)
 	}
 	for _, dark := range []bool{false, true} {
