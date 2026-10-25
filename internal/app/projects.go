@@ -108,12 +108,20 @@ func (p *projects) setHideInactive(hide bool) {
 	p.syncMenu()
 }
 
-// setMenuBarOn chooses whether Peek's item shows in the menu bar.
+// setMenuBarOn chooses whether Peek's item shows in the menu bar, in
+// place of its Dock icon. AppKit may deactivate the app as its icon goes
+// or comes, so the window comes to the front again.
 func (p *projects) setMenuBarOn(on bool) {
 	p.menuBarOn = on
 	p.keepChoice(menuBarFile, on)
 	p.showMenuBar(on)
 	p.syncMenu()
+	if !p.inline {
+		mygo.App.Focus()
+		if p.win != nil {
+			p.win.Focus()
+		}
+	}
 }
 
 func exists(p string) bool {

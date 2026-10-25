@@ -42,36 +42,70 @@ type repoStatus struct {
 //go:embed trayicon.png
 var trayIcon []byte
 
+// useDock shows Peek's icon in the Dock and the app switcher, or takes it
+// out, as an app of the menu bar's has none.
+func useDock(dock bool) {
+	if dock {
+		mygo.App.SetActivationPolicy(mygo.ActivationPolicyRegular)
+	} else {
+		mygo.App.SetActivationPolicy(mygo.ActivationPolicyAccessory)
+	}
+}
+
 // fetchClosedEvery is how often the remotes of recent repositories
 // without a window are fetched, less often than those that show.
 const fetchClosedEvery = 15 * time.Minute
 
-// showMenuBar puts Peek's item in the menu bar, reading the status of
-// the recent repositories again every while, or takes it out.
+// showMenuBar puts Peek's item in the menu bar in place of its Dock
+// icon, reading the status of the recent repositories again every while,
+// or takes it out for the Dock icon again.
 func (p *projects) showMenuBar(on bool) {
+	if p.inline {
+		return
+	}
 	if !on {
 		if p.bar != nil {
 			p.bar.stop()
 			p.bar = nil
 		}
+		useDock(true)
 		return
 	}
-	if p.bar != nil || p.inline {
+	if p.bar != nil {
 		return
 	}
 	tray, err := mygo.NewTray(mygo.TrayOptions{ID: "peek", Icon: trayIcon, IconIsTemplate: true, ToolTip: "Peek"})
 	if err != nil {
+		useDock(true) // not without either
 		return
 	}
+	useDock(false)
 	ctx, cancel := context.WithCancel(context.Background())
 	bar := &menuBar{tray: tray, status: map[string]repoStatus{}, fetched: map[string]time.Time{}, pulling: map[string]bool{}}
 	p.bar = bar
 	// The menu is made for each click, of the status as it is then,
 	// AppKit placing it under the item.
 	popUp := func() {
+		// The mouse going down on the item deactivates Peek, as the menu
+		// bar is the app's before it while Peek has no Dock icon: Peek
+		// comes back in front once the menu closes where it was, shown
+		// again where it hid as inactive.
+		active := wasActive()
 		tray.SetMenu(mygo.NewMenu(p.menuBarItems()))
-		defer tray.SetMenu(nil)
-		tray.PopUpMenu()
+		tray.PopUpMenu() // until the menu closes
+		tray.SetMenu(nil)
+		if active {
+			// Once AppKit has told of the deactivation, which may come
+			// after the menu closes.
+			time.AfterFunc(100*time.Millisecond, func() {
+				mygo.App.WhenReady(func() {
+					if !appActive {
+						mygo.App.Show()
+						mygo.App.Focus()
+					}
+				})
+			})
+		}
 		p.readStatus() // for the next
 	}
 	tray.OnClick(popUp)
@@ -103,8 +137,7 @@ func (p *projects) showMenuBar(on bool) {
 
 // menuBarItems are the menu's: the recent repositories, the one shown
 // checked, as the project switcher checks it; the commits to
-// pull; the File menu's Open Folder; whether Peek hides when inactive;
-// and Quit.
+// pull; the File menu's Open Folder; the app menu's choices; and Quit.
 func (p *projects) menuBarItems() []*mygo.MenuItem {
 	var items, pulls []*mygo.MenuItem
 	for _, repo := range p.recent {
@@ -138,6 +171,10 @@ func (p *projects) menuBarItems() []*mygo.MenuItem {
 		mygo.Separator(),
 		&mygo.MenuItem{Label: "Open Folder…", Accelerator: "Cmd+O", Click: func(*mygo.MenuItem, *mygo.Window) { p.choose() }},
 		mygo.Separator(),
+		// Here too, to go back to the Dock where the app menu does not show.
+		&mygo.MenuItem{Label: "Show in Menu Bar", Type: mygo.MenuItemCheckbox, Checked: true,
+			ToolTip: "Show Peek in the Dock instead",
+			Click:   func(*mygo.MenuItem, *mygo.Window) { p.setMenuBarOn(false) }},
 		&mygo.MenuItem{Label: "Hide When Inactive", Type: mygo.MenuItemCheckbox, Checked: p.hideInactive,
 			ToolTip: "Hide Peek as another app comes to the front",
 			Click:   func(*mygo.MenuItem, *mygo.Window) { p.setHideInactive(!p.hideInactive) }},

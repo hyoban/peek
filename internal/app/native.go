@@ -2,13 +2,21 @@ package app
 
 import (
 	"path"
+	"time"
 
 	"github.com/egoist/mygo"
 )
 
 // appActive is whether Peek is the frontmost app, as AppKit tells, on the
-// main thread.
-var appActive = true
+// main thread, and resignedAt when it last stopped being it.
+var (
+	appActive  = true
+	resignedAt time.Time
+)
+
+// wasActive reports whether Peek is frontmost, or was until a moment ago,
+// as a click on its menu bar item leaves it.
+func wasActive() bool { return appActive || time.Since(resignedAt) < 300*time.Millisecond }
 
 // followApp keeps appActive, clears the notifications of what the user
 // comes back to see, as Mail and Messages do, and hides Peek as another
@@ -19,7 +27,7 @@ func (p *projects) followApp() {
 		mygo.ClearNotifications()
 	})
 	mygo.App.OnDidResignActive(func() {
-		appActive = false
+		appActive, resignedAt = false, time.Now()
 		if p.hideInactive && !p.quitting {
 			mygo.App.Hide()
 		}

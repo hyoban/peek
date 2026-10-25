@@ -1205,6 +1205,9 @@ func Run(args []string) {
 	})
 	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { p.quitting = true })
 	p.followApp()
+	if p.menuBarOn {
+		useDock(false) // from the start, its icon never showing
+	}
 	mygo.App.WhenReady(func() {
 		p.setMenu()
 		p.setDockMenu()

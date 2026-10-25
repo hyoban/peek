@@ -32,7 +32,7 @@ func TestMenuBarItems(t *testing.T) {
 	openLabel := p.label(open) + " — main, 3 files changed"
 	closedLabel := p.label(closed) + " — main, 1 file changed"
 	pull := "Pull 2 New Commits into " + path.Base(closed)
-	want := []string{openLabel, closedLabel, "", pull, "", "Open Folder…", "", "Hide When Inactive", "", "Quit Peek"}
+	want := []string{openLabel, closedLabel, "", pull, "", "Open Folder…", "", "Show in Menu Bar", "Hide When Inactive", "", "Quit Peek"}
 	if len(labels) != len(want) {
 		t.Fatalf("items %q, want %q", labels, want)
 	}
