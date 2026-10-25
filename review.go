@@ -91,10 +91,19 @@ type reviewFinding struct {
 }
 
 type reviewResult struct {
-	Verdict  string          `json:"verdict"`
+	// Status is what Codex says of its review: complete, or inconclusive
+	// where it could not finish it.
+	Status   string          `json:"status"`
 	Summary  string          `json:"summary"`
 	Findings []reviewFinding `json:"findings"`
+	// Verdict is passed or failed, as validate judges by the findings'
+	// priorities rather than as Codex would.
+	Verdict string `json:"-"`
 }
+
+// blockingPriority is the lowest priority a finding fails the review at:
+// those of P3, minor, show with a passed one.
+const blockingPriority = 2
 
 func (r reviewResult) text() string {
 	var text strings.Builder
@@ -105,27 +114,26 @@ func (r reviewResult) text() string {
 	return text.String()
 }
 
-func (r reviewResult) validate() error {
+// validate checks the review Codex returned and judges its verdict: failed
+// where a finding is of P0 to P2, else passed.
+func (r *reviewResult) validate() error {
 	if strings.TrimSpace(r.Summary) == "" || r.Findings == nil {
 		return fmt.Errorf("Codex returned an incomplete review")
 	}
-	switch r.Verdict {
-	case "passed":
-		if len(r.Findings) != 0 {
-			return fmt.Errorf("Codex returned a passing verdict with unresolved findings")
-		}
-	case "failed":
-		if len(r.Findings) == 0 {
-			return fmt.Errorf("Codex returned a failing verdict without findings")
-		}
+	switch r.Status {
+	case "complete":
 	case "inconclusive":
 		return fmt.Errorf("review inconclusive: %s", r.Summary)
 	default:
-		return fmt.Errorf("Codex returned an invalid review verdict")
+		return fmt.Errorf("Codex returned an invalid review status")
 	}
+	r.Verdict = "passed"
 	for _, f := range r.Findings {
 		if f.Priority < 0 || f.Priority > 3 || f.Line < 1 || strings.TrimSpace(f.Title) == "" || strings.TrimSpace(f.Body) == "" || strings.TrimSpace(f.Path) == "" {
 			return fmt.Errorf("Codex returned an incomplete review finding")
+		}
+		if f.Priority <= blockingPriority {
+			r.Verdict = "failed"
 		}
 	}
 	return nil

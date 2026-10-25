@@ -86,6 +86,8 @@ While running, the button shows the current stage (starting, inspecting,
 reviewing or checking) and elapsed time. Hover for the current operation.
 Stages follow live Codex events rather than an estimated percentage.
 When finished, it shows **Passed**, **Not passed**, or **Review error**.
+Peek judges the result by the findings' priorities: any P0–P2 finding fails
+the review, while minor P3 findings alone still pass and show with it.
 Click a completed result to read the summary and findings, or to review again.
 A failed review automatically copies its summary and findings to the clipboard.
 Click while running to cancel. Changing the reviewed code makes the result

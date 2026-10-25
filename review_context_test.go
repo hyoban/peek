@@ -155,7 +155,7 @@ func TestReviewFingerprintFileDirectoryReplacement(t *testing.T) {
 				}
 				snapshot := reviewTestSnapshot(t, repo)
 				run := func(context.Context, string, reviewSnapshot) (reviewResult, error) {
-					return reviewResult{Verdict: "passed", Summary: "Reviewed", Findings: []reviewFinding{}}, nil
+					return reviewResult{Status: "complete", Summary: "Reviewed", Findings: []reviewFinding{}}, nil
 				}
 				if _, err := reviewRepository(context.Background(), repo, snapshot, run); err != nil {
 					t.Fatal(err)

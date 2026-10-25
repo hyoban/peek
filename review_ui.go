@@ -52,6 +52,9 @@ func (a *app) reviewButton(c *ui.Context) {
 	case a.review.result != nil:
 		label = "Passed"
 		tooltip = a.review.result.Summary
+		if n := len(a.review.result.Findings); n > 0 && a.review.result.Verdict != "failed" {
+			tooltip += "\n" + count(n, "minor finding")
+		}
 		if a.review.result.Verdict == "failed" {
 			label = "Not passed"
 			tooltip += "\nReview copied to clipboard"
@@ -177,7 +180,8 @@ func reviewRepository(ctx context.Context, repo string, snapshot reviewSnapshot,
 	if current.id != snapshot.id {
 		return reviewResult{}, errReviewChanged
 	}
-	return result, result.validate()
+	err = result.validate()
+	return result, err
 }
 
 func (a *app) reviewDetails(c *ui.Context) {

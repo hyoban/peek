@@ -12,8 +12,8 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-const passingReview = `{"verdict":"passed","summary":"No actionable defects found.","findings":[]}`
-const failingReview = `{"verdict":"failed","summary":"Empty inputs now crash.","findings":[{"priority":2,"title":"Handle empty inputs","body":"Restore the guard so an empty list does not divide by zero.","path":"calc.py","line":2}]}`
+const passingReview = `{"status":"complete","summary":"No actionable defects found.","findings":[]}`
+const failingReview = `{"status":"complete","summary":"Empty inputs now crash.","findings":[{"priority":2,"title":"Handle empty inputs","body":"Restore the guard so an empty list does not divide by zero.","path":"calc.py","line":2}]}`
 
 func reviewTestSnapshot(t *testing.T, repo string) reviewSnapshot {
 	t.Helper()
@@ -89,7 +89,7 @@ func TestReviewEmptyRemote(t *testing.T) {
 func TestReviewRejectsStaleResults(t *testing.T) {
 	repo := testRepo(t)
 	snapshot := reviewTestSnapshot(t, repo)
-	result := reviewResult{Verdict: "passed", Summary: "No defects", Findings: []reviewFinding{}}
+	result := reviewResult{Status: "complete", Summary: "No defects", Findings: []reviewFinding{}}
 	run := func(context.Context, string, reviewSnapshot) (reviewResult, error) {
 		if err := os.WriteFile(filepath.Join(repo, "docs/new.md"), []byte("changed during review\n"), 0o644); err != nil {
 			t.Fatal(err)
@@ -120,13 +120,34 @@ func TestReviewValidation(t *testing.T) {
 	}
 	for _, result := range []reviewResult{
 		{},
-		{Verdict: "passed", Summary: "No defects"},
-		{Verdict: "failed", Summary: "Failed", Findings: []reviewFinding{}},
-		{Verdict: "inconclusive", Summary: "Could not read the code", Findings: []reviewFinding{}},
-		{Verdict: "passed", Summary: "Passed", Findings: []reviewFinding{{Title: "Unresolved defect"}}},
+		{Status: "complete", Summary: "No defects"},
+		{Status: "passed", Summary: "Passed", Findings: []reviewFinding{}},
+		{Status: "inconclusive", Summary: "Could not read the code", Findings: []reviewFinding{}},
+		{Status: "complete", Summary: "Found", Findings: []reviewFinding{{Title: "Unresolved defect"}}},
 	} {
 		if result.validate() == nil {
 			t.Fatalf("accepted invalid review %+v", result)
+		}
+	}
+}
+
+// The findings' priorities judge the verdict: minor ones alone pass.
+func TestReviewVerdictByPriority(t *testing.T) {
+	finding := func(priority int) reviewFinding {
+		return reviewFinding{Priority: priority, Title: "Finding", Body: "Body", Path: "a.go", Line: 1}
+	}
+	for _, tc := range []struct {
+		findings []reviewFinding
+		verdict  string
+	}{
+		{[]reviewFinding{}, "passed"},
+		{[]reviewFinding{finding(3), finding(3)}, "passed"},
+		{[]reviewFinding{finding(3), finding(2)}, "failed"},
+		{[]reviewFinding{finding(0)}, "failed"},
+	} {
+		result := reviewResult{Status: "complete", Summary: "Reviewed", Findings: tc.findings, Verdict: "failed"}
+		if err := result.validate(); err != nil || result.Verdict != tc.verdict {
+			t.Errorf("%d findings: verdict %q, %v; want %q", len(tc.findings), result.Verdict, err, tc.verdict)
 		}
 	}
 }

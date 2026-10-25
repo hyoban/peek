@@ -61,7 +61,7 @@ func TestReviewRejectsDirtySubmodules(t *testing.T) {
 	}
 	run := func(context.Context, string, reviewSnapshot) (reviewResult, error) {
 		write("untracked.txt", "changed during review\n")
-		return reviewResult{Verdict: "passed", Summary: "No defects", Findings: []reviewFinding{}}, nil
+		return reviewResult{Status: "complete", Summary: "No defects", Findings: []reviewFinding{}}, nil
 	}
 	if _, err := reviewRepository(context.Background(), repo, snapshot, run); err == nil {
 		t.Fatal("accepted a verdict after the submodule became dirty")
@@ -177,7 +177,7 @@ func TestReviewIncludesIgnoredSubmoduleCommits(t *testing.T) {
 			}
 			run := func(context.Context, string, reviewSnapshot) (reviewResult, error) {
 				pushTestGit(t, sub, "checkout", "--detach", first)
-				return reviewResult{Verdict: "passed", Summary: "No defects", Findings: []reviewFinding{}}, nil
+				return reviewResult{Status: "complete", Summary: "No defects", Findings: []reviewFinding{}}, nil
 			}
 			if _, err := reviewRepository(context.Background(), repo, after, run); !errors.Is(err, errReviewChanged) {
 				t.Fatalf("accepted a verdict after switching submodule commits: %v", err)
