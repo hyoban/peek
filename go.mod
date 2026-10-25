@@ -16,6 +16,9 @@ require (
 	golang.org/x/text v0.43.0 // indirect
 )
 
-// The fork's native-tooltips branch, on 0.6.4, leaves Tooltip's tips to
-// AppKit, which shows them as its own, until MyGo does.
-replace github.com/egoist/mygo => github.com/hyoban/mygo v0.6.4-0.20261025084114-3f065aa463bd
+// The fork's native-text-services branch, on 0.6.4, leaves Tooltip's
+// tips to AppKit, which shows them as its own; scrolls as AppKit's scroll
+// views do: overlay scroll bars, and content a touchpad pulls past its
+// ends springing back; and gives macOS's Services and Writing Tools the
+// selected text, in AppKit's context menus of text. Until MyGo does.
+replace github.com/egoist/mygo => github.com/hyoban/mygo v0.6.4-0.20261025113755-12fe3c068172
