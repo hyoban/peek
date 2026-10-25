@@ -192,6 +192,7 @@ const (
 // as the user scales it, and the theme of lists without the focus.
 func (a *app) themed(c *ui.Context) {
 	t := c.Theme() // a copy for this pass
+	xcodeGrays(t, c.Preferences().HighContrast)
 	t.FontSize = fontSize * c.Preferences().TextScale
 	unhovered(t)
 	c.SetTheme(t)
@@ -240,7 +241,9 @@ func (a *app) view(c *ui.Context) {
 	}
 	content := func() {
 		ui.Column(c).Fill().Background(a.theme.Background).Children(func() {
-			a.toolbar(c, !tree, !history)
+			// The toolbar's room over the text in its band, as the jump
+			// bar under it, as Xcode's editor's.
+			ui.Column(c).Shrink(0).FillWidth().Background(chromeColor(a.theme)).Children(func() { a.toolbar(c, !tree, !history) })
 			switch conv := a.shownConversation(); {
 			case conv != nil:
 				a.conversationPane(c, conv)
@@ -622,7 +625,7 @@ func mutedDetail(c *ui.Context, detail string) func() {
 func jumpBar(c *ui.Context, title, github string, detail, body func()) {
 	t := c.Theme()
 	ui.Row(c).Height(30).Shrink(0).FillWidth().AlignItems(ui.Center).Gap(t.Space(2)).
-		Padding(0, t.Space(3)).Children(func() {
+		Padding(0, t.Space(3)).Background(chromeColor(t)).Children(func() {
 		ui.RichText(c).FontWeight(600).SingleLine().Ellipsis("…").
 			Grow(1).MinWidth(0).Tooltip(title).Children(func() {
 			linkedText(c, title, github)

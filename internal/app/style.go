@@ -204,3 +204,36 @@ func searchField(c *ui.Context, key string, query *string, placeholder, label st
 	})
 	return f
 }
+
+// xcodeGrays gives the theme the neutral grays of Xcode's and AppKit's
+// windows in place of its own, cooler and darker ones: the text over the
+// editor's gray, the controls' fills and the separators between them,
+// and the labels' grays, as they are over it. The accent is the
+// system's still, and Increase Contrast sharpens them as it does the
+// theme's.
+func xcodeGrays(t *ui.Theme, highContrast bool) {
+	if t.Dark {
+		t.Background = ui.Hex("#262626")
+		t.Surface, t.SurfaceHover, t.SurfacePressed = ui.Hex("#323232"), ui.Hex("#3a3a3a"), ui.Hex("#454545")
+		t.Border = ui.Hex("#3c3c3c")
+		t.Text, t.TextMuted = ui.Hex("#dfdfdf"), ui.Hex("#9f9f9f")
+	} else {
+		t.Background = ui.Hex("#ffffff")
+		t.Surface, t.SurfaceHover, t.SurfacePressed = ui.Hex("#f2f2f2"), ui.Hex("#e8e8e8"), ui.Hex("#dddddd")
+		t.Border = ui.Hex("#e3e3e3")
+		t.Text, t.TextMuted = ui.Hex("#262626"), ui.Hex("#808080")
+	}
+	if highContrast {
+		t.Border = t.Border.Mix(t.Text, 0.45)
+		t.TextMuted = t.TextMuted.Mix(t.Text, 0.4)
+	}
+}
+
+// chromeColor is the band of the toolbar and the jump bar over the text,
+// a shade off the text's, as Xcode's over its editor.
+func chromeColor(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return t.Background.Mix(ui.Hex("#ffffff"), 0.035)
+	}
+	return t.Background.Mix(ui.Hex("#000000"), 0.025)
+}

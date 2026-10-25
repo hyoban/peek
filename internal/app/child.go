@@ -62,6 +62,7 @@ func (a *app) follow(ch *child, open *bool, create func(view func(c *ui.Context)
 // app's size.
 func (a *app) childTheme(c *ui.Context) {
 	t := c.Theme()
+	xcodeGrays(t, c.Preferences().HighContrast)
 	t.FontSize = fontSize * c.Preferences().TextScale
 	unhovered(t)
 	c.SetTheme(t)
