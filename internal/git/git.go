@@ -174,12 +174,21 @@ func LoadChanges(repo, hash string) ([]Change, error) {
 	if hash == Worktree {
 		return LoadWorktreeChanges(repo)
 	}
-	out, err := git(repo, "show", "--format=", "--name-status", "-z", "-M", "--root", hash)
+	return countedChanges(repo, "show", "--format=", "-z", "-M", "--root", hash)
+}
+
+// countedChanges runs the git command, as show or diff, for the files it
+// lists and again for their line counts.
+func countedChanges(repo string, cmd ...string) ([]Change, error) {
+	with := func(flag string) (string, error) {
+		return git(repo, append([]string{cmd[0], flag}, cmd[1:]...)...)
+	}
+	out, err := with("--name-status")
 	if err != nil {
 		return nil, err
 	}
 	changes := parseNameStatus(out)
-	stats, err := git(repo, "show", "--format=", "--numstat", "-z", "-M", "--root", hash)
+	stats, err := with("--numstat")
 	if err != nil {
 		return nil, err
 	}
@@ -190,16 +199,10 @@ func LoadChanges(repo, hash string) ([]Change, error) {
 // LoadWorktreeChanges returns the files that differ from HEAD, those git
 // does not track included.
 func LoadWorktreeChanges(repo string) ([]Change, error) {
-	out, err := git(repo, "diff", "HEAD", "--name-status", "-z", "-M")
+	changes, err := countedChanges(repo, "diff", "HEAD", "-z", "-M")
 	if err != nil {
 		return nil, err
 	}
-	changes := parseNameStatus(out)
-	stats, err := git(repo, "diff", "HEAD", "--numstat", "-z", "-M")
-	if err != nil {
-		return nil, err
-	}
-	addCounts(changes, parseNumstat(stats))
 	// All of git's lists here end their paths with NULs, which leave
 	// them as they are rather than quoted, for the counts to match them.
 	untracked, err := git(repo, "ls-files", "-z", "--others", "--exclude-standard")

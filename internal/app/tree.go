@@ -207,19 +207,19 @@ func (t *pathTree) openAll() {
 
 // files returns the tree's files in the order its rows list them, every
 // directory open.
-func (t *pathTree) files() []string {
+func (t *pathTree) files() []string { return t.filesUnder("") }
+
+// filesUnder returns the files the directory holds, in its subdirectories
+// too, in the order the rows list them.
+func (t *pathTree) filesUnder(dir string) []string {
 	var files []string
-	var walk func(dir string)
-	walk = func(dir string) {
-		for _, p := range t.dirs[dir] {
-			if t.isDir(p) {
-				walk(p)
-			} else {
-				files = append(files, p)
-			}
+	for _, p := range t.dirs[dir] {
+		if t.isDir(p) {
+			files = append(files, t.filesUnder(p)...)
+		} else {
+			files = append(files, p)
 		}
 	}
-	walk("")
 	return files
 }
 

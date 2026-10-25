@@ -146,17 +146,11 @@ func (a *app) diffsUnder(item string) []*fileDiff {
 		return nil
 	}
 	var under []*fileDiff
-	var walk func(dir string)
-	walk = func(dir string) {
-		for _, p := range t.dirs[dir] {
-			if t.isDir(p) {
-				walk(p)
-			} else if d := a.diffOf[p]; d != nil {
-				under = append(under, d)
-			}
+	for _, p := range t.filesUnder(item) {
+		if d := a.diffOf[p]; d != nil {
+			under = append(under, d)
 		}
 	}
-	walk(item)
 	return under
 }
 

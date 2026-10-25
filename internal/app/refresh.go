@@ -107,6 +107,16 @@ func (a *app) applyHistory(h history) {
 	}
 }
 
+// changesByPath maps the changes by their new paths, and lists those.
+func changesByPath(changes []git.Change) (map[string]git.Change, []string) {
+	byPath := make(map[string]git.Change, len(changes))
+	paths := make([]string, len(changes))
+	for i, ch := range changes {
+		byPath[ch.Path], paths[i] = ch, ch.Path
+	}
+	return byPath, paths
+}
+
 func (a *app) hashAt(row int) (string, bool) {
 	if row < 0 || row >= len(a.commits) {
 		return "", false
@@ -146,12 +156,8 @@ func (a *app) updateChanges(changes []git.Change) {
 		for _, d := range a.diffs {
 			old[d.change.Path] = d
 		}
-		a.changes = map[string]git.Change{}
-		paths := make([]string, len(changes))
-		for i, ch := range changes {
-			a.changes[ch.Path] = ch
-			paths[i] = ch.Path
-		}
+		var paths []string
+		a.changes, paths = changesByPath(changes)
 		a.changeTree.set(foldGrouped(paths))
 		a.openChanges()
 		a.diffs = nil

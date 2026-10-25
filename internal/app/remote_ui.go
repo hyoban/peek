@@ -42,12 +42,7 @@ func (a *app) pullButton(c *ui.Context) {
 	busy := a.push.running || a.review.running || a.switcher.running != ""
 	b := ui.ButtonBase(c.Key("pull")).Shrink(0).Padding(t.Space(0.5), t.Space(1.5)).Radius(t.Radius).
 		TextColor(color).Label("Pull").Tooltip(tooltip).Disabled(busy || a.pull.running)
-	switch {
-	case b.Pressed():
-		b.Background(t.SurfacePressed)
-	case b.Hovered():
-		b.Background(t.SurfaceHover)
-	}
+	flat(b, t, false)
 	b.OnClick(a.startPull)
 	b.Children(func() {
 		if a.pull.running {

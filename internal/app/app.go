@@ -299,12 +299,7 @@ func (a *app) projectTitle(c *ui.Context) {
 	t := c.Theme()
 	b := ui.ButtonBase(c.Key("project")).Bind(&a.titleButton).Shrink(1).MinWidth(0).
 		Padding(t.Space(0.5), t.Space(2)).Radius(t.Radius).Label("Switch Project").Tooltip(a.repo)
-	switch {
-	case b.Pressed():
-		b.Background(t.SurfacePressed)
-	case b.Hovered():
-		b.Background(t.SurfaceHover)
-	}
+	flat(b, t, false)
 	b.OnClick(func() {
 		if a.projects != nil {
 			r := a.titleButton.Bounds(c)
@@ -789,10 +784,7 @@ func (a *app) loadCommit(hash string) {
 		if hash != git.Worktree || changes == nil {
 			changes, err = git.LoadChanges(a.repo, hash)
 		}
-		paths := make([]string, len(changes))
-		for i, ch := range changes {
-			paths[i] = ch.Path
-		}
+		byPath, paths := changesByPath(changes)
 		tree := foldGrouped(paths)
 		return func() {
 			if cm, ok := a.current(); !ok || cm.Hash != hash {
@@ -802,10 +794,7 @@ func (a *app) loadCommit(hash string) {
 				a.err = err.Error()
 				return
 			}
-			a.changes = map[string]git.Change{}
-			for _, ch := range changes {
-				a.changes[ch.Path] = ch
-			}
+			a.changes = byPath
 			a.changeTree.set(tree)
 			a.openChanges()
 			a.resetDiffs()

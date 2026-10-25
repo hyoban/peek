@@ -67,24 +67,10 @@ func RemoteRepo(t *testing.T) (string, string) {
 	return repo, remote
 }
 
+// FakeCodex puts a codex on the PATH that writes a commit message.
 func FakeCodex(t *testing.T) {
 	t.Helper()
-	dir := t.TempDir()
-	script := `#!/bin/sh
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    --output-last-message) shift; output="$1" ;;
-    --sandbox) shift; test "$1" = read-only || exit 2 ;;
-  esac
-  shift
-done
-cat >/dev/null
-printf '%s' '{"message":"Update the files"}' > "$output"
-`
-	if err := os.WriteFile(filepath.Join(dir, "codex"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	FakeReviewCodex(t, `{"message":"Update the files"}`)
 }
 
 // FakeGH puts a gh on the PATH that lists one pull request and checks

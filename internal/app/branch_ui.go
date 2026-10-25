@@ -59,12 +59,7 @@ func (a *app) branchLabel(c *ui.Context) {
 	b := ui.ButtonBase(c.Key("branch")).Bind(&a.switcher.button).Shrink(2).MinWidth(0).Padding(t.Space(0.5), t.Space(1.5)).
 		Radius(t.Radius).TextColor(t.TextMuted).Label("Switch Branch").Tooltip(a.branch).
 		Disabled(a.push.running || a.review.running || a.pull.running)
-	switch {
-	case a.switcher.open || b.Pressed():
-		b.Background(t.SurfacePressed)
-	case b.Hovered():
-		b.Background(t.SurfaceHover)
-	}
+	flat(b, t, a.switcher.open)
 	b.OnClick(func() {
 		if a.switcher.open {
 			a.switcher.open = false
@@ -332,12 +327,7 @@ func (a *app) switcherRow(c *ui.Context, target switchTarget, svg *ui.SVG, title
 	}
 	b := ui.ButtonBase(c.Key(key)).FillWidth().Padding(t.Space(1), t.Space(2)).Radius(t.Radius).
 		Label(title).Tooltip(tooltip).Disabled(a.switcher.running != "" || a.pull.running)
-	switch {
-	case b.Pressed():
-		b.Background(t.SurfacePressed)
-	case b.Hovered():
-		b.Background(t.SurfaceHover)
-	}
+	flat(b, t, false)
 	b.OnClick(func() { a.switchTo(target) })
 	b.Children(func() {
 		ui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
