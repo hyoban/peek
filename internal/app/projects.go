@@ -584,7 +584,8 @@ func (p *projects) syncMenu() {
 	if a.review.running {
 		review = "Stop Review"
 	}
-	m.review.show(review, a.review.running || (a.reviewSource.ID != "" || a.reviewSourceErr != "") && !busy, false)
+	target, targetErr := a.reviewTarget()
+	m.review.show(review, a.review.running || (target.ID != "" || targetErr != "") && !busy, false)
 	m.branch.show("Switch Branch…", a.branch != "" && !busy, false)
 	m.github.show("Open on GitHub", a.githubPage() != "", false)
 	m.finder.show("Show in Finder", true, false)

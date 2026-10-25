@@ -324,3 +324,69 @@ func reviewTestSnapshot(t *testing.T, repo string) review.Snapshot {
 	}
 	return snapshot
 }
+
+// The branch's changes, shown, are what a review is of, though pushed;
+// the work tree, shown, has its own, and each keeps its result.
+func TestReviewBranchChanges(t *testing.T) {
+	repo, _ := testutil.RemoteRepo(t)
+	testutil.Git(t, repo, "add", "--all")
+	testutil.Git(t, repo, "commit", "-q", "-m", "Update the files")
+	testutil.Git(t, repo, "push", "-q", "origin", "main")
+	main := testutil.Git(t, repo, "rev-parse", "HEAD")
+	testutil.Git(t, repo, "switch", "-q", "-c", "feature")
+	if err := os.WriteFile(filepath.Join(repo, "run.go"), []byte("package main\n\nfunc run() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Git(t, repo, "add", "--all")
+	testutil.Git(t, repo, "commit", "-q", "-m", "Add run")
+	testutil.Git(t, repo, "push", "-q", "-u", "origin", "feature")
+	testutil.FakeReviewCodex(t, testutil.PassingReview)
+	prompt := filepath.Join(t.TempDir(), "prompt")
+	t.Setenv("PEEK_TEST_REVIEW_PROMPT", prompt)
+
+	a, tt := testApp(t, repo, nil)
+	settle(tt)
+	if cm, ok := a.current(); !ok || !git.IsRange(cm.Hash) {
+		t.Fatalf("shown %+v, want the branch's changes", cm)
+	}
+	if target, _ := a.reviewTarget(); target.Scope != review.BranchScope || target.Base != main {
+		t.Fatalf("target %+v, want the branch's changes since %s", target, main)
+	}
+	if err := tt.Click("Review"); err != nil {
+		t.Fatal(err)
+	}
+	settle(tt)
+	if a.review.scope != review.BranchScope || !tt.HasText("Passed") {
+		t.Fatalf("review %+v, %q", a.review, tt.Texts())
+	}
+	if got, _ := os.ReadFile(prompt); !strings.Contains(string(got), "Scope: Branch changes.") || !strings.Contains(string(got), "Base: "+main) {
+		t.Fatalf("prompt %q, want the branch's range", got)
+	}
+
+	// The work tree has nothing to review; the branch's result waits.
+	a.commitRow = 0
+	settle(tt)
+	if tt.HasText("Passed") || a.review.result == nil {
+		t.Fatalf("branch's result shown for the work tree: %q", tt.Texts())
+	}
+	a.commitRow = 1
+	settle(tt)
+	if !tt.HasText("Passed") {
+		t.Fatalf("branch's result gone: %q", tt.Texts())
+	}
+
+	// Uncommitted changes leave it be; another commit outdates it.
+	os.WriteFile(filepath.Join(repo, "draft.txt"), []byte("draft\n"), 0o644)
+	a.refresh()
+	settle(tt)
+	if a.review.stale {
+		t.Fatal("uncommitted changes outdated the branch's review")
+	}
+	testutil.Git(t, repo, "add", "--all")
+	testutil.Git(t, repo, "commit", "-q", "-m", "Add a draft")
+	a.refresh()
+	settle(tt)
+	if !a.review.stale || !tt.HasText("Review Again") {
+		t.Fatalf("a commit kept the branch's review: %+v", a.review)
+	}
+}

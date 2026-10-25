@@ -59,9 +59,13 @@ type app struct {
 	upstream                 string // the upstream's name, where the branch is behind it
 	pull                     pullState
 	review                   reviewState
-	reviewSource             review.Snapshot
-	reviewSourceErr          string
-	switcher                 switcherState
+	// reviewSource is what a review is of where the work tree or a commit
+	// shows: the uncommitted changes, else the commits not pushed yet.
+	reviewSource    review.Snapshot
+	reviewSourceErr string
+	// branchReview is what it is of where the branch's changes show.
+	branchReview review.Snapshot
+	switcher     switcherState
 	// theme is this pass's, listTheme the one of lists with the keyboard
 	// focus and inactiveTheme the one of lists without it.
 	theme, listTheme, inactiveTheme *ui.Theme
@@ -1066,6 +1070,7 @@ func (a *app) loadCommits() {
 			a.commits, a.worktreeChanges, a.branch, a.github, a.branchURL = h.commits, h.changes, h.branch, h.github, h.branchURL
 			a.canPush, a.behind, a.upstream, a.dirty = h.canPush, h.behind, h.upstream, len(h.changes)
 			a.updateReviewSource(h.review, h.reviewErr)
+			a.updateBranchReview(h.branchReview)
 			a.readPullURL(false)
 			if len(h.commits) > 0 {
 				a.commitRow = landingRow(h)

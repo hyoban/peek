@@ -376,15 +376,16 @@ func (a *app) commentsButton(c *ui.Context) {
 }
 
 // findings are those of the review shown that are about the file's diff:
-// the uncommitted changes' where the review was of them, else the commits'
-// at the head the review was of.
+// the uncommitted changes' where the review was of them, the branch's
+// changes' where it was of those, else the commits' at the head it was of.
 func (a *app) findings(d *fileDiff) []review.Finding {
 	r := &a.review
 	cm, ok := a.current()
 	if r.result == nil || r.stale || !ok || d.patch {
 		return nil
 	}
-	if r.base == "" && cm.Hash != git.Worktree || r.base != "" && git.Tip(cm.Hash) != r.head {
+	if r.base == "" && cm.Hash != git.Worktree || r.base != "" && git.Tip(cm.Hash) != r.head ||
+		(r.scope == review.BranchScope) != git.IsRange(cm.Hash) && r.base != "" {
 		return nil
 	}
 	var fs []review.Finding

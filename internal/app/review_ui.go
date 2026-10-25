@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"peek/internal/git"
 	"peek/internal/review"
 	"time"
 
@@ -24,12 +25,47 @@ type reviewState struct {
 
 func (a *app) updateReviewSource(snapshot review.Snapshot, err string) {
 	a.reviewSource, a.reviewSourceErr = snapshot, err
-	if a.review.sourceID != "" && (snapshot.ID != a.review.sourceID || err != "") {
-		a.review.stale = true
-		if a.review.cancel != nil {
-			a.review.cancel()
-		}
+	if a.review.scope != review.BranchScope && a.review.sourceID != "" && (snapshot.ID != a.review.sourceID || err != "") {
+		a.review.outdated()
 	}
+}
+
+func (a *app) updateBranchReview(snapshot review.Snapshot) {
+	a.branchReview = snapshot
+	if a.review.scope == review.BranchScope && a.review.sourceID != "" && snapshot.ID != a.review.sourceID {
+		a.review.outdated()
+	}
+}
+
+// outdated marks the review out of date, stopping it where it runs.
+func (r *reviewState) outdated() {
+	r.stale = true
+	if r.cancel != nil {
+		r.cancel()
+	}
+}
+
+// reviewTarget is what a review would be of, as the history's selection
+// has it: the branch's changes where they show, else the uncommitted
+// changes or the commits not pushed yet.
+func (a *app) reviewTarget() (review.Snapshot, string) {
+	if cm, ok := a.current(); ok && git.IsRange(cm.Hash) && a.branchReview.ID != "" {
+		return a.branchReview, ""
+	}
+	return a.reviewSource, a.reviewSourceErr
+}
+
+func (a *app) reviewTargetID() string {
+	target, _ := a.reviewTarget()
+	return target.ID
+}
+
+// reviewSourceOf is the source of a review of the scope as read last.
+func (a *app) reviewSourceOf(scope string) review.Snapshot {
+	if scope == review.BranchScope {
+		return a.branchReview
+	}
+	return a.reviewSource
 }
 
 func (a *app) reviewButton(c *ui.Context) {
@@ -47,8 +83,18 @@ func (a *app) reviewButton(c *ui.Context) {
 		activity(c, "review", text, tooltip, "Stop Review", func() { a.review.cancel() })
 		return
 	}
+	target, targetErr := a.reviewTarget()
+	// A review of other changes than those selected stays for them, and
+	// the selected ones are offered instead.
+	other := a.review.sourceID != "" && (a.review.scope == review.BranchScope) != (target.Scope == review.BranchScope)
 	label, tooltip := "Review", "Review the changes with Codex"
 	switch {
+	case other && targetErr != "":
+		tooltip = targetErr
+	case other && target.ID == "":
+		tooltip = "Nothing to review"
+	case other:
+		tooltip = "Review " + target.Scope + " with Codex"
 	case a.review.stale:
 		label, tooltip = "Review Again", "The changes have changed since the last review"
 	case a.review.err != "":
@@ -61,17 +107,17 @@ func (a *app) reviewButton(c *ui.Context) {
 		if a.review.result.Verdict == "failed" {
 			label = "Not Passed"
 		}
-	case a.reviewSourceErr != "":
-		tooltip = a.reviewSourceErr
-	case a.reviewSource.ID == "":
+	case targetErr != "":
+		tooltip = targetErr
+	case target.ID == "":
 		tooltip = "Nothing to review"
 	default:
-		tooltip = "Review " + a.reviewSource.Scope + " with Codex"
+		tooltip = "Review " + target.Scope + " with Codex"
 	}
-	available := a.reviewSource.ID != "" || a.reviewSourceErr != ""
-	completed := !a.review.stale && (a.review.result != nil || a.review.err != "")
+	available := target.ID != "" || targetErr != ""
+	completed := !other && !a.review.stale && (a.review.result != nil || a.review.err != "")
 	disabled := a.push.running || a.switcher.running != "" || a.pull.running || !available && !completed
-	if a.review.stale && !available {
+	if a.review.stale && !other && !available {
 		label, tooltip = "Review", "Nothing to review"
 	}
 	ui.Button(c.Key("review"), label).Shrink(0).Disabled(disabled).Tooltip(tooltip).OnClick(func() {
@@ -87,15 +133,16 @@ func (a *app) startReview(services ui.Services) {
 	if a.review.running || a.push.running || a.switcher.running != "" || a.pull.running {
 		return
 	}
-	if a.reviewSourceErr != "" {
-		a.review = reviewState{err: a.reviewSourceErr, open: true}
+	snapshot, targetErr := a.reviewTarget()
+	if targetErr != "" {
+		a.review = reviewState{err: targetErr, open: true}
 		return
 	}
-	if a.reviewSource.ID == "" {
+	if snapshot.ID == "" {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	snapshot, repo := a.reviewSource, a.repo
+	repo := a.repo
 	a.review = reviewState{running: true, cancel: cancel, sourceID: snapshot.ID, scope: snapshot.Scope, head: snapshot.Head, base: snapshot.Base,
 		phase: "Checking…", detail: "Checking the review snapshot"}
 	win, inline := a.win, a.inline
@@ -119,7 +166,7 @@ func (a *app) startReview(services ui.Services) {
 		result, err := review.Run(ctx, repo, snapshot, run)
 		return func() {
 			a.review.running, a.review.cancel = false, nil
-			if errors.Is(err, review.ErrChanged) || a.reviewSource.ID != snapshot.ID {
+			if errors.Is(err, review.ErrChanged) || a.reviewSourceOf(snapshot.Scope).ID != snapshot.ID {
 				a.review.stale = true
 			} else if err != nil {
 				a.review.err = err.Error()
@@ -189,7 +236,7 @@ func (a *app) reviewDetails(c *ui.Context) {
 		// default button last.
 		ui.Button(c.Key("copy-review"), "Copy").OnClick(func() { services.WriteClipboard(a.review.text()) })
 		ui.Spacer(c)
-		ui.Button(c.Key("review-again"), "Review Again").Disabled(a.push.running || a.review.running || a.pull.running || a.reviewSource.ID == "").
+		ui.Button(c.Key("review-again"), "Review Again").Disabled(a.push.running || a.review.running || a.pull.running || a.reviewTargetID() == "").
 			OnClick(func() { a.startReview(services) })
 	})
 }

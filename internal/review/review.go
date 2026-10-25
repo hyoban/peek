@@ -1,5 +1,6 @@
-// Package review has Codex review a repository's uncommitted changes, or
-// its commits not pushed yet, and tells whether a result is out of date.
+// Package review has Codex review a repository's uncommitted changes, its
+// commits not pushed yet, or its branch's changes, and tells whether a
+// result is out of date.
 package review
 
 import (
@@ -86,6 +87,27 @@ func ReadSnapshot(repo string) (Snapshot, error) {
 	return snapshot, nil
 }
 
+// BranchScope is the scope of a review of the branch's changes since it
+// left the branch it is to merge into, as its pull request's diff has them.
+const BranchScope = "Branch changes"
+
+// BranchSnapshot is the snapshot of the branch's changes in the range,
+// which only its commits move: uncommitted changes leave it be.
+func BranchSnapshot(branch string, r git.BranchRange) Snapshot {
+	id := sha256.Sum256([]byte(BranchScope + "\x00" + branch + "\x00" + r.Base + "\x00" + r.Head))
+	return Snapshot{ID: fmt.Sprintf("%x", id), Scope: BranchScope, Base: r.Base, Head: r.Head}
+}
+
+// ReadBranchSnapshot reads the snapshot of the branch's changes, none
+// where the branch has no commits of its own.
+func ReadBranchSnapshot(repo string) (Snapshot, error) {
+	r, ok := git.BranchBase(repo)
+	if !ok {
+		return Snapshot{}, nil
+	}
+	return BranchSnapshot(git.CurrentBranch(repo), r), nil
+}
+
 type Finding struct {
 	Priority int    `json:"priority"`
 	Title    string `json:"title"`
@@ -154,7 +176,11 @@ func Run(ctx context.Context, repo string, snapshot Snapshot, run Runner) (Resul
 	if snapshot.ID == "" {
 		return Result{}, errors.New("nothing to review")
 	}
-	current, err := ReadSnapshot(repo)
+	read := ReadSnapshot
+	if snapshot.Scope == BranchScope {
+		read = ReadBranchSnapshot
+	}
+	current, err := read(repo)
 	if err != nil {
 		return Result{}, err
 	}
@@ -168,7 +194,7 @@ func Run(ctx context.Context, repo string, snapshot Snapshot, run Runner) (Resul
 	if err := ctx.Err(); err != nil {
 		return Result{}, err
 	}
-	current, err = ReadSnapshot(repo)
+	current, err = read(repo)
 	if err != nil {
 		return Result{}, err
 	}

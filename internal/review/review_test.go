@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"peek/internal/testutil"
+	"strings"
 	"testing"
 )
 
@@ -184,4 +185,37 @@ func TestCodexReviewSmoke(t *testing.T) {
 	}
 	t.Log("Progress:", phases)
 	t.Log(result.Summary)
+}
+
+// The branch's changes are a snapshot apart, which only commits move.
+func TestBranchSnapshot(t *testing.T) {
+	repo, _ := testutil.RemoteRepo(t)
+	testutil.Git(t, repo, "add", "--all")
+	testutil.Git(t, repo, "commit", "-q", "-m", "Update the files")
+	testutil.Git(t, repo, "push", "-q", "origin", "main")
+	base := testutil.Git(t, repo, "rev-parse", "HEAD")
+	testutil.Git(t, repo, "switch", "-q", "-c", "feature")
+	testutil.Git(t, repo, "commit", "-q", "--allow-empty", "-m", "Empty")
+	testutil.Git(t, repo, "push", "-q", "-u", "origin", "feature")
+	snapshot, err := ReadBranchSnapshot(repo)
+	if err != nil || snapshot.ID == "" || snapshot.Scope != BranchScope || snapshot.Base != base || snapshot.Head != testutil.Git(t, repo, "rev-parse", "HEAD") {
+		t.Fatalf("snapshot %+v, %v", snapshot, err)
+	}
+	if !strings.Contains(snapshot.context(), "git diff --no-ext-diff --no-textconv --ignore-submodules=none "+base+" "+snapshot.Head) {
+		t.Fatalf("context %q", snapshot.context())
+	}
+	os.WriteFile(filepath.Join(repo, "draft.txt"), []byte("draft\n"), 0o644)
+	run := func(context.Context, string, Snapshot) (Result, error) {
+		return Result{Status: "complete", Summary: "No defects", Findings: []Finding{}}, nil
+	}
+	if _, err := Run(context.Background(), repo, snapshot, run); err != nil {
+		t.Fatalf("uncommitted changes failed the branch's review: %v", err)
+	}
+	moved := func(context.Context, string, Snapshot) (Result, error) {
+		testutil.Git(t, repo, "commit", "-q", "--allow-empty", "-m", "Another")
+		return Result{Status: "complete", Summary: "No defects", Findings: []Finding{}}, nil
+	}
+	if _, err := Run(context.Background(), repo, snapshot, moved); !errors.Is(err, ErrChanged) {
+		t.Fatalf("a commit during the review: %v", err)
+	}
 }

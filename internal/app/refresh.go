@@ -21,7 +21,10 @@ type history struct {
 	upstream  string // the upstream's name, where it is behind
 	review    review.Snapshot
 	reviewErr string
-	err       error
+	// branchReview is the review of the branch's changes, none where it
+	// has no entry.
+	branchReview review.Snapshot
+	err          error
 }
 
 func readHistory(repo string) history {
@@ -35,12 +38,14 @@ func readHistory(repo string) history {
 	}
 	wt := git.Commit{Hash: git.Worktree, Subject: "Uncommitted Changes", Summary: summary}
 	entries := []git.Commit{wt}
+	var branchReview review.Snapshot
 	// The branch's changes since it left the branch it is to merge into,
 	// as its pull request's diff has them, where it has commits of its own.
 	if r, ok := git.BranchBase(repo); ok {
 		entries = append(entries, git.Commit{Hash: git.Range(r.Base, r.Head), Subject: "Branch Changes",
 			Summary: count(r.Commits, "commit") + " since " + r.Onto,
 			Body:    "The changes of the branch since it left " + r.Onto + ", at " + r.Base[:7]})
+		branchReview = review.BranchSnapshot(git.CurrentBranch(repo), r)
 	}
 	commits = append(entries, commits...)
 	review, reviewErr := review.ReadSnapshot(repo)
@@ -50,7 +55,7 @@ func readHistory(repo string) history {
 		reviewNote = reviewErr.Error()
 	}
 	return history{commits: commits, changes: changes, branch: git.CurrentBranch(repo), github: git.GitHubURL(repo), branchURL: git.BranchGitHubURL(repo),
-		canPush: len(changes) > 0 || git.HasUnpushedCommits(repo), behind: behind, upstream: upstream, review: review, reviewErr: reviewNote, err: err}
+		canPush: len(changes) > 0 || git.HasUnpushedCommits(repo), behind: behind, upstream: upstream, review: review, reviewErr: reviewNote, branchReview: branchReview, err: err}
 }
 
 // refresh reads the history and the work tree again, as the watch asks
@@ -86,6 +91,7 @@ func (a *app) applyHistory(h history) {
 	a.commits, a.branch, a.github, a.branchURL, a.err = h.commits, h.branch, h.github, h.branchURL, ""
 	a.canPush, a.behind, a.upstream, a.dirty = h.canPush, h.behind, h.upstream, len(h.changes)
 	a.updateReviewSource(h.review, h.reviewErr)
+	a.updateBranchReview(h.branchReview)
 	a.readPullURL(false)
 	a.commitRow = -1
 	if len(h.commits) > 0 {
