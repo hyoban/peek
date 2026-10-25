@@ -220,7 +220,7 @@ func (a *app) diffPane(c *ui.Context) {
 	if n := len(a.diffs); n > 0 {
 		detail = count(n, "file")
 	}
-	column(c, title, detail, func() {
+	columnLinked(c, title, a.github, mutedDetail(c, detail), func() {
 		if len(a.diffs) == 0 {
 			emptyNote(c, "No changes")
 			return

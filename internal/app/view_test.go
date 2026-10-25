@@ -574,3 +574,16 @@ func TestHTMLImages(t *testing.T) {
 		}
 	}
 }
+
+func TestSplitRefs(t *testing.T) {
+	for text, want := range map[string][]string{
+		"ci: run checks (#44610)":    {"ci: run checks (", "#44610", ")"},
+		"#12 and #3":                 {"#12", " and ", "#3"},
+		"no refs":                    {"no refs"},
+		"a#1 &#123; owner/repo#9 #x": {"a#1 &#123; owner/repo#9 #x"},
+	} {
+		if got := splitRefs(text); !slices.Equal(got, want) {
+			t.Errorf("splitRefs(%q) = %q, want %q", text, got, want)
+		}
+	}
+}

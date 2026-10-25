@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -329,26 +330,77 @@ func (a *app) linkButton(c *ui.Context, key string, svg *ui.SVG, label, url stri
 // a slim header with the title and, muted at the end, a detail such as a
 // count, a divider, and the body.
 func column(c *ui.Context, title, detail string, body func()) {
-	columnWith(c, title, func() {
+	columnWith(c, title, mutedDetail(c, detail), body)
+}
+
+// mutedDetail builds the detail of a column's header, muted.
+func mutedDetail(c *ui.Context, detail string) func() {
+	return func() {
 		if detail != "" {
 			ui.Text(c, detail).FontSize(smallSize).TextColor(c.Theme().TextMuted).SingleLine().Shrink(0)
 		}
-	}, body)
+	}
 }
 
 // columnWith is a column whose header ends with what detail builds.
 func columnWith(c *ui.Context, title string, detail, body func()) {
+	columnLinked(c, title, "", detail, body)
+}
+
+// columnLinked is a column whose title links its references to pull
+// requests and issues, as #123, to the GitHub repository at github, where
+// there is one.
+func columnLinked(c *ui.Context, title, github string, detail, body func()) {
 	t := c.Theme()
 	ui.Column(c).Fill().Background(t.Background).Children(func() {
 		ui.Row(c).Height(30).Shrink(0).FillWidth().AlignItems(ui.Center).Gap(t.Space(2)).
 			Padding(0, t.Space(3)).Children(func() {
-			ui.Text(c, title).FontWeight(600).SingleLine().Ellipsis("…").
-				Grow(1).MinWidth(0).Tooltip(title)
+			ui.RichText(c).FontWeight(600).SingleLine().Ellipsis("…").
+				Grow(1).MinWidth(0).Tooltip(title).Children(func() {
+				linkedText(c, title, github)
+			})
 			detail()
 		})
 		ui.Divider(c)
 		body()
 	})
+}
+
+// issueRef finds a reference to a pull request or an issue, #123, not
+// within a word or an entity such as &#123;.
+var issueRef = regexp.MustCompile(`(^|[^\w&/])#([0-9]+)\b`)
+
+// linkedText builds text, its references to pull requests and issues as
+// links to the GitHub repository at github, where there is one.
+func linkedText(c *ui.Context, text, github string) {
+	if github == "" {
+		ui.Text(c, text)
+		return
+	}
+	for _, part := range splitRefs(text) {
+		if num, ok := strings.CutPrefix(part, "#"); ok && issueRef.MatchString(" "+part) {
+			ui.Link(c, part, github+"/issues/"+num)
+		} else {
+			ui.Text(c, part)
+		}
+	}
+}
+
+// splitRefs cuts text at its references to pull requests and issues, each
+// a part of its own.
+func splitRefs(text string) []string {
+	var parts []string
+	at := 0
+	for _, m := range issueRef.FindAllStringSubmatchIndex(text, -1) {
+		if start := m[4] - 1; start > at {
+			parts = append(parts, text[at:start])
+		}
+		parts, at = append(parts, text[m[4]-1:m[5]]), m[5]
+	}
+	if at < len(text) {
+		parts = append(parts, text[at:])
+	}
+	return parts
 }
 
 // sideList insets a list of a side column, the history or a tree, so
