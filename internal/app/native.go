@@ -70,24 +70,3 @@ func (p *projects) followNetwork() {
 		was = now
 	})
 }
-
-// syncBadge counts on the Dock icon the commits the projects' remotes
-// have that their branches have not, as Mail counts unread messages.
-func (p *projects) syncBadge() {
-	n := 0
-	for _, a := range p.apps {
-		n += a.behind
-	}
-	if n != p.badge {
-		p.badge = n
-		mygo.App.SetBadgeCount(n)
-	}
-}
-
-// setDockMenu adds Open Folder to the Dock icon's menu, over the recent
-// projects macOS lists there.
-func (p *projects) setDockMenu() {
-	mygo.App.Dock.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
-		{Label: "Open Folder…", Click: func(*mygo.MenuItem, *mygo.Window) { p.choose() }},
-	}))
-}

@@ -28,7 +28,7 @@ type projects struct {
 	inline  bool            // no windows, the apps' loads on the UI thread, for tests
 	menu    *menuItems      // the menu bar's items that follow the project, nil in tests
 	empty   *mygo.Window    // the window asking for a project while none is open
-	badge   int             // the count on the Dock icon
+	bar     *menuBar        // the item in the menu bar, nil in tests
 	// quitting keeps the projects open as the app quits, for the next
 	// launch to open them again.
 	quitting bool
@@ -94,7 +94,7 @@ func (p *projects) window(c *ui.Context, a *app) {
 	if a == p.cur {
 		p.syncMenu()
 	}
-	p.syncBadge()
+	p.syncTitle()
 }
 
 // welcome is the window before any project opens, as a Mac app's welcome

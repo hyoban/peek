@@ -218,6 +218,16 @@ func LoadWorktreeChanges(repo string) ([]Change, error) {
 	return changes, nil
 }
 
+// CountChanges counts the files that differ from HEAD, those git does not
+// track included, as LoadWorktreeChanges lists them, without their lines.
+func CountChanges(repo string) (int, error) {
+	out, err := git(repo, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames")
+	if err != nil {
+		return 0, err
+	}
+	return len(nulSeparated(out)), nil
+}
+
 // untrackedCounts counts the lines of files git does not track as git
 // would once they were added, its attributes, filters, encodings and
 // big files' threshold all as they are: in an index of their own, made

@@ -76,7 +76,7 @@ func (a *app) applyHistory(h history) {
 	shown, wasShown := a.hashAt(a.loadedRow)
 	filesShown := a.filesFor >= 0 && a.filesFor == a.loadedRow
 	a.commits, a.branch, a.github, a.branchURL, a.err = h.commits, h.branch, h.github, h.branchURL, ""
-	a.canPush, a.behind, a.upstream = h.canPush, h.behind, h.upstream
+	a.canPush, a.behind, a.upstream, a.dirty = h.canPush, h.behind, h.upstream, len(h.changes)
 	a.updateReviewSource(h.review, h.reviewErr)
 	a.commitRow = -1
 	if len(h.commits) > 0 {

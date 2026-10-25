@@ -52,6 +52,7 @@ type app struct {
 	err                      string
 	push                     pushState
 	canPush                  bool   // work tree changes or commits not yet pushed
+	dirty                    int    // the files the work tree changes, as last read
 	behind                   int    // the upstream's commits, as fetched, the branch has not
 	upstream                 string // the upstream's name, where the branch is behind it
 	pull                     pullState
@@ -1050,7 +1051,7 @@ func (a *app) loadCommits() {
 				return
 			}
 			a.commits, a.worktreeChanges, a.branch, a.github, a.branchURL = h.commits, h.changes, h.branch, h.github, h.branchURL
-			a.canPush, a.behind, a.upstream = h.canPush, h.behind, h.upstream
+			a.canPush, a.behind, a.upstream, a.dirty = h.canPush, h.behind, h.upstream, len(h.changes)
 			a.updateReviewSource(h.review, h.reviewErr)
 			if len(h.commits) > 0 {
 				a.commitRow = 0
@@ -1182,8 +1183,8 @@ func Run(args []string) {
 	mygo.App.OnOpenFile(func(path string) {
 		go p.openFolder(path, nil)
 	})
-	// A Mac app stays open without windows, and opens one again as its
-	// Dock icon is clicked.
+	// Peek stays open without windows, in the menu bar, and opens one
+	// again as it is opened from Finder.
 	mygo.App.OnWindowAllClosed(func() {})
 	mygo.App.OnActivate(func(hasVisibleWindows bool) {
 		if !hasVisibleWindows && len(p.apps) == 0 {
@@ -1192,9 +1193,11 @@ func Run(args []string) {
 	})
 	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { p.quitting = true })
 	followApp()
+	// No Dock icon: the menu bar's item is Peek's place (menubar.go).
+	mygo.App.SetActivationPolicy(mygo.ActivationPolicyAccessory)
 	mygo.App.WhenReady(func() {
 		p.setMenu()
-		p.setDockMenu()
+		p.setMenuBar()
 		p.followNetwork()
 		if err == nil {
 			p.open(repo)

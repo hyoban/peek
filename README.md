@@ -41,7 +41,8 @@ All of the commit's files, to read any of them as it was then.
 - Fetches the branch's remote every few minutes, shows how many new commits it has beside the branch, and pulls them by fast-forward with a click
 - **Ship**: commit all changes with a Codex-written message and push, from the history's toolbar
 - **Review**: have Codex review the uncommitted changes or the unpushed commits, from the history's toolbar
-- A notification when shipping or a review finishes while Peek is in the background, and the remotes' new commits counted on the Dock icon
+- Lives in the menu bar rather than the Dock: its menu lists the recent repositories with their branches and the files they change, and the commits to pull, pulled with a click, whose count shows beside its icon
+- A notification when shipping or a review finishes while Peek is in the background
 - Fetches wait while offline or on a metered connection, and run as the network comes back
 - Every command in the menu bar, as Mac apps have them
 - Follows the system's light and dark appearance
