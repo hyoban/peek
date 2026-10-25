@@ -27,6 +27,26 @@ func TestGitHubPage(t *testing.T) {
 	}
 }
 
+// The branch's page is on the remote it tracks, none where it tracks none.
+func TestBranchGitHubURL(t *testing.T) {
+	repo := testutil.Repo(t)
+	testutil.Git(t, repo, "remote", "add", "origin", "git@github.com:hyoban/peek.git")
+	testutil.Git(t, repo, "remote", "add", "fork", "https://github.com/someone/peek.git")
+	testutil.Git(t, repo, "checkout", "-q", "-b", "feat/a#b")
+	if got := BranchGitHubURL(repo); got != "" {
+		t.Errorf("untracked branch's page %q, want none", got)
+	}
+	testutil.Git(t, repo, "config", "branch.feat/a#b.remote", "fork")
+	testutil.Git(t, repo, "config", "branch.feat/a#b.merge", "refs/heads/feat/a#b")
+	if got, want := BranchGitHubURL(repo), "https://github.com/someone/peek/tree/feat/a%23b"; got != want {
+		t.Errorf("tracked branch's page %q, want %q", got, want)
+	}
+	testutil.Git(t, repo, "checkout", "-q", "--detach")
+	if got := BranchGitHubURL(repo); got != "" {
+		t.Errorf("detached HEAD's page %q, want none", got)
+	}
+}
+
 // Untracked files named as pathspecs' magic, or outside a sparse
 // checkout, count as others do.
 func TestLineCountsLiteralAndSparse(t *testing.T) {

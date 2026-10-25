@@ -15,6 +15,7 @@ type history struct {
 	changes   []git.Change // the work tree's
 	branch    string
 	github    string // the repository's page on GitHub, "" for none
+	branchURL string // the branch's page on GitHub, "" for none
 	canPush   bool
 	behind    int    // the upstream's commits the branch has not
 	upstream  string // the upstream's name, where it is behind
@@ -40,7 +41,7 @@ func readHistory(repo string) history {
 	if reviewErr != nil {
 		reviewNote = reviewErr.Error()
 	}
-	return history{commits: commits, changes: changes, branch: git.CurrentBranch(repo), github: git.GitHubURL(repo),
+	return history{commits: commits, changes: changes, branch: git.CurrentBranch(repo), github: git.GitHubURL(repo), branchURL: git.BranchGitHubURL(repo),
 		canPush: len(changes) > 0 || git.HasUnpushedCommits(repo), behind: behind, upstream: upstream, review: review, reviewErr: reviewNote, err: err}
 }
 
@@ -74,7 +75,7 @@ func (a *app) applyHistory(h history) {
 	chosen, wasChosen := a.hashAt(a.commitRow)
 	shown, wasShown := a.hashAt(a.loadedRow)
 	filesShown := a.filesFor >= 0 && a.filesFor == a.loadedRow
-	a.commits, a.branch, a.github, a.err = h.commits, h.branch, h.github, ""
+	a.commits, a.branch, a.github, a.branchURL, a.err = h.commits, h.branch, h.github, h.branchURL, ""
 	a.canPush, a.behind, a.upstream = h.canPush, h.behind, h.upstream
 	if h.behind == 0 {
 		a.pull.err = "" // up to date after all, as pulled elsewhere

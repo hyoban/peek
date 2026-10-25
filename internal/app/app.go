@@ -3,6 +3,7 @@
 package app
 
 import (
+	"cmp"
 	"log"
 	"os"
 	"path"
@@ -37,6 +38,9 @@ type app struct {
 	repo     string
 	branch   string
 	github   string // the repository's page on GitHub, "" for none
+	// branchURL is the branch's page on GitHub, which the button opens
+	// over the repository's where there is one.
+	branchURL string
 	// inline runs loads on the UI thread, as tests and snapshots want,
 	// and redraw asks for the frame a window's Update would draw then.
 	// Those a pass starts wait in published for the next, as a window's
@@ -240,8 +244,8 @@ func (a *app) toolbar(c *ui.Context) {
 				a.projectTitle(c)
 				a.branchLabel(c)
 				a.pullButton(c)
-				if a.github != "" {
-					a.linkButton(c, "github", githubIcon, "Open on GitHub", a.github)
+				if page := cmp.Or(a.branchURL, a.github); page != "" {
+					a.linkButton(c, "github", githubIcon, "Open on GitHub", page)
 				}
 			})
 			a.modeChoice = a.mode
@@ -837,7 +841,7 @@ func (a *app) loadCommits() {
 				a.err = h.err.Error()
 				return
 			}
-			a.commits, a.worktreeChanges, a.branch, a.github = h.commits, h.changes, h.branch, h.github
+			a.commits, a.worktreeChanges, a.branch, a.github, a.branchURL = h.commits, h.changes, h.branch, h.github, h.branchURL
 			a.canPush, a.behind, a.upstream = h.canPush, h.behind, h.upstream
 			a.updateReviewSource(h.review, h.reviewErr)
 			if len(h.commits) > 0 {

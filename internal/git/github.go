@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	neturl "net/url"
 	"os"
 	"os/exec"
 	"regexp"
@@ -35,6 +36,32 @@ func GitHubURL(repo string) string {
 		}
 	}
 	return found
+}
+
+// BranchGitHubURL returns the GitHub page of the branch checked out, on
+// the remote it tracks, "" where it tracks none on GitHub, as a branch
+// never pushed or a detached HEAD.
+func BranchGitHubURL(repo string) string {
+	head, err := git(repo, "symbolic-ref", "--quiet", "HEAD")
+	if err != nil {
+		return ""
+	}
+	out, err := git(repo, "for-each-ref", "--format=%(upstream:remotename)%00%(upstream:remoteref)", strings.TrimSpace(head))
+	remote, ref, _ := strings.Cut(strings.TrimSpace(out), "\x00")
+	branch, ok := strings.CutPrefix(ref, "refs/heads/")
+	if err != nil || remote == "" || !ok {
+		return ""
+	}
+	url, err := git(repo, "config", "--get", "remote."+remote+".url")
+	page := githubPage(strings.TrimSpace(url))
+	if err != nil || page == "" {
+		return ""
+	}
+	parts := strings.Split(branch, "/")
+	for i, p := range parts {
+		parts[i] = neturl.PathEscape(p)
+	}
+	return page + "/tree/" + strings.Join(parts, "/")
 }
 
 // githubPage returns the page of a GitHub remote's URL, as SSH, scp-like
