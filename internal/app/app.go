@@ -88,9 +88,12 @@ type app struct {
 	// collapsedHistory and collapsedTree are the columns the window's
 	// narrowing hid, which its widening shows again.
 	collapsedHistory, collapsedTree bool
-	fitWidth                        float32 // the window's width fit last
-	mode                            int
-	modeChoice                      int // the mode switch's, which setMode follows
+	// historyShown and treeShown are how far the columns show, from 0 to
+	// 1, as they slide in and out (reveal).
+	historyShown, treeShown float32
+	fitWidth                float32 // the window's width fit last
+	mode                    int
+	modeChoice              int // the mode switch's, which setMode follows
 
 	commits    []git.Commit
 	commitList ui.ListState
@@ -206,14 +209,17 @@ func (a *app) view(c *ui.Context) {
 	// history at the end, as an inspector. The toolbar changes the state
 	// in actions, after the pass, so that all of the pass sees the same.
 	a.fit(c.Size())
+	a.treeShown = a.reveal(c, "tree", a.showTree)
+	a.historyShown = a.reveal(c, "history", a.showHistory)
 	a.nativeBar = a.nativeToolbar(c)
-	tree, history := a.showTree, a.showHistory
+	tree, history := a.treeShown > 0, a.historyShown > 0
+	treeWidth, historyWidth := sliding(&a.treeWidth, a.treeShown), sliding(&a.historyWidth, a.historyShown)
 	a.diffWidth, _ = c.Size()
 	if tree {
-		a.diffWidth -= a.treeWidth
+		a.diffWidth -= *treeWidth
 	}
 	if history {
-		a.diffWidth -= a.historyWidth
+		a.diffWidth -= *historyWidth
 	}
 	content := func() {
 		ui.Column(c).Fill().Background(a.theme.Background).Children(func() {
@@ -228,7 +234,7 @@ func (a *app) view(c *ui.Context) {
 	rest := func() {
 		if tree {
 			a.lineless(c, func() {
-				ui.Split(c, &a.treeWidth, a.themedPane(c, func() { a.treePane(c) }), a.themedPane(c, content)).Fill()
+				ui.Split(c, treeWidth, slide(c, a.treeWidth, a.themedPane(c, func() { a.treePane(c) })), a.themedPane(c, content)).Fill()
 			})
 		} else {
 			content()
@@ -236,7 +242,7 @@ func (a *app) view(c *ui.Context) {
 	}
 	if history {
 		a.lineless(c, func() {
-			endSplit(c, &a.historyWidth, a.themedPane(c, func() { a.history(c) }), a.themedPane(c, rest)).Fill()
+			endSplit(c, historyWidth, a.historyWidth, a.themedPane(c, func() { a.history(c) }), a.themedPane(c, rest)).Fill()
 		})
 	} else {
 		rest()
@@ -296,6 +302,44 @@ func (a *app) fit(width, _ float32) {
 	}
 }
 
+// reveal is how far the column on shows, which slides in and out as it
+// shows and hides, as Xcode's navigator and inspector do, at once where
+// the desktop asks for less motion. A project the window shows anew
+// starts with its columns as they are.
+func (a *app) reveal(c *ui.Context, column string, on bool) float32 {
+	var to float32
+	if on {
+		to = 1
+	}
+	return c.Root().AnimateWith(columnKey{a, column}, to, 250*time.Millisecond, ui.EaseInOut)
+}
+
+// columnKey tells apart the columns' animations, by project.
+type columnKey struct {
+	a      *app
+	column string
+}
+
+// sliding is the width a column shows at, of *width while it shows in
+// full, for its divider's drags to change, and a part of it while it
+// slides.
+func sliding(width *float32, shown float32) *float32 {
+	if shown >= 1 {
+		return width
+	}
+	w := *width * shown
+	return &w
+}
+
+// slide builds a column's pane at its full width, against the divider,
+// so that it slides past the window's edge as its split narrows it,
+// rather than squeezing.
+func slide(c *ui.Context, width float32, build func()) func() {
+	return func() {
+		ui.Column(c).Absolute().Top(0).Bottom(0).End(0).Width(width).Children(build)
+	}
+}
+
 // toggle shows or hides a column as the user asks, which the window's
 // resizing then leaves as it is.
 func (a *app) toggle(on, collapsed *bool) {
@@ -328,8 +372,9 @@ func (a *app) themedPane(c *ui.Context, build func()) func() {
 
 // endSplit is Split with end at the end, *size its width, as a window's
 // inspector keeps its width while the window resizes: a Split laid out
-// the other way round, its panes the window's way.
-func endSplit(c *ui.Context, size *float32, end, rest func()) ui.Element {
+// the other way round, its panes the window's way, end built full wide
+// (slide).
+func endSplit(c *ui.Context, size *float32, full float32, end, rest func()) ui.Element {
 	dir, flipped := c.Direction(), ui.RightToLeft
 	if dir == ui.RightToLeft {
 		flipped = ui.LeftToRight
@@ -340,7 +385,7 @@ func endSplit(c *ui.Context, size *float32, end, rest func()) ui.Element {
 	// The direction is the Split's before it builds its divider, whose
 	// drags follow it.
 	return ui.Row(c).Direction(flipped).Children(func() {
-		ui.Split(c, size, pane(end), pane(rest)).Fill()
+		ui.Split(c, size, slide(c, full, pane(end)), pane(rest)).Fill()
 	})
 }
 

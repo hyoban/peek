@@ -70,12 +70,19 @@ func TestPanelsToggle(t *testing.T) {
 	if err := tt.Click("Hide History"); err != nil {
 		t.Fatal(err)
 	}
-	if a.showHistory || tt.HasText("1 commit") {
+	// The column slides out, as Xcode's inspector does.
+	tt.Advance(100 * time.Millisecond)
+	if a.showHistory || a.historyShown <= 0 || a.historyShown >= 1 || !tt.HasText("1 commit") {
+		t.Errorf("history not sliding out after toggling it off, shown %v, texts %q", a.historyShown, tt.Texts())
+	}
+	settle(tt)
+	if tt.HasText("1 commit") {
 		t.Errorf("history still shown after toggling it off, texts %q", tt.Texts())
 	}
 	if err := tt.Click("Hide Sidebar"); err != nil {
 		t.Fatal(err)
 	}
+	settle(tt)
 	if a.showTree {
 		t.Error("file tree still shown after toggling it off")
 	}

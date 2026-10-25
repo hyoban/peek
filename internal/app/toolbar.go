@@ -12,7 +12,7 @@ import (
 // columns its separators follow, as Xcode's and Mail's: the repository's
 // controls over the sidebar, the mode and the page on GitHub over the
 // text, and the actions over the history; a column hidden, its controls
-// join the next column's. It reports whether it shows: not in tests,
+// keep their room, where it left them. It reports whether it shows: not in tests,
 // which have no window and draw the toolbar in the view (toolbarPart).
 func (a *app) nativeToolbar(c *ui.Context) bool {
 	if !a.native() {
@@ -28,27 +28,23 @@ func (a *app) toolbarSpec(c *ui.Context) *mygo.Toolbar {
 	// The side columns with the line between them and the text, which
 	// shows what is under it: their color.
 	w, _ := c.Size()
-	tree, history := float64(a.treeWidth)+1, float64(a.historyWidth)+1
-	text := float64(w)
-	if a.showTree {
-		text -= tree
-	}
-	if a.showHistory {
-		text -= history
-	}
+	// They slide as the view's do (reveal), and keep their part of the
+	// toolbar while they hide, its items staying where they stop, as
+	// Xcode's: collapsed, the items would jump to the next column's.
+	tree, history := float64(a.treeWidth*a.treeShown)+1, float64(a.historyWidth*a.historyShown)+1
+	text := float64(w) - tree - history
 	services := c.Services()
 	page := a.githubPage()
 	busy := a.push.running || a.review.running || a.pull.running
-	// The sidebar's button at the sidebar's end, as Xcode's and Mail's,
-	// or at the start while it hides; the project and its branch then,
-	// as the text's title.
-	var items []mygo.ToolbarItem
-	if a.showTree {
-		items = append(items, mygo.ToolbarItem{ID: "sidebar-start", Kind: mygo.ToolbarFlexibleSpace})
+	// The sidebar's button at the start, beside the window's buttons,
+	// where it stays as the sidebar slides, as Xcode's navigator's; the
+	// project and its branch then, as the text's title.
+	items := []mygo.ToolbarItem{
+		{ID: "sidebar", Symbol: "sidebar.left", Label: showOrHide(a.showTree, "Sidebar"), ToolTip: showOrHide(a.showTree, "Sidebar"),
+			Click: func() { a.toggle(&a.showTree, &a.collapsedTree) }},
+		{ID: "sidebar-end", Kind: mygo.ToolbarFlexibleSpace},
 	}
 	items = append(items,
-		mygo.ToolbarItem{ID: "sidebar", Symbol: "sidebar.left", Label: showOrHide(a.showTree, "Sidebar"), ToolTip: showOrHide(a.showTree, "Sidebar"),
-			Click: func() { a.toggle(&a.showTree, &a.collapsedTree) }},
 		mygo.ToolbarItem{ID: "sidebar-separator", Kind: mygo.ToolbarSeparator, Divider: 0},
 		mygo.ToolbarItem{ID: "project", Title: path.Base(a.repo), Label: "Switch Project", ToolTip: a.repo,
 			Click: a.switchProject},
@@ -76,9 +72,9 @@ func (a *app) toolbarSpec(c *ui.Context) *mygo.Toolbar {
 		Columns: []mygo.ToolbarColumn{
 			// The sidebar and the history over the window's color, as
 			// Xcode's navigator and inspector, around the text.
-			{Width: tree, Collapsed: !a.showTree, Sidebar: true},
+			{Width: tree, Sidebar: a.treeShown > 0},
 			{Width: text},
-			{Width: history, Collapsed: !a.showHistory, Sidebar: true},
+			{Width: history, Sidebar: a.historyShown > 0},
 		},
 		Customizable: true,
 		AutosaveName: "peek.toolbar",
