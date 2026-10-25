@@ -159,6 +159,26 @@ func (a *app) diffsUnder(item string) []*fileDiff {
 	return under
 }
 
+// lineCounts shows the lines added and deleted, green and red as GitHub's.
+func lineCounts(c *ui.Context, added, deleted int, onAccent bool) {
+	t := c.Theme()
+	plus, minus := statusColor(t, "A"), statusColor(t, "D")
+	if onAccent {
+		plus, minus = t.AccentText, t.AccentText
+	}
+	ui.Textf(c, "+%d", added).FontSize(smallSize).Font(monoFamily).TextColor(plus).SingleLine().Shrink(0)
+	ui.Textf(c, "−%d", deleted).FontSize(smallSize).Font(monoFamily).TextColor(minus).SingleLine().Shrink(0)
+}
+
+// sumLines adds up the lines the changes of these diffs add and delete.
+func sumLines(diffs []*fileDiff) (added, deleted int) {
+	for _, d := range diffs {
+		added += d.change.Added
+		deleted += d.change.Deleted
+	}
+	return added, deleted
+}
+
 // countRead counts the diffs read among these.
 func countRead(diffs []*fileDiff) int {
 	n := 0
@@ -297,8 +317,7 @@ func (a *app) diffHeader(c *ui.Context, d *fileDiff) {
 		ui.Text(c, where).FontSize(smallSize).TextColor(t.TextMuted).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
 		if d.state != nil {
 			added, deleted := d.state.Stats()
-			ui.Textf(c, "+%d", added).FontSize(smallSize).Font(monoFamily).TextColor(statusColor(t, "A")).Shrink(0)
-			ui.Textf(c, "−%d", deleted).FontSize(smallSize).Font(monoFamily).TextColor(statusColor(t, "D")).Shrink(0)
+			lineCounts(c, added, deleted, false)
 		}
 		statusMark(c, ch.Status, false)
 		// Marked read, as GitHub's Viewed, which folds the diff away.
@@ -332,10 +351,11 @@ func (a *app) loadDiff(d *fileDiff) {
 	cm, _ := a.current()
 	gen := a.diffGen
 	shown := d.state != nil // which a reload updates where it is
+	ch := d.change          // a refresh may change its counts meanwhile
 	a.background(func() func() {
-		before, after := fileTexts(a.repo, cm.Hash, d.change)
-		if isBitmap(d.change.Path) && before != after {
-			picture, note := decodePictures(d.change.Path, before, after)
+		before, after := fileTexts(a.repo, cm.Hash, ch)
+		if isBitmap(ch.Path) && before != after {
+			picture, note := decodePictures(ch.Path, before, after)
 			return func() {
 				d.loading = false
 				if gen == a.diffGen {
@@ -350,8 +370,8 @@ func (a *app) loadDiff(d *fileDiff) {
 		var state *editor.DiffState
 		if note == "" && !shown {
 			state = &editor.DiffState{
-				Old:        codeBuffer(d.change.Path, before),
-				New:        codeBuffer(d.change.Path, after),
+				Old:        codeBuffer(ch.Path, before),
+				New:        codeBuffer(ch.Path, after),
 				Layout:     editor.DiffUnified,
 				FitContent: true,
 				// Long lines wrap, as Xcode's do: a diff that scrolled

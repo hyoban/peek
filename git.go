@@ -31,6 +31,16 @@ type change struct {
 	Status string // A, M, D, R, C, T
 	Old    string // the path before a rename or copy, else Path
 	Path   string
+	// Added and Deleted are the lines the change adds and deletes, as
+	// git's --numstat counts them, none for a binary file.
+	Added, Deleted int
+}
+
+// shape is the change less its line counts: the file and how it changed,
+// which an edit to an already changed file keeps.
+func (ch change) shape() change {
+	ch.Added, ch.Deleted = 0, 0
+	return ch
 }
 
 // gitSlots limits the git processes running at once, as when a scroll
@@ -38,11 +48,18 @@ type change struct {
 var gitSlots = make(chan struct{}, 8)
 
 func git(repo string, args ...string) (string, error) {
+	return gitWith(repo, nil, "", args...)
+}
+
+// gitWith runs git with these variables more in its environment and this
+// input on its standard input.
+func gitWith(repo string, env []string, input string, args ...string) (string, error) {
 	gitSlots <- struct{}{}
 	defer func() { <-gitSlots }()
 	cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+	cmd.Stdin = strings.NewReader(input)
 	// Reads alone, which leave the index as it is for the watch.
-	cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0")
+	cmd.Env = append(append(os.Environ(), "GIT_OPTIONAL_LOCKS=0"), env...)
 	var out, errOut bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errOut
 	if err := cmd.Run(); err != nil {
@@ -94,41 +111,128 @@ func loadChanges(repo, hash string) ([]change, error) {
 	if hash == worktree {
 		return loadWorktreeChanges(repo)
 	}
-	out, err := git(repo, "show", "--format=", "--name-status", "-M", "--root", hash)
+	out, err := git(repo, "show", "--format=", "--name-status", "-z", "-M", "--root", hash)
 	if err != nil {
 		return nil, err
 	}
-	return parseNameStatus(out), nil
+	changes := parseNameStatus(out)
+	stats, err := git(repo, "show", "--format=", "--numstat", "-z", "-M", "--root", hash)
+	if err != nil {
+		return nil, err
+	}
+	addCounts(changes, parseNumstat(stats))
+	return changes, nil
 }
 
 // loadWorktreeChanges returns the files that differ from HEAD, those git
 // does not track included.
 func loadWorktreeChanges(repo string) ([]change, error) {
-	out, err := git(repo, "diff", "HEAD", "--name-status", "-M")
+	out, err := git(repo, "diff", "HEAD", "--name-status", "-z", "-M")
 	if err != nil {
 		return nil, err
 	}
 	changes := parseNameStatus(out)
-	untracked, err := git(repo, "ls-files", "--others", "--exclude-standard")
+	stats, err := git(repo, "diff", "HEAD", "--numstat", "-z", "-M")
 	if err != nil {
 		return nil, err
 	}
-	for line := range strings.Lines(untracked) {
-		p := strings.TrimRight(line, "\n")
-		changes = append(changes, change{Status: "A", Old: p, Path: p})
+	addCounts(changes, parseNumstat(stats))
+	// All of git's lists here end their paths with NULs, which leave
+	// them as they are rather than quoted, for the counts to match them.
+	untracked, err := git(repo, "ls-files", "-z", "--others", "--exclude-standard")
+	if err != nil {
+		return nil, err
+	}
+	paths := nulSeparated(untracked)
+	// Counts that fail leave the files listed, with none.
+	added, _ := untrackedCounts(repo, paths)
+	for _, p := range paths {
+		changes = append(changes, change{Status: "A", Old: p, Path: p, Added: added[p][0]})
 	}
 	return changes, nil
 }
 
+// untrackedCounts counts the lines of files git does not track as git
+// would once they were added, its attributes, filters, encodings and
+// big files' threshold all as they are: in an index of their own, made
+// for this and thrown away, they are only to be added, which leaves the
+// repository's index and its objects as they are, and git diffs them.
+func untrackedCounts(repo string, paths []string) (map[string][2]int, error) {
+	if len(paths) == 0 {
+		return nil, nil
+	}
+	dir, err := os.MkdirTemp("", "peek-index")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(dir)
+	// The paths as they are, not patterns nor :magic, and those outside
+	// a sparse checkout's too.
+	env := []string{"GIT_INDEX_FILE=" + filepath.Join(dir, "index"), "GIT_LITERAL_PATHSPECS=1"}
+	// Nothing of the repository's own runs or is written: no hook, as
+	// post-index-change, is told of this index, and none of it is split
+	// into the shared index files git would keep in the repository.
+	isolated := []string{"-c", "core.hooksPath=" + os.DevNull, "-c", "core.splitIndex=false"}
+	input := strings.Join(paths, "\x00") + "\x00"
+	add := append(isolated, "add", "--intent-to-add", "--sparse", "--pathspec-from-file=-", "--pathspec-file-nul")
+	if _, err := gitWith(repo, env, input, add...); err != nil {
+		return nil, err
+	}
+	out, err := gitWith(repo, env, "", append(isolated, "diff", "--numstat", "-z")...)
+	if err != nil {
+		return nil, err
+	}
+	return parseNumstat(out), nil
+}
+
+// parseNumstat reads git's --numstat -z: the lines added and deleted by
+// new path, a rename's paths each ended by a NUL of their own.
+func parseNumstat(out string) map[string][2]int {
+	counts := map[string][2]int{}
+	fields := strings.Split(out, "\x00")
+	for i := 0; i < len(fields); i++ {
+		f := strings.SplitN(fields[i], "\t", 3)
+		if len(f) != 3 {
+			continue
+		}
+		p := f[2]
+		if p == "" && i+2 < len(fields) { // a rename or copy: old, then new
+			p = fields[i+2]
+			i += 2
+		}
+		added, _ := strconv.Atoi(f[0]) // "-" for a binary file
+		deleted, _ := strconv.Atoi(f[1])
+		counts[p] = [2]int{added, deleted}
+	}
+	return counts
+}
+
+func addCounts(changes []change, counts map[string][2]int) {
+	for i := range changes {
+		n := counts[changes[i].Path]
+		changes[i].Added, changes[i].Deleted = n[0], n[1]
+	}
+}
+
+// parseNameStatus reads git's --name-status -z: a status, then its path,
+// or a rename's or a copy's old path and new.
 func parseNameStatus(out string) []change {
 	var changes []change
-	for line := range strings.Lines(out) {
-		f := strings.Split(strings.TrimRight(line, "\n"), "\t")
-		switch {
-		case len(f) == 2:
-			changes = append(changes, change{Status: f[0][:1], Old: f[1], Path: f[1]})
-		case len(f) == 3:
-			changes = append(changes, change{Status: f[0][:1], Old: f[1], Path: f[2]})
+	f := strings.Split(out, "\x00")
+	for i := 0; i+1 < len(f); i++ {
+		status := f[i]
+		if status == "" {
+			continue
+		}
+		switch status[0] {
+		case 'R', 'C': // the old path, then the new
+			if i+2 < len(f) {
+				changes = append(changes, change{Status: status[:1], Old: f[i+1], Path: f[i+2]})
+			}
+			i += 2
+		default:
+			changes = append(changes, change{Status: status[:1], Old: f[i+1], Path: f[i+1]})
+			i++
 		}
 	}
 	return changes

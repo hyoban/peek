@@ -311,15 +311,22 @@ func (a *app) linkButton(c *ui.Context, key string, svg *ui.SVG, label, url stri
 // a slim header with the title and, muted at the end, a detail such as a
 // count, a divider, and the body.
 func column(c *ui.Context, title, detail string, body func()) {
+	columnWith(c, title, func() {
+		if detail != "" {
+			ui.Text(c, detail).FontSize(smallSize).TextColor(c.Theme().TextMuted).SingleLine().Shrink(0)
+		}
+	}, body)
+}
+
+// columnWith is a column whose header ends with what detail builds.
+func columnWith(c *ui.Context, title string, detail, body func()) {
 	t := c.Theme()
 	ui.Column(c).Fill().Background(t.Background).Children(func() {
 		ui.Row(c).Height(30).Shrink(0).FillWidth().AlignItems(ui.Center).Gap(t.Space(2)).
 			Padding(0, t.Space(3)).Children(func() {
 			ui.Text(c, title).FontWeight(600).SingleLine().Ellipsis("…").
 				Grow(1).MinWidth(0).Tooltip(title)
-			if detail != "" {
-				ui.Text(c, detail).FontSize(smallSize).TextColor(t.TextMuted).SingleLine().Shrink(0)
-			}
+			detail()
 		})
 		ui.Divider(c)
 		body()
@@ -411,7 +418,15 @@ func (a *app) treePane(c *ui.Context) {
 	if a.mode == modeFiles {
 		title, key, tree, label = "Files", "all", &a.allTree, "Files"
 	}
-	column(c, title, "", func() {
+	// The lines the changes add and delete in all, as GitHub's pull
+	// requests total them.
+	detail := func() {
+		if a.mode == modeChanges && len(a.diffs) > 0 {
+			added, deleted := sumLines(a.diffs)
+			lineCounts(c, added, deleted, false)
+		}
+	}
+	columnWith(c, title, detail, func() {
 		if tree.dirs == nil {
 			loading(c)
 			return
@@ -451,8 +466,11 @@ func (a *app) treeItem(c *ui.Context, tree *pathTree, p string, selected, focuse
 	if isGroup(p) {
 		row.Children(func() {
 			ui.Text(c, tree.labels[p]).FontSize(smallSize).FontWeight(600).TextColor(muted).SingleLine().Grow(1)
-			// How many of its files are read, as their diffs fold.
+			// The lines its files add and delete, and how many of them are
+			// read, as their diffs fold.
 			diffs := a.diffsUnder(p)
+			added, deleted := sumLines(diffs)
+			lineCounts(c, added, deleted, in.onAccent)
 			ui.Textf(c, "%d/%d", countRead(diffs), len(diffs)).FontSize(smallSize).TextColor(muted).Shrink(0).Padding(0, t.Space(1))
 		})
 		return

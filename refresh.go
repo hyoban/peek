@@ -117,15 +117,23 @@ func (a *app) rowOf(hash string) int {
 
 // updateChanges shows the work tree's changes read again: the diffs of
 // the files changed before reload as they come into view, in place, and
-// the list and the tree change only where the files changed are others.
+// the list and the tree change only where the files changed are others,
+// not where only their line counts are.
 func (a *app) updateChanges(changes []change) {
 	same := len(changes) == len(a.changes)
 	for _, ch := range changes {
-		if a.changes[ch.Path] != ch {
+		if a.changes[ch.Path].shape() != ch.shape() {
 			same = false
 		}
 	}
-	if !same {
+	if same {
+		for _, ch := range changes {
+			a.changes[ch.Path] = ch
+			if d := a.diffOf[ch.Path]; d != nil {
+				d.change = ch
+			}
+		}
+	} else {
 		old := map[string]*fileDiff{}
 		for _, d := range a.diffs {
 			old[d.change.Path] = d
@@ -141,9 +149,10 @@ func (a *app) updateChanges(changes []change) {
 		a.diffs = nil
 		for _, p := range a.changeTree.files() {
 			d := old[p]
-			if d == nil || d.change != a.changes[p] {
+			if d == nil || d.change.shape() != a.changes[p].shape() {
 				d = a.newDiff(a.changes[p])
 			}
+			d.change = a.changes[p]
 			a.diffs = append(a.diffs, d)
 		}
 		a.indexDiffs()

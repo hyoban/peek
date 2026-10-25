@@ -31,6 +31,20 @@ func TestRefresh(t *testing.T) {
 		t.Errorf("main.go diff not updated in place: %q", d.state.New.String())
 	}
 
+	// Lines added to a file changed already change its counts alone: the
+	// diff and the tree stay, the group of docs opened by hand with them.
+	docs := groupPrefix + kindNames[kindDocs]
+	a.changeTree.state.Open.Add(docs)
+	write("main.go", "package main\n\nfunc main() { println() }\n\nfunc other() {}\n")
+	a.refresh()
+	settle(tt)
+	if a.diffs[a.diffIndex("main.go")] != d || !a.changeTree.state.Open.Has(docs) {
+		t.Error("main.go diff or the tree made anew for new line counts")
+	}
+	if ch := a.changes["main.go"]; ch.Added != 4 || d.change.Added != 4 {
+		t.Errorf("main.go counts %+v and %+v, want 4 added", ch, d.change)
+	}
+
 	write("src/added.go", "package src\n")
 	a.refresh()
 	settle(tt)

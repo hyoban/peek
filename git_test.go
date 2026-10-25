@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -423,5 +425,155 @@ func TestFilesKeptWhileCommitLoads(t *testing.T) {
 	}
 	if !a.allTree.has("old.txt") || a.openFile != "main.go" || a.code.Buffer.String() != "package main\n" {
 		t.Errorf("open %q, files %v, want main.go of the commit", a.openFile, a.allTree.dirs)
+	}
+}
+
+func TestLineCounts(t *testing.T) {
+	repo := testRepo(t)
+	changes, err := loadWorktreeChanges(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string][2]int{}
+	for _, ch := range changes {
+		got[ch.Path] = [2]int{ch.Added, ch.Deleted}
+	}
+	want := map[string][2]int{"main.go": {2, 0}, "old.txt": {0, 1}, "docs/new.md": {1, 0}}
+	if !maps.Equal(got, want) {
+		t.Errorf("line counts %v, want %v", got, want)
+	}
+	// Counted, the file git does not track stays so, the index as it was.
+	if staged, _ := git(repo, "diff", "--cached", "--name-only"); staged != "" {
+		t.Errorf("index changed: %q", staged)
+	}
+	if others, _ := git(repo, "ls-files", "--others", "--exclude-standard"); others != "docs/new.md\n" {
+		t.Errorf("untracked %q, want docs/new.md", others)
+	}
+	_, tt := testApp(t, repo, nil)
+	for _, s := range []string{"+3", "−1"} {
+		if !tt.HasText(s) {
+			t.Errorf("no total %q in %q", s, tt.Texts())
+		}
+	}
+}
+
+// Paths git would quote, a rename's and a link's count as git counts them.
+func TestLineCountsOddPaths(t *testing.T) {
+	repo := testRepo(t)
+	run := func(args ...string) {
+		if _, err := git(repo, append([]string{"-c", "user.name=Ada", "-c", "user.email=ada@example.com"}, args...)...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	os.WriteFile(filepath.Join(repo, "é.txt"), []byte("one\n"), 0o644)
+	run("add", "-A")
+	run("commit", "-q", "-m", "Second")
+	os.WriteFile(filepath.Join(repo, "é.txt"), []byte("one\ntwo\n"), 0o644)
+	run("mv", "main.go", "app.go")
+	os.Symlink("docs/new.md", filepath.Join(repo, "link"))
+	if err := syscall.Mkfifo(filepath.Join(repo, "fifo"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Text git diffs as binary, by its attributes or its driver's.
+	// And bytes git diffs as text, by theirs; text git stores converted,
+	// and a file past git's threshold for big ones.
+	os.WriteFile(filepath.Join(repo, ".gitattributes"), []byte("*.svg -diff\n*.lock diff=lock\n*.dat diff\n*.raw diff=raw\n*.u16 working-tree-encoding=UTF-16LE\n"), 0o644)
+	os.WriteFile(filepath.Join(repo, "two.u16"), []byte("a\x00\n\x00b\x00\n\x00"), 0o644)
+	run("config", "core.bigFileThreshold", "1k")
+	os.WriteFile(filepath.Join(repo, "big.log"), []byte(strings.Repeat("line\n", 1000)), 0o644)
+	run("config", "diff.lock.binary", "true")
+	run("config", "diff.raw.binary", "false")
+	os.WriteFile(filepath.Join(repo, "a.dat"), []byte("a\x00b\n"), 0o644)
+	os.WriteFile(filepath.Join(repo, "b.raw"), []byte("a\x00b\nc\n"), 0o644)
+	os.WriteFile(filepath.Join(repo, "icon.svg"), []byte("<svg>\n</svg>\n"), 0o644)
+	os.WriteFile(filepath.Join(repo, "deps.lock"), []byte("a\nb\n"), 0o644)
+	changes, err := loadWorktreeChanges(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]change{}
+	for _, ch := range changes {
+		got[ch.Path] = ch
+	}
+	if ch := got["é.txt"]; ch.Status != "M" || ch.Added != 1 {
+		t.Errorf("é.txt %+v, want 1 added", ch)
+	}
+	if ch := got["app.go"]; ch.Status != "R" || ch.Old != "main.go" {
+		t.Errorf("app.go %+v, want renamed from main.go", ch)
+	}
+	if ch := got["link"]; ch.Added != 1 {
+		t.Errorf("link %+v, want its target's one line", ch)
+	}
+	for _, p := range []string{"icon.svg", "deps.lock", "big.log"} {
+		if ch := got[p]; ch.Added != 0 {
+			t.Errorf("%s %+v, want none as git diffs it as binary", p, ch)
+		}
+	}
+	for p, want := range map[string]int{".gitattributes": 5, "a.dat": 1, "b.raw": 2, "two.u16": 2} {
+		if ch := got[p]; ch.Added != want {
+			t.Errorf("%s %+v, want %d added", p, ch, want)
+		}
+	}
+	if ch := got["fifo"]; ch.Added != 0 {
+		t.Errorf("fifo %+v, want none", ch)
+	}
+}
+
+// Untracked files named as pathspecs' magic, or outside a sparse
+// checkout, count as others do.
+func TestLineCountsLiteralAndSparse(t *testing.T) {
+	repo := testRepo(t)
+	if _, err := git(repo, "sparse-checkout", "set", "--no-cone", "/main.go", "/old.txt"); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(repo, ":notes.txt"), []byte("a\nb\n"), 0o644)
+	os.WriteFile(filepath.Join(repo, "*"), []byte("a\n"), 0o644)
+	changes, err := loadWorktreeChanges(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]int{}
+	for _, ch := range changes {
+		got[ch.Path] = ch.Added
+	}
+	want := map[string]int{"main.go": 2, "old.txt": 0, "docs/new.md": 1, ":notes.txt": 2, "*": 1}
+	if !maps.Equal(got, want) {
+		t.Errorf("added %v, want %v", got, want)
+	}
+}
+
+// Counting the untracked files runs none of the repository's hooks and
+// writes nothing in it, a split index's shared files neither.
+func TestLineCountsIsolated(t *testing.T) {
+	repo := testRepo(t)
+	hooks := filepath.Join(repo, ".git", "hooks")
+	os.MkdirAll(hooks, 0o755)
+	marker := filepath.Join(t.TempDir(), "ran")
+	os.WriteFile(filepath.Join(hooks, "post-index-change"), []byte("#!/bin/sh\ntouch "+marker+"\n"), 0o755)
+	if _, err := git(repo, "config", "core.splitIndex", "true"); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := filepath.Glob(filepath.Join(repo, ".git", "sharedindex.*"))
+	changes, err := loadWorktreeChanges(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if i := slices.IndexFunc(changes, func(ch change) bool { return ch.Path == "docs/new.md" }); i < 0 || changes[i].Added != 1 {
+		t.Errorf("docs/new.md not counted: %+v", changes)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Error("post-index-change ran")
+	}
+	if after, _ := filepath.Glob(filepath.Join(repo, ".git", "sharedindex.*")); len(after) != len(before) {
+		t.Errorf("shared index files %v, were %v", after, before)
+	}
+}
+
+func TestParseNumstat(t *testing.T) {
+	out := "3\t1\tmain.go\x00-\t-\ticon.png\x002\t0\t\x00old.go\x00new.go\x00"
+	got := parseNumstat(out)
+	want := map[string][2]int{"main.go": {3, 1}, "icon.png": {0, 0}, "new.go": {2, 0}}
+	if !maps.Equal(got, want) {
+		t.Errorf("parseNumstat = %v, want %v", got, want)
 	}
 }
