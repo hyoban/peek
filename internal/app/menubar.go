@@ -14,8 +14,8 @@ import (
 	"github.com/egoist/mygo"
 )
 
-// Peek has no Dock icon: its item in the menu bar is where it always is,
-// whether windows show or not. A click opens its menu, of the recent
+// Peek's item in the menu bar, where the user chooses to show it, is
+// there whether windows show or not. A click opens its menu, of the recent
 // repositories, what each has to commit and to pull, and a right click
 // brings Peek to the front; the count beside the icon is of the commits
 // to pull of them all.
@@ -27,6 +27,7 @@ type menuBar struct {
 	fetched map[string]time.Time // when a repository without a window was last fetched
 	pulling map[string]bool
 	title   string
+	stop    func() // takes the item out of the menu bar
 }
 
 type repoStatus struct {
@@ -45,14 +46,26 @@ var trayIcon []byte
 // without a window are fetched, less often than those that show.
 const fetchClosedEvery = 15 * time.Minute
 
-// setMenuBar puts Peek's item in the menu bar, and reads the status of
-// the recent repositories, again every while.
-func (p *projects) setMenuBar() {
+// showMenuBar puts Peek's item in the menu bar, reading the status of
+// the recent repositories again every while, or takes it out.
+func (p *projects) showMenuBar(on bool) {
+	if !on {
+		if p.bar != nil {
+			p.bar.stop()
+			p.bar = nil
+		}
+		return
+	}
+	if p.bar != nil || p.inline {
+		return
+	}
 	tray, err := mygo.NewTray(mygo.TrayOptions{ID: "peek", Icon: trayIcon, IconIsTemplate: true, ToolTip: "Peek"})
 	if err != nil {
 		return
 	}
-	p.bar = &menuBar{tray: tray, status: map[string]repoStatus{}, fetched: map[string]time.Time{}, pulling: map[string]bool{}}
+	ctx, cancel := context.WithCancel(context.Background())
+	bar := &menuBar{tray: tray, status: map[string]repoStatus{}, fetched: map[string]time.Time{}, pulling: map[string]bool{}}
+	p.bar = bar
 	// The menu is made for each click, of the status as it is then,
 	// AppKit placing it under the item.
 	popUp := func() {
@@ -63,11 +76,27 @@ func (p *projects) setMenuBar() {
 	}
 	tray.OnClick(popUp)
 	tray.OnRightClick(p.activate)
-	mygo.App.OnWillQuit(func(*mygo.QuitEvent) { tray.Destroy() })
+	offQuit := mygo.App.OnWillQuit(func(*mygo.QuitEvent) { tray.Destroy() })
+	bar.stop = func() {
+		cancel()
+		offQuit()
+		tray.Destroy()
+	}
 	p.readStatus()
 	go func() {
-		for range time.Tick(fetchEvery) {
-			mygo.App.WhenReady(p.readStatus)
+		tick := time.NewTicker(fetchEvery)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-tick.C:
+				mygo.App.WhenReady(func() {
+					if p.bar == bar {
+						p.readStatus()
+					}
+				})
+			}
 		}
 	}()
 }
@@ -155,6 +184,9 @@ func (p *projects) statusOf(repo string) repoStatus {
 // window off the main thread, fetching their remotes every while.
 func (p *projects) readStatus() {
 	bar := p.bar
+	if bar == nil {
+		return
+	}
 	for _, repo := range p.recent {
 		if p.apps[repo] != nil {
 			continue

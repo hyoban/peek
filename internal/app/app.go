@@ -1194,8 +1194,8 @@ func Run(args []string) {
 	mygo.App.OnOpenFile(func(path string) {
 		go p.openFolder(path, nil)
 	})
-	// Peek stays open without windows, in the menu bar, and opens one
-	// again as it is opened from Finder.
+	// A Mac app stays open without windows, and opens one again as its
+	// Dock icon is clicked.
 	mygo.App.OnWindowAllClosed(func() {})
 	mygo.App.OnActivate(func(hasVisibleWindows bool) {
 		if !hasVisibleWindows {
@@ -1205,11 +1205,10 @@ func Run(args []string) {
 	})
 	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { p.quitting = true })
 	p.followApp()
-	// No Dock icon: the menu bar's item is Peek's place (menubar.go).
-	mygo.App.SetActivationPolicy(mygo.ActivationPolicyAccessory)
 	mygo.App.WhenReady(func() {
 		p.setMenu()
-		p.setMenuBar()
+		p.setDockMenu()
+		p.showMenuBar(p.menuBarOn)
 		p.followNetwork()
 		if err == nil {
 			p.open(repo)

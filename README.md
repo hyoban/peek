@@ -36,12 +36,14 @@ All of the commit's files, to read any of them as it was then.
 - Pictures shown as pictures, and Markdown files as a preview with the repository's images, with a toggle to the source
 - File and folder icons from the icon theme VS Code is set to, when it draws SVGs (as [Flow Icons](https://github.com/thang-nm/Flow-Icons) does), or else from [file-icons](https://github.com/file-icons/atom)
 - Authors' and co-authors' avatars, the commit's details and message on hover, references such as `#123` linked to their pull request or issue, and a link to the branch on GitHub
-- One window for every repository, switched from the project's name in the toolbar or the menu bar, each kept as you left it, and the repositories open at quitting opened again
+- One window for every repository, switched from the project's name in the toolbar or Peek's menu bar item, each kept as you left it, and the repositories open at quitting opened again
 - Switch branches, or check out a pull request by number or link with the [GitHub CLI](https://cli.github.com), from the branch in the toolbar
 - Fetches the branch's remote every few minutes, shows how many new commits it has beside the branch, and pulls them by fast-forward with a click
 - **Ship**: commit all changes with a Codex-written message and push, from the history's toolbar
 - **Review**: have Codex review the uncommitted changes or the unpushed commits, from the history's toolbar
-- Lives in the menu bar rather than the Dock: its menu lists the recent repositories with their branches and the files they change, and the commits to pull, pulled with a click, whose count shows beside its icon; a right click brings Peek to the front, and Hide When Inactive in its menu hides Peek as another app comes to the front
+- **Show in Menu Bar**, in the app menu, puts Peek in the menu bar too: its menu lists the recent repositories with their branches and the files they change, and the commits to pull, pulled with a click, whose count shows beside its icon; a right click brings Peek to the front
+- **Hide When Inactive**, in the app menu, hides Peek as another app comes to the front
+- The remotes' new commits counted on the Dock icon
 - A notification when shipping or a review finishes while Peek is in the background
 - Fetches wait while offline or on a metered connection, and run as the network comes back
 - Every command in the menu bar, as Mac apps have them

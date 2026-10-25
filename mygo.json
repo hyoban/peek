@@ -6,8 +6,7 @@
   "out": "build",
   "macos": {
     "infoPlist": {
-      "LSApplicationCategoryType": "public.app-category.developer-tools",
-      "LSUIElement": true
+      "LSApplicationCategoryType": "public.app-category.developer-tools"
     }
   }
 }
