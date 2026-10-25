@@ -74,6 +74,9 @@ type app struct {
 	endTools                        ui.Handle // the controls at the end of the text's toolbar
 	endWidth                        float32   // their width, as last laid out
 	alert                           alertState
+	// shot is the view the app is to open at, for screenshots, nil for
+	// none or once it is shown.
+	shot *shot
 	// nativeBar tells that AppKit's toolbar shows this pass (nativeToolbar),
 	// over the room the columns leave it.
 	nativeBar bool
@@ -1031,6 +1034,7 @@ func (a *app) codePane(c *ui.Context) {
 // sync starts loading what the choices in the history, the trees and the
 // mode ask for, once for each new choice.
 func (a *app) sync(c *ui.Context) {
+	a.applyShot(c)
 	if a.changeTree.sync() || a.allTree.sync() {
 		c.Services().Invalidate()
 	}

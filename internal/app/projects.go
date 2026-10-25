@@ -249,6 +249,7 @@ func (p *projects) open(repo string) {
 		}
 		p.apps[repo] = a
 		if !p.inline {
+			a.shot = shotFromEnv()
 			a.watch()
 		}
 		a.loadCommits()
