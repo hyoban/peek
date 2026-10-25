@@ -48,9 +48,9 @@ type app struct {
 	reviewSource             reviewSnapshot
 	reviewSourceErr          string
 	switcher                 switcherState
-	// theme is this pass's, and inactiveTheme the one of lists without
-	// the keyboard focus.
-	theme, inactiveTheme *ui.Theme
+	// theme is this pass's, listTheme the one of lists with the keyboard
+	// focus and inactiveTheme the one of lists without it.
+	theme, listTheme, inactiveTheme *ui.Theme
 	titleButton          ui.Handle // the project's name, under which the projects list
 
 	showHistory, showTree   bool
@@ -128,13 +128,20 @@ func (a *app) themed(c *ui.Context) {
 	t := c.Theme() // a copy for this pass
 	t.FontSize = fontSize * c.Preferences().TextScale
 	c.SetTheme(t)
-	inactive := *t
-	inactive.Accent = t.Text.Alpha(0.1)
+	// Rows hover fainter than the gray of a choice without the focus, so
+	// the row under the pointer never passes for the chosen one.
+	list := *t
+	list.SurfaceHover = t.Text.Alpha(0.04)
 	if t.Dark {
-		inactive.Accent = t.Text.Alpha(0.14)
+		list.SurfaceHover = t.Text.Alpha(0.06)
+	}
+	inactive := list
+	inactive.Accent = t.Text.Alpha(0.12)
+	if t.Dark {
+		inactive.Accent = t.Text.Alpha(0.17)
 	}
 	inactive.AccentText = t.Text
-	a.theme, a.inactiveTheme = t, &inactive
+	a.theme, a.listTheme, a.inactiveTheme = t, &list, &inactive
 }
 
 func (a *app) view(c *ui.Context) {

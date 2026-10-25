@@ -37,10 +37,10 @@ func statusColor(t *ui.Theme, s string) ui.Color {
 // withFocus builds a list in the theme its focus asks for.
 func (a *app) withFocus(c *ui.Context, focused bool, build func()) {
 	if focused {
-		build()
-		return
+		c.SetTheme(a.listTheme)
+	} else {
+		c.SetTheme(a.inactiveTheme)
 	}
-	c.SetTheme(a.inactiveTheme)
 	build()
 	c.SetTheme(a.theme)
 }
