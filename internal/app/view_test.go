@@ -391,6 +391,50 @@ func TestFilesKeptWhileCommitLoads(t *testing.T) {
 	}
 }
 
+// Choosing another commit in files mode keeps the folders open and the
+// file chosen in every pass, not to flash the tree closed and unchosen.
+func TestFilesTreeKeptAcrossCommits(t *testing.T) {
+	repo := testutil.Repo(t)
+	for name, text := range map[string]string{"a/one.go": "package a\n", "b/two.go": "package b\n", "docs/new.md": "# New\n"} {
+		os.MkdirAll(filepath.Dir(filepath.Join(repo, name)), 0o755)
+		if err := os.WriteFile(filepath.Join(repo, name), []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	commit := func(msg string) {
+		testutil.Git(t, repo, "add", "-A")
+		testutil.Git(t, repo, "-c", "user.name=Ada", "-c", "user.email=ada@example.com", "commit", "-q", "-m", msg)
+	}
+	commit("Add packages")
+	os.WriteFile(filepath.Join(repo, "b", "three.go"), []byte("package b\n"), 0o644)
+	commit("Add three")
+	a := newApp(repo)
+	a.inline, a.mode = true, modeFiles
+	a.loadCommits()
+	var bad []string
+	tt := ui.NewTester(func(c *ui.Context) {
+		a.view(c)
+		if a.filesFor >= 0 && a.allTree.dirs != nil && (!a.allTree.state.Open.Has("a") || a.allTree.chosen() != "b/two.go") {
+			bad = append(bad, fmt.Sprintf("row %d chose %q, a open %v", a.commitRow, a.allTree.chosen(), a.allTree.state.Open.Has("a")))
+		}
+	}, 1200, 800)
+	settle(tt)
+	a.allTree.state.Open.Add("a")
+	a.openInFiles(a.commits[a.loadedRow].Hash, "b/two.go")
+	settle(tt)
+	bad = nil
+	for row := 1; row <= 2; row++ { // Add three, then Add packages
+		a.commitRow = row
+		settle(tt)
+	}
+	if len(bad) > 0 {
+		t.Errorf("the tree changed as the commits loaded: %v", bad)
+	}
+	if a.filesFor != 2 || a.allTree.has("b/three.go") {
+		t.Errorf("files for row %d, three.go %v, want Add packages' files", a.filesFor, a.allTree.has("b/three.go"))
+	}
+}
+
 func TestLineCounts(t *testing.T) {
 	repo := testutil.Repo(t)
 	changes, err := git.LoadWorktreeChanges(repo)

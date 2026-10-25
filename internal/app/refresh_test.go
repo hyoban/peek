@@ -1,12 +1,15 @@
 package app
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"peek/internal/filekind"
 	"peek/internal/git"
 	"peek/internal/testutil"
 	"testing"
+
+	"github.com/egoist/mygo/ui"
 )
 
 // A refresh follows the files: the diffs shown change in place, new files
@@ -191,5 +194,42 @@ func TestBranchChanges(t *testing.T) {
 	settle(tt)
 	if cm, ok := a.current(); !ok || cm.Hash != git.Worktree {
 		t.Fatalf("shown %+v with a draft, want the work tree", cm)
+	}
+}
+
+// A refresh that brings new files keeps the change tree's folders as the
+// user left them and the file shown chosen in every pass, opening only the
+// new folders, the new groups of tests and docs closed as they start.
+func TestRefreshKeepsChangeTree(t *testing.T) {
+	repo := testutil.Repo(t)
+	a := newApp(repo)
+	a.inline = true
+	a.loadCommits()
+	docs, code, tests := groupPrefix+"Docs", groupPrefix+"Code", groupPrefix+"Tests"
+	var bad []string
+	tt := ui.NewTester(func(c *ui.Context) {
+		a.view(c)
+		if a.changeTree.dirs != nil && (!a.changeTree.state.Open.Has(docs) || a.changeTree.chosen() != a.file) {
+			bad = append(bad, fmt.Sprintf("chose %q, docs open %v", a.changeTree.chosen(), a.changeTree.state.Open.Has(docs)))
+		}
+	}, 1200, 800)
+	settle(tt)
+	a.changeTree.state.Open.Add(docs)
+	a.changeTree.show("main.go")
+	settle(tt)
+	bad = nil
+	for _, name := range []string{"z/util.go", "z/util_test.go"} {
+		os.MkdirAll(filepath.Join(repo, "z"), 0o755)
+		if err := os.WriteFile(filepath.Join(repo, name), []byte("package z\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a.refresh()
+	settle(tt)
+	if len(bad) > 0 {
+		t.Errorf("the tree changed as the files came: %v", bad)
+	}
+	if !a.changeTree.state.Open.Has(code+"/z") || a.changeTree.state.Open.Has(tests) || !a.changeTree.has("z/util_test.go") {
+		t.Errorf("new folders: z open %v, tests open %v", a.changeTree.state.Open.Has(code+"/z"), a.changeTree.state.Open.Has(tests))
 	}
 }

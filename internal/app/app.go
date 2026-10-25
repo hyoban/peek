@@ -1177,7 +1177,7 @@ func (a *app) loadCommit(hash string) {
 			}
 			a.changes = byPath
 			a.changeTree.set(tree)
-			a.openChanges()
+			a.openChanges(nil)
 			a.resetDiffs()
 			a.file = ""
 			if len(a.diffs) > 0 {
@@ -1203,7 +1203,7 @@ func (a *app) loadFiles(hash string) {
 				a.err = err.Error()
 				return
 			}
-			a.allTree.set(tree)
+			a.allTree.replace(tree)
 			keep := a.openFile
 			if keep == "" {
 				keep = a.file

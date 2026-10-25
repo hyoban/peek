@@ -179,6 +179,55 @@ func (t *pathTree) set(f folded) {
 	t.remember()
 }
 
+// replace replaces the tree with another of mostly the same paths, as
+// another commit's files, keeping open the folders open in both and the
+// item chosen chosen where the new tree has it, so that the rows show
+// at once as they were rather than closed and unchosen for a pass.
+func (t *pathTree) replace(f folded) {
+	opened := slices.Collect(t.state.Open.All())
+	saved := t.savedGen == t.gen
+	chosen := t.chosen()
+	if chosen == "" {
+		chosen = t.reveal
+	}
+	t.set(f)
+	for _, dir := range opened {
+		if t.isDir(dir) {
+			t.state.Open.Add(dir)
+		}
+	}
+	if saved {
+		t.savedGen = t.gen // the folders to open again as the filter clears
+	}
+	t.remember()
+	if _, ok := t.labels[chosen]; ok {
+		t.choose(chosen)
+	}
+}
+
+// choose chooses the item, its row known before the outline builds its
+// rows anew, or once it shows; sync then scrolls to it.
+func (t *pathTree) choose(p string) {
+	t.row, t.reveal = slices.Index(t.rows(), p), p
+}
+
+// rows returns the items the outline shows, in its order: each folder's
+// entries under it where it is open.
+func (t *pathTree) rows() []string {
+	var rows []string
+	var walk func(dir string)
+	walk = func(dir string) {
+		for _, p := range t.entries(dir) {
+			rows = append(rows, p)
+			if t.isDir(p) && t.state.Open.Has(p) {
+				walk(p)
+			}
+		}
+	}
+	walk("")
+	return rows
+}
+
 // applyFilter keeps the items the query asks for, once for each query and
 // tree, opening the folders that hold them. The item chosen stays chosen
 // where it shows, as the rows move under it.
@@ -234,8 +283,8 @@ func (t *pathTree) applyFilter() {
 		return kept
 	}
 	walk("")
-	t.row, t.reveal = -1, chosen
 	t.remember()
+	t.choose(chosen)
 }
 
 // pathMatches reports whether the path holds each of the words, which are
@@ -343,14 +392,14 @@ func (t *pathTree) filesUnder(dir string) []string {
 	return files
 }
 
-// show opens the directories above the file and chooses it once its row
-// shows.
+// show opens the directories above the file and chooses it, in the pass
+// that builds its row.
 func (t *pathTree) show(p string) {
 	for dir, ok := t.parents[p]; ok && dir != ""; dir, ok = t.parents[dir] {
 		t.state.Open.Add(dir)
 	}
-	t.reveal = p
 	t.remember()
+	t.choose(p)
 }
 
 // flip opens the directory or closes it, as its arrow does: arrowed then

@@ -62,17 +62,23 @@ func (a *app) newDiff(ch git.Change) *fileDiff {
 	return &fileDiff{change: ch, read: read}
 }
 
-// openChanges opens the change tree, but for the groups of tests, docs
-// and generated files, which start closed as their diffs start read.
-func (a *app) openChanges() {
+// openChanges opens the change tree's folders but those it had before,
+// known, which stay as they were, and the groups of tests, docs and
+// generated files, which start closed as their diffs start read.
+func (a *app) openChanges(known map[string][]string) {
 	t := &a.changeTree
-	t.openAll()
-	for _, item := range t.dirs[""] {
-		if isGroup(item) && item != groupPrefix+filekind.Names[filekind.Code] {
-			t.state.Open.Remove(item)
+	for dir := range t.dirs {
+		if _, ok := known[dir]; ok || dir == "" {
+			continue
+		}
+		if !isGroup(dir) || dir == groupPrefix+filekind.Names[filekind.Code] {
+			t.state.Open.Add(dir)
 		}
 	}
 	t.remember()
+	if t.reveal != "" {
+		t.choose(t.reveal) // whose row the folders opened move
+	}
 }
 
 func (a *app) indexDiffs() {

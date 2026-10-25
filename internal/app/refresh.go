@@ -209,8 +209,9 @@ func (a *app) updateChanges(changes []git.Change) {
 		}
 		var paths []string
 		a.changes, paths = changesByPath(changes)
-		a.changeTree.set(foldGrouped(paths))
-		a.openChanges()
+		known := a.changeTree.dirs
+		a.changeTree.replace(foldGrouped(paths))
+		a.openChanges(known)
 		a.diffs = nil
 		for _, p := range a.changeTree.files() {
 			d := old[p]
@@ -221,15 +222,15 @@ func (a *app) updateChanges(changes []git.Change) {
 			a.diffs = append(a.diffs, d)
 		}
 		a.indexDiffs()
+		// The file shown stays where it is, as the list keys its rows by
+		// path; one gone gives way to the first.
 		if _, ok := a.changes[a.file]; !ok {
 			a.file = ""
 			if len(a.diffs) > 0 {
 				a.file = a.diffs[0].change.Path
+				a.changeTree.show(a.file)
+				a.scrollToFile(a.file)
 			}
-		}
-		if a.file != "" {
-			a.changeTree.show(a.file)
-			a.scrollToFile(a.file)
 		}
 	}
 	for _, d := range a.diffs {
@@ -258,17 +259,7 @@ func (a *app) reloadFiles() {
 			if cm, ok := a.current(); err != nil || !ok || cm.Hash != git.Worktree || a.filesFor != a.loadedRow {
 				return
 			}
-			var opened []string
-			for dir := range a.allTree.state.Open.All() {
-				opened = append(opened, dir)
-			}
-			a.allTree.set(tree)
-			for _, dir := range opened {
-				if a.allTree.isDir(dir) {
-					a.allTree.state.Open.Add(dir)
-				}
-			}
-			a.allTree.remember()
+			a.allTree.replace(tree)
 			if open == "" || a.openFile != open {
 				return
 			}
