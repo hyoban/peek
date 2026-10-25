@@ -712,6 +712,7 @@ func (a *app) commitMenu(c *ui.Context, item ui.Element, i int, cm git.Commit) {
 func (a *app) personAvatar(c *ui.Context, name, email string, size float32) ui.Element {
 	box := ui.Box(c).Size(size, size).Shrink(0).Radius(size / 2).Role(ui.RoleImage).Label(name)
 	if bm := a.avatar(email); bm != nil {
+		a.avatars.show(bm)
 		return box.Clip().Children(func() {
 			ui.Image(c, bm).Fit(ui.Cover).Size(size, size)
 		})

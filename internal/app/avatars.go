@@ -22,8 +22,12 @@ type avatars struct {
 	dir     string
 	loaded  map[string]*ui.Bitmap // nil for an email with no picture
 	pending map[string]bool
-	slots   chan struct{} // limits the downloads at once
-	client  *http.Client
+	// shown are the pictures drawn: false after the frame that first
+	// drew one, which gave it to the GPU, true once it let go of its
+	// pixels in memory (shown).
+	shown  map[*ui.Bitmap]bool
+	slots  chan struct{} // limits the downloads at once
+	client *http.Client
 }
 
 func newAvatars() *avatars {
@@ -36,6 +40,7 @@ func newAvatars() *avatars {
 		dir:     dir,
 		loaded:  map[string]*ui.Bitmap{},
 		pending: map[string]bool{},
+		shown:   map[*ui.Bitmap]bool{},
 		slots:   make(chan struct{}, 6),
 		client:  &http.Client{Timeout: 10 * time.Second},
 	}
@@ -87,6 +92,19 @@ func (av *avatars) load(email string) *ui.Bitmap {
 		return nil
 	}
 	return bm
+}
+
+// show notes a frame drawing the picture: from the next, which comes
+// after the GPU took it, it lets go of its pixels in memory, decoding
+// them again where a renderer needs them. On the UI thread.
+func (av *avatars) show(bm *ui.Bitmap) {
+	switch released, drawn := av.shown[bm]; {
+	case !drawn:
+		av.shown[bm] = false
+	case !released:
+		bm.ReleasePixels()
+		av.shown[bm] = true
+	}
 }
 
 // fetch returns the picture at url, empty where there is none.
