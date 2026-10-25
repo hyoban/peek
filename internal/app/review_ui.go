@@ -45,18 +45,19 @@ func (a *app) reviewButton(c *ui.Context) {
 		return
 	}
 	label, tooltip := "Review", "Review the changes with Codex"
+	svg, tint, dot := reviewIcon, ui.Color{}, false
 	switch {
 	case a.review.stale:
-		label, tooltip = "Review Again", "The changes have changed since the last review"
+		label, tooltip, dot = "Review Again", "The changes have changed since the last review", true
 	case a.review.err != "":
-		label, tooltip = "Review Error", a.review.err
+		label, tooltip, svg, tint = "Review Error", a.review.err, warningIcon, system(c, systemOrange)
 	case a.review.result != nil:
-		label, tooltip = "Passed", a.review.result.Summary
+		label, tooltip, tint = "Passed", a.review.result.Summary, system(c, systemGreen)
 		if n := len(a.review.result.Findings); n > 0 && a.review.result.Verdict != "failed" {
 			tooltip += "\n" + count(n, "minor finding")
 		}
 		if a.review.result.Verdict == "failed" {
-			label = "Not Passed"
+			label, svg, tint = "Not Passed", failedIcon, system(c, systemRed)
 		}
 	case a.reviewSourceErr != "":
 		tooltip = a.reviewSourceErr
@@ -69,12 +70,9 @@ func (a *app) reviewButton(c *ui.Context) {
 	completed := !a.review.stale && (a.review.result != nil || a.review.err != "")
 	disabled := a.push.running || a.switcher.running != "" || a.pull.running || !available && !completed
 	if a.review.stale && !available {
-		label, tooltip = "Review", "Nothing to review"
+		label, tooltip, dot = "Review", "Nothing to review", false
 	}
-	ui.Button(c.Key("review"), "").Label(label).Shrink(1).MinWidth(0).Disabled(disabled).Tooltip(tooltip).
-		Children(func() {
-			ui.Text(c, label).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
-		}).OnClick(func() {
+	iconButton(c, "review", svg, tint, dot, label, tooltip, disabled, func() {
 		if completed {
 			a.review.open = true
 			return

@@ -20,6 +20,10 @@ var (
 	repoIcon     = icon(`<path d="M3 2.5h8.5a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4.5A1.5 1.5 0 0 1 3 12V2.5z"/><path d="M3 11.5a1.5 1.5 0 0 1 1.5-1.5h8"/><path d="M6 13.5v2l1-.7 1 .7v-2"/>`)
 	searchIcon   = icon(`<circle cx="7" cy="7" r="4.5" stroke-width="1.5"/><path d="M10.5 10.5l3.5 3.5" stroke-width="1.5"/>`)
 	clearIcon    = icon(`<path d="M3 3l10 10M13 3L3 13" stroke-width="2.4"/>`)
+	reviewIcon   = icon(`<path d="M3.5 1.5h6l3 3v10h-9z"/><path d="M9.5 1.5v3h3"/><path d="M5.8 9.3l1.6 1.6 3-3.2"/>`)
+	failedIcon   = icon(`<path d="M3.5 1.5h6l3 3v10h-9z"/><path d="M9.5 1.5v3h3"/><path d="M6 7.5l3.5 3.5M9.5 7.5L6 11"/>`)
+	warningIcon  = icon(`<path d="M8 2L14.5 13.5h-13z"/><path d="M8 6.5v3.2M8 11.6v.1" stroke-width="1.5"/>`)
+	shipIcon     = icon(`<path d="M8 10V2M4.8 5.2L8 2l3.2 3.2"/><path d="M2.5 9v3.5a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V9"/>`)
 	previewIcon  = icon(`<path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/>`)
 )
 

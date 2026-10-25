@@ -63,7 +63,7 @@ func (a *app) branchLabel(c *ui.Context) {
 		return
 	}
 	t := c.Theme()
-	b := ui.ButtonBase(c.Key("branch")).Bind(&a.switcher.button).Shrink(2).MinWidth(0).Padding(t.Space(0.5), t.Space(1.5)).
+	b := ui.ButtonBase(c.Key("branch")).Bind(&a.switcher.button).Shrink(1).MinWidth(0).Padding(t.Space(0.5), t.Space(1.5)).
 		Radius(t.Radius).TextColor(t.TextMuted).Label("Switch Branch").Tooltip(a.branch).
 		Disabled(a.push.running || a.review.running || a.pull.running)
 	flat(b, t, a.switcher.open)

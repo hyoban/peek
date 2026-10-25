@@ -38,8 +38,9 @@ func (a *app) pushButton(c *ui.Context) {
 		}
 	}
 	label, tooltip := "Ship", "Commit all changes with Codex and push"
+	svg, tint := shipIcon, ui.Color{}
 	if a.push.status != "" {
-		label, tooltip = "Shipped", a.push.status
+		label, tooltip, svg, tint = "Shipped", a.push.status, checkIcon, system(c, systemGreen)
 	}
 	checkingOut := a.switcher.running != ""
 	disabled := a.review.running || checkingOut || a.pull.running || !a.canPush
@@ -51,7 +52,7 @@ func (a *app) pushButton(c *ui.Context) {
 	case disabled && a.push.status == "":
 		tooltip = "Nothing to ship"
 	}
-	ui.Button(c.Key("push"), label).Shrink(0).Disabled(disabled).Tooltip(tooltip).OnClick(a.startPush)
+	iconButton(c, "push", svg, tint, false, label, tooltip, disabled, a.startPush)
 }
 
 func (a *app) startPush() {

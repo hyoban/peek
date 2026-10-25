@@ -63,7 +63,6 @@ type app struct {
 	// focus and inactiveTheme the one of lists without it.
 	theme, listTheme, inactiveTheme *ui.Theme
 	titleButton                     ui.Handle // the project's name, under which the projects list
-	search                          searchState
 	alert                           alertState
 
 	showHistory, showTree   bool
@@ -281,9 +280,11 @@ func endSplit(c *ui.Context, size *float32, end, rest func()) ui.Element {
 // toolbarPart is the part of the window's toolbar over a column: a row of
 // the title bar's height, which drags the window, leaving the traffic
 // lights their room at the window's start and the window's edge at its
-// end. Its controls take no face until hovered, Tab stops on it once and
-// the arrows move among them.
-func toolbarPart(c *ui.Context, label string, start, end bool, build func()) {
+// end. Its groups of controls are ui.Toolbars, which take no face until
+// hovered, Tab stopping on each once and the arrows moving among their
+// controls; the names, which their toolbar would put in its overflow menu
+// for want of room, are out of them, to be cut short.
+func toolbarPart(c *ui.Context, start, end bool, build func()) {
 	t := c.Theme()
 	bar := c.TitleBar()
 	left, right := t.Space(2), t.Space(2)
@@ -294,40 +295,59 @@ func toolbarPart(c *ui.Context, label string, start, end bool, build func()) {
 		right += bar.Right
 	}
 	ui.Row(c).Height(titleBarHeight).Shrink(0).FillWidth().AlignItems(ui.Center).
-		Padding(0, right, 0, left).DragWindow().Children(func() {
-		ui.Toolbar(c, build).Grow(1).MinWidth(0).Padding(0).Label(label)
+		Padding(0, right, 0, left).Gap(t.Space(1)).DragWindow().Children(build)
+}
+
+// toolGroup is a group of the toolbar's controls, built by build.
+func toolGroup(c *ui.Context, label string, build func()) ui.Element {
+	return ui.Toolbar(c, build).Shrink(0).Padding(0).Label(label)
+}
+
+// repository is the toolbar's controls of the repository: the project,
+// its branch and the commits to pull, over the sidebar, which lists its
+// files, or at the start of the text's part while the sidebar hides, as
+// Finder's title moves. The branch gives way first where room is short.
+func (a *app) repository(c *ui.Context) ui.Element {
+	t := c.Theme()
+	return ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Gap(t.Space(1)).Children(func() {
+		a.projectTitle(c)
+		a.branchLabel(c)
+		a.pullButton(c)
 	})
 }
 
-// toolbar is the part of the toolbar over the text: the project, the mode
-// in the middle and the actions, with the buttons of the columns hidden,
-// which their own parts hold while they show.
+// toolbar is the part of the toolbar over the text: the mode in the middle
+// and the actions at the end, with the buttons and the controls of the
+// columns hidden, which their own parts hold while they show.
 func (a *app) toolbar(c *ui.Context, start, end bool) {
 	t := c.Theme()
-	toolbarPart(c, "Toolbar", start, end, func() {
+	toolbarPart(c, start, end, func() {
 		if start {
-			a.paneButton(c, "sidebar", sidebarIcon, &a.showTree, &a.collapsedTree, "Sidebar")
+			toolGroup(c, "Sidebar", func() {
+				a.paneButton(c, "sidebar", sidebarIcon, &a.showTree, &a.collapsedTree, "Sidebar")
+			})
+			a.repository(c)
+		} else {
+			ui.Row(c).Grow(1).Basis(0).MinWidth(0)
 		}
-		ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Gap(t.Space(1)).Children(func() {
-			a.projectTitle(c)
-			a.branchLabel(c)
-			a.pullButton(c)
-			if page := cmp.Or(a.branchURL, a.github); page != "" {
-				a.linkButton(c, "github", githubIcon, "Open on GitHub", page)
-			}
-		})
 		a.modeChoice = a.mode
-		modeSwitch(c.Key("mode"), &a.modeChoice, "Changes", "Files").Label("Mode").
-			OnChange(func() { a.setMode(a.modeChoice) })
-		// Keep both sides equally wide as the action labels change.
-		ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).
-			Justify(ui.End).Gap(t.Space(1)).Children(func() {
-			a.reviewButton(c)
-			a.pushButton(c)
+		toolGroup(c, "Mode", func() {
+			modeSwitch(c.Key("mode"), &a.modeChoice, "Changes", "Files").Label("Mode").
+				OnChange(func() { a.setMode(a.modeChoice) })
 		})
-		if end {
-			a.paneButton(c, "history", historyIcon, &a.showHistory, &a.collapsedHistory, "History")
-		}
+		// Both sides as wide, so that the mode stays in the middle.
+		ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Justify(ui.End).Gap(t.Space(1)).Children(func() {
+			toolGroup(c, "Toolbar", func() {
+				if page := cmp.Or(a.branchURL, a.github); page != "" {
+					a.linkButton(c, "github", githubIcon, "Open on GitHub", page)
+				}
+				a.reviewButton(c)
+				a.pushButton(c)
+				if end {
+					a.paneButton(c, "history", historyIcon, &a.showHistory, &a.collapsedHistory, "History")
+				}
+			})
+		})
 	})
 }
 
@@ -378,7 +398,7 @@ func (a *app) paneButton(c *ui.Context, key string, svg *ui.SVG, on, collapsed *
 // click on switches the project.
 func (a *app) projectTitle(c *ui.Context) {
 	t := c.Theme()
-	b := ui.ButtonBase(c.Key("project")).Bind(&a.titleButton).Shrink(1).MinWidth(0).
+	b := ui.ButtonBase(c.Key("project")).Bind(&a.titleButton).Shrink(0).MaxWidth(160).
 		Padding(t.Space(0.5), t.Space(2)).Radius(t.Radius).Label("Switch Project").Tooltip(a.repo)
 	flat(b, t, false)
 	b.OnClick(func() {
@@ -515,84 +535,19 @@ func rowInk(t *ui.Theme, selected, focused bool) ink {
 	return ink{text: t.AccentText, muted: t.AccentText.Alpha(0.72), onAccent: focused}
 }
 
-// searchState is the history's search, in its part of the toolbar, where
-// Mac apps keep a search field: the query, the commits it keeps, and the
-// row of the list chosen, which maps to the commit chosen.
-type searchState struct {
-	query string
-	field ui.Handle
-	focus bool // the field is to take the keys, as the menu bar asks
-	// toList moves the keys to the list, as Down in the field asks.
-	toList bool
-	// shown are the commits the list showed, by row; row is its choice,
-	// set is the choice it was given, so a change of row is the user's.
-	shown    []int
-	row, set int
-}
-
-// matchingCommits returns the commits the query keeps, by index: each of its
-// words in the subject, the message, an author's name or email, or at the
-// start of the hash. Without a query, all of them.
-func (a *app) matchingCommits(query string) []int {
-	words := strings.Fields(strings.ToLower(query))
-	var shown []int
-	for i, cm := range a.commits {
-		if len(words) == 0 || commitMatches(cm, words) {
-			shown = append(shown, i)
-		}
-	}
-	return shown
-}
-
-func commitMatches(cm git.Commit, words []string) bool {
-	text := strings.ToLower(cm.Subject + "\n" + cm.Body + "\n" + cm.Author + "\n" + cm.Email)
-	for _, co := range cm.CoAuthors {
-		text += "\n" + strings.ToLower(co.Name+"\n"+co.Email)
-	}
-	for _, w := range words {
-		if !strings.Contains(text, w) && !(cm.Hash != git.Worktree && strings.HasPrefix(cm.Hash, w)) {
-			return false
-		}
-	}
-	return true
-}
-
 func (a *app) history(c *ui.Context) {
-	s := &a.search
 	n := len(a.commits)
 	if n > 0 && a.commits[0].Hash == git.Worktree {
 		n--
 	}
-	// The choice the user made in the list, of the rows it showed.
-	if s.row != s.set && s.row >= 0 && s.row < len(s.shown) {
-		a.commitRow = s.shown[s.row]
-	}
-	s.shown = a.matchingCommits(s.query)
-	s.row = slices.Index(s.shown, a.commitRow)
-	if s.toList && len(s.shown) > 0 {
-		if s.row < 0 {
-			s.row, a.commitRow = 0, s.shown[0]
-		}
-		s.toList = false
-		a.commitList.Handle.Focus(c)
-	}
-	s.set = s.row
-	detail := count(n, "commit")
-	if strings.TrimSpace(s.query) != "" {
-		found := len(s.shown)
-		if found > 0 && a.commits[s.shown[0]].Hash == git.Worktree {
-			found--
-		}
-		detail = fmt.Sprintf("%d of %s", found, detail)
-	}
 	sideColumn(c, a.theme.Background, func() {
-		toolbarPart(c, "History Toolbar", false, true, func() {
-			searchField(c, "history-search", &s.query, "Search", "Search Commits", &s.field, &s.focus,
-				func() { s.toList = true }).Grow(1).MinWidth(0).
-				Tooltip("Search the subjects, messages, authors and hashes of the commits")
-			a.paneButton(c, "history", historyIcon, &a.showHistory, &a.collapsedHistory, "History")
+		toolbarPart(c, false, true, func() {
+			ui.Spacer(c)
+			toolGroup(c, "History Toolbar", func() {
+				a.paneButton(c, "history", historyIcon, &a.showHistory, &a.collapsedHistory, "History")
+			})
 		})
-	}, "History", mutedDetail(c, detail), func() {
+	}, "History", mutedDetail(c, count(n, "commit")), func() {
 		switch {
 		case a.err != "":
 			emptyNote(c, a.err)
@@ -600,27 +555,15 @@ func (a *app) history(c *ui.Context) {
 		case len(a.commits) == 0:
 			loading(c)
 			return
-		case len(s.shown) == 0:
-			emptyNote(c, "No Results")
-			return
 		}
-		a.commitList.Selected = &s.row
-		a.commitList.Key = func(i int) any { return a.commits[s.shown[i]].Hash } // "" the work tree
-		a.commitList.Label = func(i int) string { return a.commits[s.shown[i]].Subject }
+		a.commitList.Selected = &a.commitRow
+		a.commitList.Key = func(i int) any { return a.commits[i].Hash } // "" the work tree
+		a.commitList.Label = func(i int) string { return a.commits[i].Subject }
 		a.withFocus(c, a.commitList.FocusWithin(c), func() {
-			list := ui.List(c.Key("history"), &a.commitList, len(s.shown)).Gap(1).Label("History")
-			sideList(c, list).Rows(func(row ui.ListRow) { a.commitItem(row, s.shown[row.Index]) })
+			list := ui.List(c.Key("history"), &a.commitList, len(a.commits)).Gap(1).Label("History")
+			sideList(c, list).Rows(func(row ui.ListRow) { a.commitItem(row, row.Index) })
 		})
 	})
-}
-
-// searchHistory puts the keys in the history's search field, showing the
-// history where it is hidden, as Find Commits asks.
-func (a *app) searchHistory() {
-	if !a.showHistory {
-		a.toggle(&a.showHistory, &a.collapsedHistory)
-	}
-	a.search.focus = true
 }
 
 // commitItem is the row of the commit at index i of the history.
@@ -765,9 +708,11 @@ func (a *app) treePane(c *ui.Context) {
 		}
 	}
 	sideColumn(c, sidebarBackground(c), func() {
-		toolbarPart(c, "Sidebar Toolbar", true, false, func() {
-			ui.Spacer(c)
-			a.paneButton(c, "sidebar", sidebarIcon, &a.showTree, &a.collapsedTree, "Sidebar")
+		toolbarPart(c, true, false, func() {
+			a.repository(c)
+			toolGroup(c, "Sidebar Toolbar", func() {
+				a.paneButton(c, "sidebar", sidebarIcon, &a.showTree, &a.collapsedTree, "Sidebar")
+			})
 		})
 	}, title, detail, func() {
 		switch {
