@@ -251,3 +251,79 @@ func TestCommitInfo(t *testing.T) {
 		t.Fatal("Escape left the popover open")
 	}
 }
+
+// The search above the history keeps the commits each of its words is
+// in, by subject, author or the start of the hash, and the choice in the
+// list stays the commit's.
+func TestHistorySearch(t *testing.T) {
+	a := newApp("/tmp/repo")
+	a.commits = []git.Commit{
+		{Hash: git.Worktree, Subject: "Uncommitted Changes"},
+		{Hash: "abc123", Subject: "Add the switcher", Author: "Ada"},
+		{Hash: "def456", Subject: "Fix the toolbar", Author: "Grace", Body: "Native spacing."},
+		{Hash: "fed789", Subject: "Add a sheet", Author: "Ada"},
+	}
+	a.loadedRow, a.commitRow = 1, 1
+	tt := ui.NewTester(a.view, 1200, 800)
+	tt.Frame()
+	if !tt.HasText("3 commits") {
+		t.Fatal(tt.Texts())
+	}
+	for query, want := range map[string]int{"add ada": 2, "native": 1, "def4": 1, "toolbar ada": 0, "": 4} {
+		if got := len(a.matchingCommits(query)); got != want {
+			t.Errorf("%q kept %d commits, want %d", query, got, want)
+		}
+	}
+	a.search.query = "add"
+	tt.Frame()
+	if !tt.HasText("2 of 3 commits") || tt.HasText("Fix the toolbar") || a.search.row != 0 {
+		t.Fatalf("row %d, texts %q", a.search.row, tt.Texts())
+	}
+	if err := tt.Click("Add a sheet"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.commitRow != 3 {
+		t.Fatalf("chose commit %d, want 3", a.commitRow)
+	}
+	a.search.query = ""
+	tt.Frame()
+	if a.commitRow != 3 || a.search.row != 3 {
+		t.Fatalf("choice lost as the search cleared: commit %d, row %d", a.commitRow, a.search.row)
+	}
+	a.search.query = "nothing like it"
+	tt.Frame()
+	if !tt.HasText("No Results") {
+		t.Fatal(tt.Texts())
+	}
+
+	// Search Commits puts the keys in the field, Down moves them to the
+	// list's first result, and Escape clears the field.
+	a.search.query = ""
+	a.searchHistory()
+	tt.Frame()
+	tt.Frame()
+	tt.Type("sheet")
+	tt.Frame()
+	if a.search.query != "sheet" {
+		t.Fatalf("typed into the field: %q", a.search.query)
+	}
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	if a.search.query != "" {
+		t.Fatalf("Escape left %q", a.search.query)
+	}
+	tt.Type("grace")
+	tt.Frame()
+	tt.Key(0, ui.KeyDown)
+	tt.Frame()
+	tt.Frame()
+	if a.commitRow != 2 {
+		t.Fatalf("Down chose commit %d, want 2", a.commitRow)
+	}
+	tt.Key(0, ui.KeyUp) // in the list now, not the field
+	tt.Frame()
+	if a.search.query != "grace" {
+		t.Fatalf("the list's key reached the field: %q", a.search.query)
+	}
+}

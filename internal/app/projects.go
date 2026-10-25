@@ -442,6 +442,9 @@ func (p *projects) setMenu() {
 			{Label: "Find Next", Accelerator: "Cmd+G", Click: do(func(a *app) { a.find(editor.FindNext) })},
 			{Label: "Find Previous", Accelerator: "Shift+Cmd+G", Click: do(func(a *app) { a.find(editor.FindPrevious) })},
 			{Label: "Use Selection for Find", Accelerator: "Cmd+E", Click: do(func(a *app) { a.find(editor.UseSelectionForFind) })},
+			mygo.Separator(),
+			{Label: "Filter Files", Accelerator: "Alt+Cmd+J", Click: do(func(a *app) { a.filterFiles() })},
+			{Label: "Search Commits", Accelerator: "Alt+Cmd+F", Click: do(func(a *app) { a.searchHistory() })},
 		}},
 	}
 	mygo.App.SetMenu(mygo.NewMenu([]*mygo.MenuItem{

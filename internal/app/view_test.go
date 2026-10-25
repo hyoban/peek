@@ -594,3 +594,54 @@ func TestSplitRefs(t *testing.T) {
 		}
 	}
 }
+
+// The filter at the bottom of the sidebar keeps the files whose paths hold
+// its words, in their folders opened, and as it clears the folders close
+// again and the file chosen is chosen again.
+func TestFilterFiles(t *testing.T) {
+	a, tt := testApp(t, testutil.Repo(t), func(a *app) { a.mode = modeFiles })
+	tree := &a.allTree
+	tree.state.Open.Clear()
+	tt.Frame()
+	if err := tt.Click("main.go"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	_, all := tree.filterCount()
+	tree.filter = "NEW"
+	settle(tt)
+	if !tree.state.Open.Has("docs") || tree.state.Rows() != 2 || tree.state.Item(1) != "docs/new.md" {
+		t.Fatalf("rows %d, open docs %v", tree.state.Rows(), tree.state.Open.Has("docs"))
+	}
+	if !tt.HasText(fmt.Sprintf("1 of %d files", all)) || a.openFile != "main.go" {
+		t.Fatalf("open %q, texts %q", a.openFile, tt.Texts())
+	}
+	tree.filter = ""
+	settle(tt)
+	if tree.state.Open.Has("docs") || tree.chosen() != "main.go" {
+		t.Fatalf("after clearing: docs open %v, chosen %q", tree.state.Open.Has("docs"), tree.chosen())
+	}
+	tree.filter = "nothing like it"
+	settle(tt)
+	if !tt.HasText("No Results") || !tt.HasText("Filter Files") {
+		t.Fatal(tt.Texts())
+	}
+
+	// Filter Files puts the keys in the field, and Down moves them to the
+	// tree's first file.
+	tree.filter = ""
+	settle(tt)
+	a.filterFiles()
+	tt.Frame()
+	tt.Frame()
+	tt.Type("new")
+	settle(tt)
+	if tree.filter != "new" {
+		t.Fatalf("typed into the filter: %q", tree.filter)
+	}
+	tt.Key(0, ui.KeyDown)
+	settle(tt)
+	if tree.chosen() != "docs/new.md" || a.openFile != "docs/new.md" {
+		t.Fatalf("Down chose %q, opened %q", tree.chosen(), a.openFile)
+	}
+}

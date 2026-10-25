@@ -140,3 +140,44 @@ func (a *app) showAlert(title, message string) {
 func (a *app) alerts(c *ui.Context) {
 	ui.AlertDialog(c.Key("alert"), &a.alert.open, a.alert.title, a.alert.message, "OK")
 }
+
+// searchField is a search field as AppKit's, as ui.SearchField draws one,
+// with a placeholder of its own and its input bound, for the menu bar to
+// put the keys in it and for Down to leave it: a magnifying glass, the
+// text, and a button clearing it while it holds any, as Escape does then.
+func searchField(c *ui.Context, key string, query *string, placeholder, label string, input *ui.Handle, focus *bool, down func()) ui.Element {
+	t := c.Theme()
+	focused := input.FocusWithin(c)
+	f := ui.Row(c.Key(key)).AlignItems(ui.Center).Gap(t.Space(1.5)).Padding(t.Space(1), t.Space(2)).
+		Radius(t.Radius).Background(t.Surface).Border(1, t.Border)
+	if focused {
+		f.Border(1, t.Accent).Shadow(0, 0, 0, 3, t.Focus)
+	}
+	f.Children(func() {
+		ui.Icon(c, searchIcon).Size(14, 14).Shrink(0).TextColor(t.TextMuted)
+		in := ui.TextInputBase(c.Key(key+":input"), query).Bind(input).Grow(1).MinWidth(0).
+			Placeholder(placeholder).Label(label).OnTextKey(func(k ui.TextKey) bool {
+			switch {
+			case k.Mods == 0 && k.Key == ui.KeyDown:
+				down()
+			case k.Mods == 0 && k.Key == ui.KeyEscape && *query != "":
+				k.SetText("")
+				*query = ""
+			default:
+				return false
+			}
+			return true
+		})
+		if *focus {
+			*focus = false
+			in.Focus()
+		}
+		if *query != "" {
+			clear := ui.ButtonBase(c.Key(key+":clear")).Size(16, 16).Shrink(0).Center().Radius(8).
+				Background(t.TextMuted.Alpha(0.5)).Label("Clear").KeepFocus()
+			clear.OnClick(func() { *query = "" })
+			clear.Children(func() { ui.Icon(c, clearIcon).Size(8, 8).TextColor(t.Background) })
+		}
+	})
+	return f
+}

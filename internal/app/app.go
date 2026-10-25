@@ -4,6 +4,7 @@ package app
 
 import (
 	"cmp"
+	"fmt"
 	"log"
 	"os"
 	"path"
@@ -63,6 +64,7 @@ type app struct {
 	theme, listTheme, inactiveTheme *ui.Theme
 	titleButton                     ui.Handle // the project's name, under which the projects list
 	info                            infoState
+	search                          searchState
 	alert                           alertState
 
 	showHistory, showTree   bool
@@ -515,17 +517,84 @@ func rowInk(t *ui.Theme, selected, focused bool) ink {
 	return ink{text: t.AccentText, muted: t.AccentText.Alpha(0.72), onAccent: focused}
 }
 
+// searchState is the history's search, in its part of the toolbar, where
+// Mac apps keep a search field: the query, the commits it keeps, and the
+// row of the list chosen, which maps to the commit chosen.
+type searchState struct {
+	query string
+	field ui.Handle
+	focus bool // the field is to take the keys, as the menu bar asks
+	// toList moves the keys to the list, as Down in the field asks.
+	toList bool
+	// shown are the commits the list showed, by row; row is its choice,
+	// set is the choice it was given, so a change of row is the user's.
+	shown    []int
+	row, set int
+}
+
+// matchingCommits returns the commits the query keeps, by index: each of its
+// words in the subject, the message, an author's name or email, or at the
+// start of the hash. Without a query, all of them.
+func (a *app) matchingCommits(query string) []int {
+	words := strings.Fields(strings.ToLower(query))
+	var shown []int
+	for i, cm := range a.commits {
+		if len(words) == 0 || commitMatches(cm, words) {
+			shown = append(shown, i)
+		}
+	}
+	return shown
+}
+
+func commitMatches(cm git.Commit, words []string) bool {
+	text := strings.ToLower(cm.Subject + "\n" + cm.Body + "\n" + cm.Author + "\n" + cm.Email)
+	for _, co := range cm.CoAuthors {
+		text += "\n" + strings.ToLower(co.Name+"\n"+co.Email)
+	}
+	for _, w := range words {
+		if !strings.Contains(text, w) && !(cm.Hash != git.Worktree && strings.HasPrefix(cm.Hash, w)) {
+			return false
+		}
+	}
+	return true
+}
+
 func (a *app) history(c *ui.Context) {
+	s := &a.search
 	n := len(a.commits)
 	if n > 0 && a.commits[0].Hash == git.Worktree {
 		n--
 	}
+	// The choice the user made in the list, of the rows it showed.
+	if s.row != s.set && s.row >= 0 && s.row < len(s.shown) {
+		a.commitRow = s.shown[s.row]
+	}
+	s.shown = a.matchingCommits(s.query)
+	s.row = slices.Index(s.shown, a.commitRow)
+	if s.toList && len(s.shown) > 0 {
+		if s.row < 0 {
+			s.row, a.commitRow = 0, s.shown[0]
+		}
+		s.toList = false
+		a.commitList.Handle.Focus(c)
+	}
+	s.set = s.row
+	detail := count(n, "commit")
+	if strings.TrimSpace(s.query) != "" {
+		found := len(s.shown)
+		if found > 0 && a.commits[s.shown[0]].Hash == git.Worktree {
+			found--
+		}
+		detail = fmt.Sprintf("%d of %s", found, detail)
+	}
 	sideColumn(c, a.theme.Background, func() {
 		toolbarPart(c, "History Toolbar", false, true, func() {
-			ui.Spacer(c)
+			searchField(c, "history-search", &s.query, "Search", "Search Commits", &s.field, &s.focus,
+				func() { s.toList = true }).Grow(1).MinWidth(0).
+				Tooltip("Search the subjects, messages, authors and hashes of the commits")
 			a.paneButton(c, "history", historyIcon, &a.showHistory, &a.collapsedHistory, "History")
 		})
-	}, "History", mutedDetail(c, count(n, "commit")), func() {
+	}, "History", mutedDetail(c, detail), func() {
 		switch {
 		case a.err != "":
 			emptyNote(c, a.err)
@@ -533,21 +602,34 @@ func (a *app) history(c *ui.Context) {
 		case len(a.commits) == 0:
 			loading(c)
 			return
+		case len(s.shown) == 0:
+			emptyNote(c, "No Results")
+			return
 		}
-		a.commitList.Selected = &a.commitRow
-		a.commitList.Key = func(i int) any { return a.commits[i].Hash } // "" the work tree
-		a.commitList.Label = func(i int) string { return a.commits[i].Subject }
+		a.commitList.Selected = &s.row
+		a.commitList.Key = func(i int) any { return a.commits[s.shown[i]].Hash } // "" the work tree
+		a.commitList.Label = func(i int) string { return a.commits[s.shown[i]].Subject }
 		a.withFocus(c, a.commitList.FocusWithin(c), func() {
-			list := ui.List(c.Key("history"), &a.commitList, len(a.commits)).Gap(1).Label("History")
-			sideList(c, list).Rows(func(row ui.ListRow) { a.commitItem(row) })
+			list := ui.List(c.Key("history"), &a.commitList, len(s.shown)).Gap(1).Label("History")
+			sideList(c, list).Rows(func(row ui.ListRow) { a.commitItem(row, s.shown[row.Index]) })
 		})
 	})
 }
 
-func (a *app) commitItem(row ui.ListRow) {
+// searchHistory puts the keys in the history's search field, showing the
+// history where it is hidden, as Find Commits asks.
+func (a *app) searchHistory() {
+	if !a.showHistory {
+		a.toggle(&a.showHistory, &a.collapsedHistory)
+	}
+	a.search.focus = true
+}
+
+// commitItem is the row of the commit at index i of the history.
+func (a *app) commitItem(row ui.ListRow, i int) {
 	c := row.Context
 	t := c.Theme()
-	cm := a.commits[row.Index]
+	cm := a.commits[i]
 	in := rowInk(t, row.Selected(), row.ListFocused())
 	text, muted := in.text, in.muted
 	item := ui.Row(c).FillWidth().Gap(t.Space(2.5)).Padding(t.Space(2), t.Space(2)).AlignItems(ui.Start).Children(func() {
@@ -594,7 +676,7 @@ func (a *app) commitItem(row ui.ListRow) {
 		})
 	})
 	if cm.Hash != git.Worktree {
-		a.commitMenu(c, item, row.Index, cm)
+		a.commitMenu(c, item, i, cm)
 	}
 }
 
@@ -734,10 +816,15 @@ func (a *app) treePane(c *ui.Context) {
 	if a.mode == modeFiles {
 		title, key, tree, label = "Files", "all", &a.allTree, "Files"
 	}
+	tree.applyFilter()
 	// The lines the changes add and delete in all, as GitHub's pull
-	// requests total them.
+	// requests total them, or how many files the filter keeps.
 	detail := func() {
-		if a.mode == modeChanges && len(a.diffs) > 0 {
+		switch {
+		case tree.keep != nil:
+			kept, all := tree.filterCount()
+			mutedDetail(c, fmt.Sprintf("%d of %s", kept, count(all, "file")))()
+		case a.mode == modeChanges && len(a.diffs) > 0:
 			added, deleted := sumLines(a.diffs)
 			lineCounts(c, added, deleted, false)
 		}
@@ -748,12 +835,40 @@ func (a *app) treePane(c *ui.Context) {
 			a.paneButton(c, "sidebar", sidebarIcon, &a.showTree, &a.collapsedTree, "Sidebar")
 		})
 	}, title, detail, func() {
-		if tree.dirs == nil {
+		switch {
+		case tree.dirs == nil:
 			loading(c)
-			return
+		case tree.keep != nil && len(tree.entries("")) == 0:
+			emptyNote(c, "No Results")
+		default:
+			a.treeView(c.Key(key), tree, label)
 		}
-		a.treeView(c.Key(key), tree, label)
+		filterBar(c, key, &tree.filterState)
 	})
+}
+
+// filterBar is the field at the bottom of the sidebar that filters its
+// tree, as Xcode's navigator has: Down moves to the tree, Escape clears it.
+func filterBar(c *ui.Context, key string, f *filterState) {
+	t := c.Theme()
+	ui.Divider(c)
+	ui.Row(c).Shrink(0).FillWidth().Padding(t.Space(2)).Children(func() {
+		searchField(c, "filter:"+key, &f.filter, "Filter", "Filter Files", &f.field, &f.focus,
+			func() { f.toList = true }).FillWidth()
+	})
+}
+
+// filterFiles puts the keys in the sidebar's filter field, showing the
+// sidebar where it is hidden, as Filter Files asks.
+func (a *app) filterFiles() {
+	if !a.showTree {
+		a.toggle(&a.showTree, &a.collapsedTree)
+	}
+	tree := &a.changeTree
+	if a.mode == modeFiles {
+		tree = &a.allTree
+	}
+	tree.focus = true
 }
 
 func (a *app) treeView(c *ui.Context, tree *pathTree, label string) {

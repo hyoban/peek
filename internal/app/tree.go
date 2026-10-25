@@ -25,9 +25,31 @@ type pathTree struct {
 	// otherwise was so by the outline's arrow or keys, or a click on a
 	// folder's row.
 	opened map[string]bool
+	filterState
 }
 
-func newPathTree() pathTree { return pathTree{row: -1} }
+// filterState is the tree's filter, as the field at the bottom of Xcode's
+// navigator: the files whose paths hold each word of its query, and the
+// folders they are in, open, the folders open before coming back as it
+// clears.
+type filterState struct {
+	filter string    // the query of the field
+	field  ui.Handle // the field, which the menu bar's Filter Files focuses
+	focus  bool      // the field is to take the keys
+	toList bool      // the tree is to take the keys, as Down in the field asks
+	gen    int       // counts the trees set, whose open folders differ
+	// filtered is the query keep holds the items of, for the tree of
+	// filteredGen; keep is nil without a query.
+	filtered    string
+	filteredGen int
+	keep        map[string]bool
+	// saved are the folders open as filtering began, in the tree of
+	// savedGen.
+	saved    []string
+	savedGen int
+}
+
+func newPathTree() pathTree { return pathTree{row: -1, filterState: filterState{filteredGen: -1}} }
 
 // folded is a tree of paths, built off the UI thread for a pathTree.
 type folded struct {
@@ -153,7 +175,105 @@ func (t *pathTree) set(f folded) {
 	t.dirs, t.labels, t.parents = f.dirs, f.labels, f.parents
 	t.state.Open.Clear()
 	t.row, t.reveal = -1, ""
+	t.gen++
 	t.remember()
+}
+
+// applyFilter keeps the items the query asks for, once for each query and
+// tree, opening the folders that hold them. The item chosen stays chosen
+// where it shows, as the rows move under it.
+func (t *pathTree) applyFilter() {
+	q := strings.ToLower(strings.TrimSpace(t.filter))
+	if q == t.filtered && t.filteredGen == t.gen {
+		return
+	}
+	chosen := t.chosen()
+	if chosen == "" {
+		chosen = t.reveal
+	}
+	t.filtered, t.filteredGen = q, t.gen
+	if q == "" {
+		if t.keep == nil {
+			return // a new tree, unfiltered
+		}
+		t.keep = nil
+		if t.savedGen == t.gen {
+			t.state.Open.Clear()
+			for _, dir := range t.saved {
+				t.state.Open.Add(dir)
+			}
+		}
+		t.saved = nil
+		t.row = -1
+		if chosen != "" {
+			t.show(chosen)
+		}
+		t.remember()
+		return
+	}
+	if t.keep == nil || t.savedGen != t.gen {
+		t.saved, t.savedGen = slices.Collect(t.state.Open.All()), t.gen
+	}
+	words := strings.Fields(q)
+	t.keep = map[string]bool{}
+	var walk func(dir string) bool
+	walk = func(dir string) bool {
+		kept := false
+		for _, p := range t.dirs[dir] {
+			switch {
+			case t.isDir(p):
+				if walk(p) {
+					t.keep[p] = true
+					t.state.Open.Add(p)
+					kept = true
+				}
+			case pathMatches(itemPath(p), words):
+				t.keep[p], kept = true, true
+			}
+		}
+		return kept
+	}
+	walk("")
+	t.row, t.reveal = -1, chosen
+	t.remember()
+}
+
+// pathMatches reports whether the path holds each of the words, which are
+// in lower case.
+func pathMatches(p string, words []string) bool {
+	p = strings.ToLower(p)
+	for _, w := range words {
+		if !strings.Contains(p, w) {
+			return false
+		}
+	}
+	return true
+}
+
+// entries are the items of the directory that show: those the filter
+// keeps.
+func (t *pathTree) entries(dir string) []string {
+	if t.keep == nil {
+		return t.dirs[dir]
+	}
+	var kept []string
+	for _, p := range t.dirs[dir] {
+		if t.keep[p] {
+			kept = append(kept, p)
+		}
+	}
+	return kept
+}
+
+// filterCount counts the files the filter keeps, and all of them.
+func (t *pathTree) filterCount() (kept, all int) {
+	for _, p := range t.files() {
+		all++
+		if t.keep[p] {
+			kept++
+		}
+	}
+	return kept, all
 }
 
 func (t *pathTree) remember() {
@@ -280,9 +400,20 @@ func (t *pathTree) sync() bool {
 func (t *pathTree) view(c *ui.Context, label string, item func(p string, selected bool)) ui.Element {
 	t.state.List.Selected = &t.row
 	t.state.Indent = 12
+	if t.toList {
+		t.toList = false
+		if t.row < 0 {
+			for i := range t.state.Rows() {
+				if !t.isDir(t.state.Item(i)) {
+					t.row = i
+					break
+				}
+			}
+		}
+		t.state.List.Handle.Focus(c)
+	}
 	chosen := t.chosen()
-	children := func(p string) []string { return t.dirs[p] }
-	return ui.Outline(c, &t.state, t.dirs[""], children, func(p string) {
+	return ui.Outline(c, &t.state, t.entries(""), t.entries, func(p string) {
 		item(p, p == chosen)
 	}).Label(label)
 }
