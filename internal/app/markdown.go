@@ -126,14 +126,14 @@ func (a *app) previewButton(c *ui.Context) {
 	p := a.openFile
 	t := c.Theme()
 	// Borderless, as the buttons of Xcode's jump bar: the icon alone, a
-	// fill under the pointer, and the accent while the preview shows.
+	// fill while pressed, and the accent while the preview shows.
 	b := ui.ButtonBase(c.Key("preview")).Size(22, 22).Shrink(0).Center().Radius(5).
 		Label(label).Tooltip(label)
 	flat(b, t, false)
 	color := t.TextMuted
 	if on {
 		color = t.Accent
-		if !b.Hovered() && !b.Pressed() {
+		if !b.Pressed() {
 			b.Background(t.Accent.Alpha(0.12))
 		}
 	}

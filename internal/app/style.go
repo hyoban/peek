@@ -44,15 +44,19 @@ func statusColor(c *ui.Context, s string) ui.Color {
 	return system(c, systemOrange)
 }
 
-// flat gives a borderless button the faces of its states, as toolbars'
-// items have: pressed, or down where it holds a popover open, and hovered.
+// flat gives a borderless button the face of its state, as toolbars'
+// items have: pressed, or down where it holds a popover open, and nothing
+// under the pointer.
 func flat(b ui.Element, t *ui.Theme, down bool) {
-	switch {
-	case down || b.Pressed():
+	if down || b.Pressed() {
 		b.Background(t.SurfacePressed)
-	case b.Hovered():
-		b.Background(t.SurfaceHover)
 	}
+}
+
+// unhovered keeps buttons as they are under the pointer, as AppKit's: the
+// theme's hover colors are those of their rest.
+func unhovered(t *ui.Theme) {
+	t.SurfaceHover, t.AccentHover = t.Surface, t.Accent
 }
 
 // withFocus builds a list in the theme its focus asks for.

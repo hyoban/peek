@@ -167,6 +167,7 @@ const (
 func (a *app) themed(c *ui.Context) {
 	t := c.Theme() // a copy for this pass
 	t.FontSize = fontSize * c.Preferences().TextScale
+	unhovered(t)
 	c.SetTheme(t)
 	// Rows show nothing under the pointer, as AppKit's tables and outlines.
 	list := *t
@@ -309,8 +310,7 @@ func endSplit(c *ui.Context, size *float32, end, rest func()) ui.Element {
 // toolbarPart is the part of the window's toolbar over a column: a row of
 // the title bar's height, which drags the window, leaving the traffic
 // lights their room at the window's start and the window's edge at its
-// end. Its groups of controls are ui.Toolbars, which take no face until
-// hovered, Tab stopping on each once and the arrows moving among their
+// end. Its groups of controls are ui.Toolbars, which take no face, Tab stopping on each once and the arrows moving among their
 // controls; the names, which their toolbar would put in its overflow menu
 // for want of room, are out of them, to be cut short.
 func toolbarPart(c *ui.Context, start, end bool, build func()) {
@@ -327,9 +327,17 @@ func toolbarPart(c *ui.Context, start, end bool, build func()) {
 		Padding(0, right, 0, left).Gap(t.Space(1)).DragWindow().Children(build)
 }
 
-// toolGroup is a group of the toolbar's controls, built by build.
+// toolGroup is a group of the toolbar's controls, built by build, which
+// show nothing under the pointer, as the items of AppKit's toolbars.
 func toolGroup(c *ui.Context, label string, build func()) ui.Element {
-	return ui.Toolbar(c, build).Shrink(0).Padding(0).Label(label)
+	t := c.Theme()
+	bare := *t
+	bare.SurfaceHover = ui.Transparent
+	return ui.Toolbar(c, func() {
+		c.SetTheme(&bare)
+		build()
+		c.SetTheme(t)
+	}).Shrink(0).Padding(0).Label(label)
 }
 
 // actions are the toolbar's work on the commits: explaining and
@@ -404,9 +412,9 @@ func modeSwitch(c *ui.Context, selected *int, labels ...string) ui.Element {
 		w, _ := c.MeasureText(0, ui.Span{Text: label, Size: t.FontSize})
 		widest = max(widest, w)
 	}
-	track, chosen, hover := t.Text.Alpha(0.06), t.Background, t.Text.Alpha(0.04)
+	track, chosen := t.Text.Alpha(0.06), t.Background
 	if t.Dark {
-		track, chosen, hover = t.Text.Alpha(0.1), t.Text.Alpha(0.24), t.Text.Alpha(0.06)
+		track, chosen = t.Text.Alpha(0.1), t.Text.Alpha(0.24)
 	}
 	parts := ui.SegmentedBase(c, selected, len(labels))
 	parts.Track.Height(24).AlignItems(ui.Stretch).Padding(inset).Gap(inset).Radius(7).Background(track)
@@ -415,12 +423,10 @@ func modeSwitch(c *ui.Context, selected *int, labels ...string) ui.Element {
 	}
 	parts.Track.Children(func() {
 		for i, label := range labels {
+			// Nothing under the pointer, as NSSegmentedControl.
 			s := parts.Segment(i).Width(widest + 2*pad).Radius(5).TextColor(t.Text)
-			switch {
-			case i == *selected:
+			if i == *selected {
 				s.Background(chosen).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.15))
-			case s.Hovered():
-				s.Background(hover)
 			}
 			s.Children(func() { ui.Text(c, label).FontSize(t.FontSize).SingleLine() })
 		}

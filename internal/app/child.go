@@ -63,6 +63,7 @@ func (a *app) follow(ch *child, open *bool, create func(view func(c *ui.Context)
 func (a *app) childTheme(c *ui.Context) {
 	t := c.Theme()
 	t.FontSize = fontSize * c.Preferences().TextScale
+	unhovered(t)
 	c.SetTheme(t)
 }
 
