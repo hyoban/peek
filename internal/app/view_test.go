@@ -482,3 +482,95 @@ func TestAuthors(t *testing.T) {
 		t.Errorf("authors %q", s)
 	}
 }
+
+// A Markdown file shows its source until its preview is asked for, which
+// stays the file's alone.
+func TestMarkdownPreview(t *testing.T) {
+	repo := testutil.Repo(t)
+	if err := os.WriteFile(filepath.Join(repo, "docs", "pic.png"), testutil.PNG(t), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a, tt := testApp(t, repo, func(a *app) { a.mode = modeFiles })
+	a.allTree.show("docs/new.md")
+	tt.Frame()
+	if a.openFile != "docs/new.md" || a.preview == nil || a.previewing() {
+		t.Fatalf("open %q (preview %v, previewing %v), want docs/new.md's source", a.openFile, a.preview != nil, a.previewing())
+	}
+	if err := tt.Click("Show Preview"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !a.previewing() || !tt.HasText("Show Source") {
+		t.Fatal("a click on Show Preview did not show the preview")
+	}
+	a.allTree.show("main.go")
+	tt.Frame()
+	if a.preview != nil || a.previewing() || tt.HasText("Show Preview") {
+		t.Error("main.go has a preview")
+	}
+	a.allTree.show("docs/new.md")
+	tt.Frame()
+	if !a.previewing() {
+		t.Error("docs/new.md went back to its source")
+	}
+
+	for link, want := range map[string]string{
+		"pic.png": "docs/pic.png", "./pic.png": "docs/pic.png", "/docs/pic.png": "docs/pic.png", "pic.png?raw=1": "docs/pic.png",
+		"../../pic.png": "", "https://example.com/pic.png": "", "new.md": "",
+	} {
+		if got, _ := picturePath("docs/new.md", link); got != want {
+			t.Errorf("picture %q at %q, want %q", link, got, want)
+		}
+	}
+	if _, err := a.preview.opts.LoadImage("pic.png"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Edited, the file and its picture show anew in the preview.
+	md := a.preview
+	if a.reloadFiles(); a.preview != md {
+		t.Error("the preview showed anew without a change")
+	}
+	if err := os.WriteFile(filepath.Join(repo, "docs", "new.md"), []byte("# Newer\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if a.reloadFiles(); a.preview == md || a.preview.text != "# Newer\n" {
+		t.Error("the preview did not follow the edited text")
+	}
+	md = a.preview
+	if _, err := md.opts.LoadImage("pic.png"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "docs", "pic.png"), append(testutil.PNG(t), 0), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if a.reloadFiles(); a.preview == md {
+		t.Error("the preview did not follow the edited picture")
+	}
+}
+
+func TestHTMLImages(t *testing.T) {
+	picture := `<p align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/a-dark.png 2x, docs/b.png">
+  <img alt="A" src="docs/a-light.png" width="400">
+</picture>
+</p>`
+	for _, tc := range []struct {
+		block    string
+		dark     bool
+		want     []htmlImage
+		centered bool
+	}{
+		{picture, false, []htmlImage{{"docs/a-light.png", "A", 400}}, true},
+		{picture, true, []htmlImage{{"docs/a-dark.png", "A", 400}}, true},
+		{`<a href="x"><img src="b.svg"></a> <img src="c.png">`, false, []htmlImage{{"b.svg", "", 0}, {"c.png", "", 0}}, false},
+		{`<details><summary>More</summary><img src="b.svg"></details>`, false, nil, false},
+		{`<p>Words <img src="b.svg"></p>`, false, nil, false},
+	} {
+		got, centered := htmlImages(tc.block, tc.dark)
+		if !slices.Equal(got, tc.want) || centered != tc.centered {
+			t.Errorf("htmlImages(%q, dark %v) = %v, %v; want %v, %v", tc.block, tc.dark, got, centered, tc.want, tc.centered)
+		}
+	}
+}

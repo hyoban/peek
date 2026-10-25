@@ -191,7 +191,7 @@ func (a *app) updateChanges(changes []git.Change) {
 // reloadFiles lists the work tree's files again for the files mode,
 // keeping the folders open and the file shown, its text where it is.
 func (a *app) reloadFiles() {
-	open := a.openFile
+	open, md := a.openFile, a.preview
 	a.background(func() func() {
 		files, err := git.ListFiles(a.repo, git.Worktree)
 		tree := fold(files)
@@ -201,6 +201,8 @@ func (a *app) reloadFiles() {
 			text, textErr = git.FileText(a.repo, git.Worktree, open)
 		}
 		picture, note := fileView(open, text, textErr)
+		// The preview shows anew where the text or its pictures changed.
+		stale := md != nil && md.stale(text)
 		return func() {
 			if cm, ok := a.current(); err != nil || !ok || cm.Hash != git.Worktree || a.filesFor != a.loadedRow {
 				return
@@ -220,18 +222,24 @@ func (a *app) reloadFiles() {
 				return
 			}
 			if !a.allTree.has(open) {
-				a.openFile, a.code, a.picture, a.codeNote = "", nil, nil, "" // deleted
+				a.openFile, a.code, a.picture, a.codeNote, a.preview = "", nil, nil, "", nil // deleted
 				return
 			}
 			a.allTree.show(open)
 			switch {
 			case note != "" || picture != nil:
-				a.code, a.picture, a.codeNote = nil, picture, note
+				a.code, a.picture, a.codeNote, a.preview = nil, picture, note, nil
 			case a.code != nil:
 				resetText(a.code.Buffer, text)
+				if stale && a.preview == md {
+					a.preview = a.newPreview(git.Worktree, open, text)
+				}
 			default:
 				a.code = newCode(open, text)
-				a.picture, a.codeNote = nil, ""
+				a.picture, a.codeNote, a.preview = nil, "", nil
+				if isMarkdown(open) {
+					a.preview = a.newPreview(git.Worktree, open, text)
+				}
 			}
 		}
 	})

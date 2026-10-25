@@ -15,6 +15,7 @@ var (
 	branchIcon   = icon(`<circle cx="4.5" cy="3.5" r="1.5"/><circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="5" r="1.5"/><path d="M4.5 5v6M11.5 6.5c0 2.5-3 2.5-5.5 4.6"/>`)
 	pullIcon     = icon(`<circle cx="4.5" cy="3.5" r="1.5"/><circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="12.5" r="1.5"/><path d="M4.5 5v6M11.5 11V6.5a2 2 0 0 0-2-2H7.5"/><path d="M9 3l-1.5 1.5L9 6"/>`)
 	checkIcon    = icon(`<path d="M3.5 8.5l3 3 6-7" stroke-width="1.6"/>`)
+	previewIcon  = icon(`<path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/>`)
 )
 
 // githubIcon is GitHub's mark, from Primer's Octicons (MIT), filled.

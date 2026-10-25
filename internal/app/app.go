@@ -93,6 +93,10 @@ type app struct {
 	code     *editor.State
 	picture  ui.ImageSource // the file's picture, in place of code
 	codeNote string         // why the text does not show
+	preview  *mdPreview     // a Markdown file's, beside its code
+	// previewed is the Markdown files shown as their previews, their
+	// sources showing by default.
+	previewed map[string]bool
 }
 
 func newApp(repo string) *app {
@@ -643,7 +647,14 @@ func (a *app) codePane(c *ui.Context) {
 	if a.picture != nil {
 		detail = pictureSize(a.picture)
 	}
-	column(c, a.openFile, detail, func() {
+	columnWith(c, a.openFile, func() {
+		if detail != "" {
+			ui.Text(c, detail).FontSize(smallSize).TextColor(c.Theme().TextMuted).SingleLine().Shrink(0)
+		}
+		if a.preview != nil && a.codeNote == "" {
+			a.previewButton(c)
+		}
+	}, func() {
 		switch {
 		case a.codeNote != "":
 			emptyNote(c, a.codeNote)
@@ -653,6 +664,8 @@ func (a *app) codePane(c *ui.Context) {
 			})
 		case a.code == nil:
 			emptyNote(c, "No file selected")
+		case a.previewing():
+			previewView(c, a.preview)
 		default:
 			editor.View(c.Key("code:"+a.openFile), a.code).Grow(1).FillWidth()
 		}
@@ -830,7 +843,7 @@ func (a *app) loadFiles(hash string) {
 				keep = a.file
 			}
 			if !a.openInFiles(hash, keep) {
-				a.openFile, a.code, a.picture, a.codeNote = "", nil, nil, ""
+				a.openFile, a.code, a.picture, a.codeNote, a.preview = "", nil, nil, "", nil
 			}
 		}
 	})
@@ -842,11 +855,17 @@ func (a *app) loadText(hash, p string) {
 		picture, note := fileView(p, text, err)
 		return func() {
 			if p == a.openFile {
-				var code *editor.State
+				var (
+					code    *editor.State
+					preview *mdPreview
+				)
 				if note == "" && picture == nil {
 					code = newCode(p, text)
+					if isMarkdown(p) {
+						preview = a.newPreview(hash, p, text)
+					}
 				}
-				a.code, a.picture, a.codeNote = code, picture, note
+				a.code, a.picture, a.codeNote, a.preview = code, picture, note, preview
 			}
 		}
 	})
