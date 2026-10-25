@@ -271,6 +271,13 @@ func TestReadDiffs(t *testing.T) {
 		t.Error("marking new.md viewed again did not fold it")
 	}
 
+	// Choosing a read file in the tree shows its diff, still read.
+	a.changeTree.show("docs/new.md")
+	settle(tt)
+	if a.file != "docs/new.md" || !docs.read || docs.folded() {
+		t.Errorf("after choosing new.md in the tree, file %q, read %v, folded %v; want it read and shown", a.file, docs.read, docs.folded())
+	}
+
 	// The marks stay with the commit while another shows.
 	a.setRead(a.diffs[0], true)
 	a.setRead(a.diffs[2], false)
