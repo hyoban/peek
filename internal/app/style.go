@@ -181,26 +181,3 @@ func searchField(c *ui.Context, key string, query *string, placeholder, label st
 	})
 	return f
 }
-
-// iconButton is a toolbar button showing an icon alone, as macOS toolbars'
-// items do where room is short, rather than a label cut short: named by
-// label for its tooltip and assistive technology, tinted where it tells of
-// a state, with a dot of the accent where something waits.
-func iconButton(c *ui.Context, key string, svg *ui.SVG, tint ui.Color, dot bool, label, tooltip string, disabled bool, click func()) {
-	t := c.Theme()
-	tip := label
-	if tooltip != "" && tooltip != label {
-		tip = label + "\n" + tooltip
-	}
-	ui.Button(c.Key(key), "").Shrink(0).Label(label).Tooltip(tip).Disabled(disabled).Children(func() {
-		ui.Box(c).Size(16, 16).Children(func() {
-			icon := ui.Icon(c, svg).Size(16, 16)
-			if tint != (ui.Color{}) {
-				icon.TextColor(tint)
-			}
-			if dot {
-				ui.Box(c).Size(6, 6).Radius(3).Background(t.Accent).Absolute().Right(-2).Top(-2)
-			}
-		})
-	}).OnClick(click)
-}

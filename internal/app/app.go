@@ -303,6 +303,14 @@ func toolGroup(c *ui.Context, label string, build func()) ui.Element {
 	return ui.Toolbar(c, build).Shrink(0).Padding(0).Label(label)
 }
 
+// actions are the toolbar's work on the commits: reviewing the changes
+// and shipping them, over the history, which they add to, or at the end
+// of the text's part while the history hides.
+func (a *app) actions(c *ui.Context) {
+	a.reviewButton(c)
+	a.pushButton(c)
+}
+
 // repository is the toolbar's controls of the repository: the project,
 // its branch and the commits to pull, over the sidebar, which lists its
 // files, or at the start of the text's part while the sidebar hides, as
@@ -317,8 +325,8 @@ func (a *app) repository(c *ui.Context) ui.Element {
 }
 
 // toolbar is the part of the toolbar over the text: the mode in the middle
-// and the actions at the end, with the buttons and the controls of the
-// columns hidden, which their own parts hold while they show.
+// and the page on GitHub at the end, with the buttons and the controls of
+// the columns hidden, which their own parts hold while they show.
 func (a *app) toolbar(c *ui.Context, start, end bool) {
 	t := c.Theme()
 	toolbarPart(c, start, end, func() {
@@ -341,9 +349,8 @@ func (a *app) toolbar(c *ui.Context, start, end bool) {
 				if page := cmp.Or(a.branchURL, a.github); page != "" {
 					a.linkButton(c, "github", githubIcon, "Open on GitHub", page)
 				}
-				a.reviewButton(c)
-				a.pushButton(c)
 				if end {
+					a.actions(c)
 					a.paneButton(c, "history", historyIcon, &a.showHistory, &a.collapsedHistory, "History")
 				}
 			})
@@ -544,6 +551,7 @@ func (a *app) history(c *ui.Context) {
 		toolbarPart(c, false, true, func() {
 			ui.Spacer(c)
 			toolGroup(c, "History Toolbar", func() {
+				a.actions(c)
 				a.paneButton(c, "history", historyIcon, &a.showHistory, &a.collapsedHistory, "History")
 			})
 		})
