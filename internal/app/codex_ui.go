@@ -66,16 +66,16 @@ func (a *app) changing() bool {
 // resultSheet shows what Codex answered in a sheet: its title and scope
 // over body, Copy apart at the start, copying text, and the button named
 // again, which asks once more, before Done.
-func resultSheet(c *ui.Context, open *bool, title, scope string, body func(), text, again string, disabled bool, onAgain func()) {
-	t := c.Theme()
+func (a *app) resultSheet(c *ui.Context, ch *child, open *bool, title, scope string, body func(c *ui.Context), text, again string, disabled bool, onAgain func()) {
 	services := c.Services()
-	sheet(c, open, title, 620, 480, func() {
+	a.sheet(c, ch, open, title, 620, 480, func(c *ui.Context) {
+		t := c.Theme()
 		ui.Text(c, title).FontWeight(600).FontSize(fontSize + 3).Shrink(0)
 		ui.Text(c, scope).TextColor(t.TextMuted).Shrink(0)
 		ui.Scroll(c).Grow(1).FillWidth().MinHeight(0).Children(func() {
-			ui.Column(c).FillWidth().Gap(t.Space(3)).Children(body)
+			ui.Column(c).FillWidth().Gap(t.Space(3)).Children(func() { body(c) })
 		})
-	}, func() {
+	}, func(c *ui.Context) {
 		// Copy apart at the start, as a sheet's secondary action, and the
 		// default button last.
 		ui.Button(c.Key("copy:"+title), "Copy").Disabled(text == "").OnClick(func() { services.WriteClipboard(text) })

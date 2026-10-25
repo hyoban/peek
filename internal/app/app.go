@@ -74,6 +74,8 @@ type app struct {
 	endTools                        ui.Handle // the controls at the end of the text's toolbar
 	endWidth                        float32   // their width, as last laid out
 	alert                           alertState
+	// The windows of AppKit's own the sheets and the switcher show in.
+	reviewSheet, explainSheet, switcherPopover child
 
 	showHistory, showTree   bool
 	historyWidth, treeWidth float32

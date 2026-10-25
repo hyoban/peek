@@ -73,7 +73,7 @@ func (a *app) branchLabel(c *ui.Context) {
 			return
 		}
 		a.openSwitcher()
-		a.switcher.field.Focus(c)
+		a.switcher.focus = true
 	})
 	b.Children(func() {
 		ui.Row(c).MinWidth(0).Gap(t.Space(1)).AlignItems(ui.Center).Children(func() {
@@ -84,16 +84,34 @@ func (a *app) branchLabel(c *ui.Context) {
 }
 
 // branchSwitcher shows the switcher under the branch's name, out of the
-// toolbar, whose keys move among its controls alone.
+// toolbar, whose keys move among its controls alone: in an NSPopover,
+// where there are windows.
 func (a *app) branchSwitcher(c *ui.Context) {
+	anchor := c.Resolve(a.switcher.button)
+	if !anchor.Valid() {
+		return
+	}
+	if a.native() {
+		a.popover(&a.switcherPopover, &a.switcher.open, anchor, switcherWidth+2*popoverPadding, func(c *ui.Context) {
+			a.focusSwitcher(c)
+			a.switcherPanel(c)
+		})
+		return
+	}
+	a.focusSwitcher(c)
+	ui.Popover(c.Key("branches"), anchor, &a.switcher.open, func() { a.switcherPanel(c) })
+}
+
+// focusSwitcher gives the switcher's field the keys, as it opens.
+func (a *app) focusSwitcher(c *ui.Context) {
 	if a.switcher.focus {
 		a.switcher.focus = false
 		a.switcher.field.Focus(c)
 	}
-	if anchor := c.Resolve(a.switcher.button); anchor.Valid() {
-		ui.Popover(c.Key("branches"), anchor, &a.switcher.open, func() { a.switcherPanel(c) })
-	}
 }
+
+// switcherWidth is the width of the switcher's content.
+const switcherWidth = 380
 
 // openSwitcher shows the switcher and reads again what it lists: the
 // branches at once, the pull requests as GitHub answers.
@@ -328,7 +346,7 @@ func (a *app) switchTo(target switchTarget) {
 func (a *app) switcherPanel(c *ui.Context) {
 	t := c.Theme()
 	s := &a.switcher
-	ui.Column(c).Width(380).Gap(t.Space(1)).Children(func() {
+	ui.Column(c).Width(switcherWidth).Gap(t.Space(1)).Children(func() {
 		ui.TextInput(c.Key("branch-query"), &s.query).Bind(&s.field).Label("Branch or pull request").
 			Placeholder("Branch, or pull request number or link").OnTextKey(func(k ui.TextKey) bool {
 			switch {

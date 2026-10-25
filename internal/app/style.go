@@ -3,6 +3,7 @@ package app
 import (
 	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -96,11 +97,31 @@ func activity(c *ui.Context, key, text, tooltip, stop string, cancel func()) {
 		Children(func() { ui.Icon(c, stopIcon).Size(12, 12) }).OnClick(cancel)
 }
 
-// sheet shows a dialog while *open is true, as AppKit's sheets: attached
+// sheet shows a dialog while *open is true, as AppKit's sheets: AppKit's
+// own, in a window of its own, where there are windows, else attached
 // under the toolbar, what is behind it waiting and a click there doing
-// nothing; Escape and Return close it, Done being its default button,
+// nothing. Escape and Return close it, Done being its default button,
 // last of the buttons that buttons builds.
-func sheet(c *ui.Context, open *bool, label string, width, height float32, body, buttons func()) {
+func (a *app) sheet(c *ui.Context, ch *child, open *bool, label string, width, height float32, body, buttons func(c *ui.Context)) {
+	content := func(c *ui.Context, panel ui.Element) {
+		t := c.Theme()
+		panel.Gap(t.Space(3)).Padding(t.Space(5)).Role(ui.RoleDialog).Label(label).Children(func() {
+			body(c)
+			ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Center).Gap(t.Space(2)).Children(func() {
+				buttons(c)
+				ui.PrimaryButton(c.Key("done"), "Done").OnClick(func() { *open = false })
+			})
+		})
+	}
+	if a.native() {
+		a.nativeSheet(ch, open, int(width), int(height), func(c *ui.Context) {
+			content(c, ui.Column(c).Fill().MinHeight(0))
+			if c.Shortcut(0, ui.KeyEscape) || c.Shortcut(0, ui.KeyEnter) {
+				*open = false
+			}
+		})
+		return
+	}
 	if !*open {
 		return
 	}
@@ -109,15 +130,8 @@ func sheet(c *ui.Context, open *bool, label string, width, height float32, body,
 		back := ui.Column(c.Key("sheet:"+label)).Absolute().Left(0).Top(0).Right(0).Bottom(0).
 			AlignItems(ui.Center).Padding(titleBarHeight, t.Space(4), t.Space(4), t.Space(4)).Modal()
 		back.Children(func() {
-			ui.Column(c).Width(width).Height(height).Shrink(1).MinHeight(0).MaxWidthPercent(100).
-				Gap(t.Space(3)).Padding(t.Space(5)).Radius(12).Background(t.Background).Border(1, t.Border).
-				Shadow(0, 10, 30, 0, ui.RGBA(0, 0, 0, 0.25)).Role(ui.RoleDialog).Label(label).Children(func() {
-				body()
-				ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Center).Gap(t.Space(2)).Children(func() {
-					buttons()
-					ui.PrimaryButton(c.Key("done"), "Done").OnClick(func() { *open = false })
-				})
-			})
+			content(c, ui.Column(c).Width(width).Height(height).Shrink(1).MinHeight(0).MaxWidthPercent(100).
+				Radius(12).Background(t.Background).Border(1, t.Border).Shadow(0, 10, 30, 0, ui.RGBA(0, 0, 0, 0.25)))
 		})
 		if back.OverlayShortcut(0, ui.KeyEscape) || back.OverlayShortcut(0, ui.KeyEnter) {
 			*open = false
@@ -126,9 +140,9 @@ func sheet(c *ui.Context, open *bool, label string, width, height float32, body,
 }
 
 // alertState is an alert about what failed meanwhile, such as a push,
-// over the window until the user answers it.
+// over the window until the user answers it; shown, once AppKit shows it.
 type alertState struct {
-	open           bool
+	open, shown    bool
 	title, message string
 }
 
@@ -137,8 +151,26 @@ func (a *app) showAlert(title, message string) {
 	a.alert = alertState{open: true, title: title, message: message}
 }
 
+// alerts shows the alert as the project shows: in an NSAlert, a sheet of
+// the window, where there are windows.
 func (a *app) alerts(c *ui.Context) {
-	ui.AlertDialog(c.Key("alert"), &a.alert.open, a.alert.title, a.alert.message, "OK")
+	if !a.native() {
+		ui.AlertDialog(c.Key("alert"), &a.alert.open, a.alert.title, a.alert.message, "OK")
+		return
+	}
+	if !a.alert.open || a.alert.shown {
+		return
+	}
+	a.alert.shown = true
+	alert, win := a.alert, a.win
+	go func() {
+		mygo.Dialog.Message(mygo.MessageOptions{Parent: win, Type: mygo.MessageWarning, Message: alert.title, Detail: alert.message})
+		win.Update(func() {
+			if a.alert == alert {
+				a.alert = alertState{}
+			}
+		})
+	}()
 }
 
 // searchField is a search field as AppKit's, as ui.SearchField draws one,

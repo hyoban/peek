@@ -184,10 +184,10 @@ func (r *reviewState) text() string {
 
 // reviewDetails is the review in a sheet, its findings to read and copy.
 func (a *app) reviewDetails(c *ui.Context) {
-	t := c.Theme()
 	services := c.Services()
 	r := &a.review
-	resultSheet(c, &r.open, r.title(), r.scope, func() {
+	a.resultSheet(c, &a.reviewSheet, &r.open, r.title(), r.scope, func(c *ui.Context) {
+		t := c.Theme()
 		if r.stale {
 			ui.Text(c, "This review is out of date. Review the current changes again.")
 		}

@@ -132,7 +132,7 @@ func (a *app) startExplain(services ui.Services) {
 func (a *app) explanationDetails(c *ui.Context) {
 	e := &a.explain
 	services := c.Services()
-	resultSheet(c, &e.open, "Explanation", e.scope, func() {
+	a.resultSheet(c, &a.explainSheet, &e.open, "Explanation", e.scope, func(c *ui.Context) {
 		if e.err != "" {
 			ui.Text(c, e.err).Selectable()
 			return
