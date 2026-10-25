@@ -162,14 +162,10 @@ go tool mygo build
 CGO_ENABLED=0 go test ./...
 ```
 
-The screenshots above are drawn by `TestSnapshot` over a clone of [Dify](https://github.com/langgenius/dify) with `main` at commit `9dc53da` ([#44561](https://github.com/langgenius/dify/pull/44561)), whose `origin` is the GitHub repository:
+The screenshots above are of Peek's window, 1236 by 800 points at 2×, over a clone of [Dify](https://github.com/langgenius/dify) with `main` at commit `9dc53da` ([#44561](https://github.com/langgenius/dify/pull/44561)), whose `origin` is the GitHub repository: that commit chosen in Changes, and `dify-agent-runtime/internal/agentcli/config.go` in Files, each in the light and the dark appearance, captured without the window's shadow:
 
 ```bash
-PEEK_REPO=path/to/dify PEEK_OUT=$PWD/docs/changes PEEK_COMMIT=1 go test ./internal/app -run 'Snapshot$'
-```
-
-```bash
-PEEK_REPO=path/to/dify PEEK_OUT=$PWD/docs/files PEEK_MODE=files PEEK_COMMIT=1 PEEK_FILE=dify-agent-runtime/internal/agentcli/config.go go test ./internal/app -run 'Snapshot$'
+screencapture -o -l <window number> docs/changes-light.png
 ```
 
 ## License
