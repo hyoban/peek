@@ -202,3 +202,24 @@ func TestShipWaitsForCheckout(t *testing.T) {
 		t.Fatal("checkout started during Ship")
 	}
 }
+
+// The GitHub button opens the branch's pull request where it has one, and
+// the repository's page on the default branch.
+func TestGitHubButtonOpensPullRequest(t *testing.T) {
+	repo, _ := testutil.RemoteRepo(t)
+	testutil.Git(t, repo, "switch", "-q", "-c", "feature")
+	testutil.Git(t, repo, "push", "-q", "-u", "origin", "feature")
+	testutil.Git(t, repo, "remote", "set-url", "origin", "https://github.com/hyoban/peek.git")
+	testutil.FakeGH(t, "https://github.com/hyoban/peek")
+	a, tt := testApp(t, repo, nil)
+	settle(tt)
+	if got, want := a.githubPage(), "https://github.com/hyoban/peek/pull/7"; got != want {
+		t.Fatalf("feature's page %q, want %q", got, want)
+	}
+	testutil.Git(t, repo, "switch", "-q", "main")
+	a.refresh()
+	settle(tt)
+	if got, want := a.githubPage(), "https://github.com/hyoban/peek"; got != want {
+		t.Fatalf("main's page %q, want %q", got, want)
+	}
+}

@@ -3,7 +3,6 @@
 package app
 
 import (
-	"cmp"
 	"fmt"
 	"log"
 	"os"
@@ -43,6 +42,9 @@ type app struct {
 	// branchURL is the branch's page on GitHub, which the button opens
 	// over the repository's where there is one.
 	branchURL string
+	// pullURL is the page of the branch's pull request, which the button
+	// opens over the branch's, as read for the branch's page pullURLFor.
+	pullURL, pullURLFor string
 	// inline runs loads on the UI thread, as tests and snapshots want,
 	// and redraw asks for the frame a window's Update would draw then.
 	// Those a pass starts wait in published for the next, as a window's
@@ -363,7 +365,7 @@ func (a *app) toolbar(c *ui.Context, start, end bool) {
 		// Both sides as wide, so that the mode stays in the middle.
 		ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Justify(ui.End).Gap(t.Space(1)).Children(func() {
 			toolGroup(c, "Toolbar", func() {
-				if page := cmp.Or(a.branchURL, a.github); page != "" {
+				if page := a.githubPage(); page != "" {
 					a.linkButton(c, "github", githubIcon, "Open on GitHub", page)
 				}
 				if end {
@@ -1064,6 +1066,7 @@ func (a *app) loadCommits() {
 			a.commits, a.worktreeChanges, a.branch, a.github, a.branchURL = h.commits, h.changes, h.branch, h.github, h.branchURL
 			a.canPush, a.behind, a.upstream, a.dirty = h.canPush, h.behind, h.upstream, len(h.changes)
 			a.updateReviewSource(h.review, h.reviewErr)
+			a.readPullURL(false)
 			if len(h.commits) > 0 {
 				a.commitRow = landingRow(h)
 			}

@@ -73,9 +73,9 @@ func FakeCodex(t *testing.T) {
 	FakeReviewCodex(t, `{"changes":["Update the files"],"subject":"Update the files"}`)
 }
 
-// FakeGH puts a gh on the PATH that lists one pull request and checks
-// it out as a branch of its name, recording what it was asked; its default
-// repository is github's, the page of one.
+// FakeGH puts a gh on the PATH that lists one pull request, takes it for
+// the branch's own and checks it out as a branch of its name, recording
+// what it was asked; its default repository is github's, the page of one.
 func FakeGH(t *testing.T, github string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -85,6 +85,7 @@ echo "$@" >> "` + log + `"
 case "$1 $2" in
   "repo view") echo "` + github + `" ;;
   "pr list") printf '%s' '[{"number":7,"title":"Add the switcher","headRefName":"switcher","isDraft":false,"author":{"login":"ada"}}]' ;;
+  "pr view") echo "` + github + `/pull/7" ;;
   "pr checkout") git switch -q -c "pr-$3" ;;
   *) exit 1 ;;
 esac

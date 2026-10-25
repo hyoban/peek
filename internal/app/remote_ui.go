@@ -1,9 +1,11 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"peek/internal/git"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -82,8 +84,46 @@ func (a *app) fetchRemote() {
 		moved, _ := git.FetchUpstream(ctx, repo)
 		return func() {
 			a.pull.fetching = false
+			a.readPullURL(true) // a pull request opened since
 			if moved {
 				a.refresh()
+			}
+		}
+	})
+}
+
+// githubPage is the page the GitHub button opens: the branch's pull
+// request, else the branch's page, else the repository's.
+func (a *app) githubPage() string {
+	if a.pullURLFor == a.branchURL {
+		return cmp.Or(a.pullURL, a.branchURL, a.github)
+	}
+	return cmp.Or(a.branchURL, a.github)
+}
+
+// readPullURL asks gh for the branch's pull request where the branch
+// moved to another page since, or always with again. Only a branch of
+// its own on GitHub, not the default one, has one.
+func (a *app) readPullURL(again bool) {
+	page := a.branchURL
+	if page == a.pullURLFor && !again {
+		return
+	}
+	if !strings.Contains(page, "/tree/") {
+		a.pullURL, a.pullURLFor = "", page
+		return
+	}
+	if page != a.pullURLFor {
+		a.pullURL, a.pullURLFor = "", page
+	}
+	repo := a.repo
+	a.background(func() func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		url := git.BranchPullRequestURL(ctx, repo)
+		return func() {
+			if a.branchURL == page {
+				a.pullURL, a.pullURLFor = url, page
 			}
 		}
 	})

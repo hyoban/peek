@@ -1,7 +1,6 @@
 package app
 
 import (
-	"cmp"
 	"os"
 	"path"
 	"path/filepath"
@@ -468,7 +467,7 @@ func (p *projects) setMenu() {
 			a.openSwitcher()
 			a.switcher.focus = true
 		}),
-		github: item("Open on GitHub", "", func(a *app) { mygo.Shell.OpenExternal(cmp.Or(a.branchURL, a.github)) }),
+		github: item("Open on GitHub", "", func(a *app) { mygo.Shell.OpenExternal(a.githubPage()) }),
 		finder: item("Show in Finder", "Alt+Cmd+R", func(a *app) { mygo.Shell.ShowItemInFolder(a.repo) }),
 		menuBar: newMenuItem(&mygo.MenuItem{Label: "Show in Menu Bar", Type: mygo.MenuItemCheckbox, Checked: p.menuBarOn,
 			Click: func(*mygo.MenuItem, *mygo.Window) { p.setMenuBarOn(!p.menuBarOn) }}),
@@ -587,7 +586,7 @@ func (p *projects) syncMenu() {
 	}
 	m.review.show(review, a.review.running || (a.reviewSource.ID != "" || a.reviewSourceErr != "") && !busy, false)
 	m.branch.show("Switch Branch…", a.branch != "" && !busy, false)
-	m.github.show("Open on GitHub", cmp.Or(a.branchURL, a.github) != "", false)
+	m.github.show("Open on GitHub", a.githubPage() != "", false)
 	m.finder.show("Show in Finder", true, false)
 }
 

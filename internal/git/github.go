@@ -176,6 +176,17 @@ func ListPullRequests(ctx context.Context, repo, page string) ([]PullRequest, er
 	return prs, nil
 }
 
+// BranchPullRequestURL returns the page of the pull request of the branch
+// checked out, as gh finds it, open or merged, "" where it has none or gh
+// cannot say.
+func BranchPullRequestURL(ctx context.Context, repo string) string {
+	out, err := gh(ctx, repo, "pr", "view", "--json", "url,state", "--jq", `select(.state != "CLOSED") | .url`)
+	if url := strings.TrimSpace(out); err == nil && pullURL.MatchString(url) {
+		return url
+	}
+	return ""
+}
+
 // CheckoutPullRequest checks out the pull request of the repository whose
 // page this is, as gh does, from a fork's too, as a local branch tracking
 // it.
