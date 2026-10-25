@@ -16,6 +16,7 @@ type commit struct {
 	Hash    string
 	Short   string
 	Subject string
+	Body    string // the message after the subject
 	Author  string
 	Email   string
 	Time    time.Time
@@ -87,20 +88,23 @@ func currentBranch(repo string) string {
 }
 
 func loadCommits(repo string, limit int) ([]commit, error) {
-	const sep = "\x1f"
+	// The body spans lines, so the records end with a separator of
+	// their own.
+	const sep, end = "\x1f", "\x1e"
 	out, err := git(repo, "log", fmt.Sprintf("-n%d", limit),
-		"--format=%H"+sep+"%h"+sep+"%s"+sep+"%an"+sep+"%ae"+sep+"%at")
+		"--format=%H"+sep+"%h"+sep+"%s"+sep+"%an"+sep+"%ae"+sep+"%at"+sep+"%b"+end)
 	if err != nil {
 		return nil, err
 	}
 	var commits []commit
-	for line := range strings.Lines(out) {
-		f := strings.Split(strings.TrimRight(line, "\n"), sep)
-		if len(f) != 6 {
+	for record := range strings.SplitSeq(out, end) {
+		f := strings.Split(strings.TrimLeft(record, "\n"), sep)
+		if len(f) != 7 {
 			continue
 		}
 		unix, _ := strconv.ParseInt(f[5], 10, 64)
-		commits = append(commits, commit{Hash: f[0], Short: f[1], Subject: f[2], Author: f[3], Email: f[4], Time: time.Unix(unix, 0)})
+		commits = append(commits, commit{Hash: f[0], Short: f[1], Subject: f[2], Body: strings.TrimSpace(f[6]),
+			Author: f[3], Email: f[4], Time: time.Unix(unix, 0)})
 	}
 	return commits, nil
 }

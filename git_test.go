@@ -577,3 +577,24 @@ func TestParseNumstat(t *testing.T) {
 		t.Errorf("parseNumstat = %v, want %v", got, want)
 	}
 }
+
+func TestLoadCommitsBody(t *testing.T) {
+	dir := testRepo(t)
+	if _, err := git(dir, "-c", "user.name=Ada", "-c", "user.email=ada@example.com",
+		"commit", "-q", "-a", "-m", "Second commit", "-m", "Why it changed.\n\nMore lines."); err != nil {
+		t.Fatal(err)
+	}
+	commits, err := loadCommits(dir, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(commits) != 2 {
+		t.Fatalf("got %d commits, want 2", len(commits))
+	}
+	if got := commits[0]; got.Subject != "Second commit" || got.Body != "Why it changed.\n\nMore lines." {
+		t.Errorf("got %q / %q", got.Subject, got.Body)
+	}
+	if got := commits[1]; got.Subject != "Initial commit" || got.Body != "" || got.Author != "Ada" {
+		t.Errorf("got %+v", got)
+	}
+}

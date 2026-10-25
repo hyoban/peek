@@ -392,7 +392,7 @@ func (a *app) commitItem(row ui.ListRow) {
 	cm := a.commits[row.Index]
 	in := rowInk(t, row.Selected(), row.ListFocused())
 	text, muted := in.text, in.muted
-	ui.Row(c).FillWidth().Gap(t.Space(2.5)).Padding(t.Space(2), t.Space(2)).AlignItems(ui.Start).Children(func() {
+	item := ui.Row(c).FillWidth().Gap(t.Space(2.5)).Padding(t.Space(2), t.Space(2)).AlignItems(ui.Start).Children(func() {
 		if cm.Hash == worktree {
 			orange := system(t, systemOrange)
 			badge := ui.Box(c).Size(30, 30).Shrink(0).Radius(999).Center().
@@ -420,12 +420,43 @@ func (a *app) commitItem(row ui.ListRow) {
 		ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
 			ui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(ui.Baseline).Children(func() {
 				ui.Text(c, cm.Subject).FontWeight(600).TextColor(text).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
-				ui.Text(c, shortDate(cm.Time, time.Now())).FontSize(smallSize).TextColor(muted).SingleLine().Shrink(0).
-					Tooltip(cm.Time.Format("Monday, January 2, 2006 at 15:04"))
+				ui.Text(c, shortDate(cm.Time, time.Now())).FontSize(smallSize).TextColor(muted).SingleLine().Shrink(0)
 			})
 			ui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(ui.Baseline).Children(func() {
 				ui.Text(c, cm.Author).FontSize(smallSize).TextColor(muted).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
 				ui.Text(c, cm.Short).FontSize(smallSize).Font(monoFamily).TextColor(muted).SingleLine().Shrink(0)
+			})
+		})
+	})
+	if cm.Hash != worktree {
+		commitDetails(c, item, cm)
+	}
+}
+
+// commitDetails shows more of the commit as the pointer rests on its row:
+// who and when in full, the whole hash and the message. The card
+// goes beside the row, toward the window's middle, as the history is at
+// its end.
+func commitDetails(c *ui.Context, item ui.Element, cm commit) {
+	t := c.Theme()
+	ui.TooltipBase(c, item, func(tip ui.Element) {
+		tip.AttachTo(item, ui.AnchorTopStart, ui.AnchorTopEnd).MarginEnd(t.Space(1.5))
+		tip.Width(t.Space(80)).Padding(t.Space(3)).Radius(t.Space(2)).
+			Background(t.Background).Border(1, t.Border).Shadow(0, 4, 16, 0, ui.RGBA(0, 0, 0, 0.18))
+		tip.Children(func() {
+			ui.Column(c).FillWidth().Gap(t.Space(2)).Children(func() {
+				// The pointer goes through the card, so nothing in it can
+				// scroll: the message is cut to lines as wrapped, after who
+				// and when, which stay in view.
+				ui.Text(c, cm.Subject).FontWeight(600).TextColor(t.Text).MaxLines(3)
+				ui.Column(c).FillWidth().Gap(t.Space(0.5)).Children(func() {
+					ui.Text(c, cm.Author+" <"+cm.Email+">").FontSize(smallSize).TextColor(t.TextMuted).SingleLine()
+					ui.Text(c, cm.Time.Format("Monday, January 2, 2006 at 15:04")).FontSize(smallSize).TextColor(t.TextMuted)
+					ui.Text(c, cm.Hash).FontSize(smallSize).Font(monoFamily).TextColor(t.TextMuted).SingleLine()
+				})
+				if cm.Body != "" {
+					ui.Text(c, cm.Body).FontSize(smallSize).TextColor(t.Text).MaxLines(10)
+				}
 			})
 		})
 	})
