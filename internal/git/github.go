@@ -40,7 +40,8 @@ func GitHubURL(repo string) string {
 
 // BranchGitHubURL returns the GitHub page of the branch checked out, on
 // the remote it tracks, "" where it tracks none on GitHub, as a branch
-// never pushed or a detached HEAD.
+// never pushed or a detached HEAD. The remote's default branch has the
+// repository's own page.
 func BranchGitHubURL(repo string) string {
 	head, err := git(repo, "symbolic-ref", "--quiet", "HEAD")
 	if err != nil {
@@ -57,11 +58,28 @@ func BranchGitHubURL(repo string) string {
 	if err != nil || page == "" {
 		return ""
 	}
+	if branch == remoteDefaultBranch(repo, remote) {
+		return page
+	}
 	parts := strings.Split(branch, "/")
 	for i, p := range parts {
 		parts[i] = neturl.PathEscape(p)
 	}
 	return page + "/tree/" + strings.Join(parts, "/")
+}
+
+// remoteDefaultBranch returns the branch the remote's HEAD names, or else
+// main or master where the remote has one.
+func remoteDefaultBranch(repo, remote string) string {
+	if out, err := git(repo, "symbolic-ref", "--quiet", "refs/remotes/"+remote+"/HEAD"); err == nil {
+		return strings.TrimPrefix(strings.TrimSpace(out), "refs/remotes/"+remote+"/")
+	}
+	for _, name := range []string{"main", "master"} {
+		if _, err := git(repo, "rev-parse", "--verify", "--quiet", "refs/remotes/"+remote+"/"+name); err == nil {
+			return name
+		}
+	}
+	return ""
 }
 
 // githubPage returns the page of a GitHub remote's URL, as SSH, scp-like
