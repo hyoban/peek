@@ -268,7 +268,7 @@ func TestReviewCancelAndLayout(t *testing.T) {
 	a.canPush = true
 	for _, width := range []int{640, 1200} {
 		tt := ui.NewTester(a.view, width, 800)
-		tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Left: 78})
+		tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Left: 68})
 		tt.Frame()
 		mode, ok := tt.Find("Changes")
 		if !ok {
@@ -394,7 +394,7 @@ func TestReviewSnapshot(t *testing.T) {
 	a.review = reviewState{result: &result, scope: "Uncommitted changes", open: true}
 	tt := ui.NewTester(a.view, 1280, 800)
 	tt.SetScale(2)
-	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Left: 78})
+	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Left: 68})
 	for _, dark := range []bool{false, true} {
 		tt.SetDark(dark)
 		settle(tt)

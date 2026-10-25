@@ -9,7 +9,7 @@ import (
 )
 
 // TestSnapshot draws the window over a real repository, light and dark,
-// with a macOS inset title bar and its traffic lights:
+// with a macOS compact title bar and its traffic lights:
 //
 //	PEEK_REPO=~/i/hyoban.cc PEEK_OUT=/tmp/peek go test -run Snapshot
 //
@@ -26,7 +26,7 @@ func TestSnapshot(t *testing.T) {
 	}
 	tt := ui.NewTester(a.view, 1280, 800)
 	tt.SetScale(2)
-	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Left: 78})
+	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Left: 68})
 	settle(tt)
 	if row, err := strconv.Atoi(os.Getenv("PEEK_COMMIT")); err == nil {
 		a.commitRow = row

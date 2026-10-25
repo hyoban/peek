@@ -287,7 +287,7 @@ func TestPushButtonLayouts(t *testing.T) {
 	a.loadedRow, a.commitRow = 0, 0
 	for _, width := range []int{640, 1200} {
 		tt := ui.NewTester(a.view, width, 800)
-		tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Left: 78})
+		tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Left: 68})
 		settle(tt)
 		if !tt.HasText("Ship") {
 			t.Fatalf("no Ship button at width %d", width)

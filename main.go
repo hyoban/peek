@@ -102,7 +102,11 @@ func newApp(repo string) *app {
 	}
 }
 
-const titleBarHeight = 52 // the height of an inset title bar
+// The title bar is a compact toolbar's, one row tall, the traffic lights
+// as far from its top as from its left.
+const titleBarHeight = 38
+
+var trafficLightsAt = mygo.Point{X: 13, Y: 12}
 
 // The sizes of text, the system's: 13 for the body, 11 for captions and
 // 12 for code, as Xcode's, which the user scales in their preferences.
@@ -211,6 +215,7 @@ func (a *app) toolbar(c *ui.Context) {
 			a.paneButton(c, "sidebar", sidebarIcon, &a.showTree, "Sidebar")
 			ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Gap(t.Space(1)).Children(func() {
 				a.projectTitle(c)
+				a.branchLabel(c)
 				if a.github != "" {
 					a.linkButton(c, "github", githubIcon, "Open on GitHub", a.github)
 				}
@@ -269,8 +274,8 @@ func (a *app) paneButton(c *ui.Context, key string, svg *ui.SVG, on *bool, pane 
 		Children(func() { ui.Icon(c, svg).Size(16, 16) }).OnClick(func() { *on = !*on })
 }
 
-// projectTitle is the title and subtitle of the window, as Xcode's
-// toolbar shows them, which a click on switches the project.
+// projectTitle is the title of the window, the project's name, which a
+// click on switches the project.
 func (a *app) projectTitle(c *ui.Context) {
 	t := c.Theme()
 	b := ui.ButtonBase(c.Key("project")).Bind(&a.titleButton).Shrink(1).MinWidth(0).
@@ -288,15 +293,24 @@ func (a *app) projectTitle(c *ui.Context) {
 		}
 	})
 	b.Children(func() {
-		ui.Column(c).MinWidth(0).Children(func() {
-			ui.Row(c).MinWidth(0).Gap(t.Space(1)).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, path.Base(a.repo)).FontWeight(700).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
-				ui.Icon(c, chevronIcon).Size(9, 9).Shrink(0).TextColor(t.TextMuted)
-			})
-			if a.branch != "" {
-				ui.Text(c, a.branch).FontSize(smallSize).TextColor(t.TextMuted).SingleLine().Ellipsis("…")
-			}
+		ui.Row(c).MinWidth(0).Gap(t.Space(1)).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, path.Base(a.repo)).FontWeight(700).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
+			ui.Icon(c, chevronIcon).Size(9, 9).Shrink(0).TextColor(t.TextMuted)
 		})
+	})
+}
+
+// branchLabel is the branch checked out, muted beside the project's name,
+// which gives way to it when the toolbar is narrow.
+func (a *app) branchLabel(c *ui.Context) {
+	if a.branch == "" {
+		return
+	}
+	t := c.Theme()
+	ui.Row(c).Shrink(2).MinWidth(0).Gap(t.Space(1)).AlignItems(ui.Center).TextColor(t.TextMuted).
+		Tooltip(a.branch).Children(func() {
+		ui.Icon(c, branchIcon).Size(12, 12).Shrink(0)
+		ui.Text(c, a.branch).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
 	})
 }
 
@@ -780,9 +794,10 @@ func main() {
 			MinWidth:  640,
 			MinHeight: 400,
 			// Opens where the user left it last time.
-			StateKey:      "main",
-			TitleBarStyle: mygo.TitleBarHiddenInset,
-			Content:       ui.View(p.view),
+			StateKey:             "main",
+			TitleBarStyle:        mygo.TitleBarHidden,
+			TrafficLightPosition: &trafficLightsAt,
+			Content:              ui.View(p.view),
 		})
 		p.win.OnClosed(func() {
 			for _, a := range p.apps {

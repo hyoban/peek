@@ -16,7 +16,7 @@ import (
 func TestToggleMatrix(t *testing.T) {
 	a, out := realApp(t)
 	tt := ui.NewTester(a.view, 1100, 640)
-	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Left: 78})
+	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Left: 68})
 	for _, mode := range []int{modeChanges, modeFiles} {
 		for _, history := range []bool{true, false} {
 			for _, tree := range []bool{true, false} {
@@ -34,7 +34,7 @@ func TestToggleMatrix(t *testing.T) {
 func trafficLights(img *image.RGBA, scale int) *image.RGBA {
 	colors := []color.RGBA{{0xff, 0x5f, 0x57, 0xff}, {0xfe, 0xbc, 0x2e, 0xff}, {0x28, 0xc8, 0x40, 0xff}}
 	for i, col := range colors {
-		cx, cy, r := (20+6+i*20)*scale, titleBarHeight/2*scale, 6*scale
+		cx, cy, r := (trafficLightsAt.X+7+i*20)*scale, titleBarHeight/2*scale, 6*scale
 		for y := cy - r; y <= cy+r; y++ {
 			for x := cx - r; x <= cx+r; x++ {
 				if (x-cx)*(x-cx)+(y-cy)*(y-cy) <= r*r {
