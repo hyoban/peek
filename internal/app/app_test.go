@@ -190,3 +190,64 @@ func TestGrouped(t *testing.T) {
 		t.Errorf("root %q for code only", got)
 	}
 }
+
+// As AppKit's split views do, the window's narrowing hides the history,
+// then the sidebar, and its widening shows them again, but a column the
+// user shows stays until the window resizes.
+func TestColumnsCollapse(t *testing.T) {
+	a := newApp("/tmp/repo")
+	a.commits = []git.Commit{{Hash: "abc", Short: "abc", Subject: "Initial commit", Author: "Ada"}}
+	a.loadedRow, a.commitRow = 0, 0
+	tt := ui.NewTester(a.view, 1200, 800)
+	tt.Frame()
+	if !a.showTree || !a.showHistory {
+		t.Fatal("columns hidden in a wide window")
+	}
+	tt.SetSize(900, 800)
+	tt.Frame()
+	if !a.showTree || a.showHistory {
+		t.Fatalf("tree %v, history %v at 900", a.showTree, a.showHistory)
+	}
+	tt.SetSize(640, 800)
+	tt.Frame()
+	if a.showTree || a.showHistory || !tt.HasText("Ship") {
+		t.Fatalf("tree %v, history %v at 640, texts %q", a.showTree, a.showHistory, tt.Texts())
+	}
+	if err := tt.Click("Show Sidebar"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !a.showTree {
+		t.Fatal("the sidebar shown did not stay")
+	}
+	tt.SetSize(1300, 800)
+	tt.Frame()
+	if !a.showTree || !a.showHistory {
+		t.Fatalf("tree %v, history %v after widening", a.showTree, a.showHistory)
+	}
+}
+
+// The jump bar's info button shows the commit's details in a popover, as
+// does Show Info in its row's context menu.
+func TestCommitInfo(t *testing.T) {
+	a, tt := testApp(t, testutil.Repo(t), nil)
+	settle(tt)
+	if _, ok := tt.Find("Show Info"); ok {
+		t.Fatal("info button on the work tree")
+	}
+	a.commitRow = 1
+	settle(tt)
+	cm, _ := a.current()
+	if err := tt.Click("Show Info"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !a.info.open || !tt.HasText(cm.Hash) {
+		t.Fatalf("info %+v, texts %q", a.info, tt.Texts())
+	}
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	if a.info.open {
+		t.Fatal("Escape left the popover open")
+	}
+}

@@ -14,14 +14,14 @@ func TestPullButton(t *testing.T) {
 	repo, remote := testutil.RemoteRepo(t)
 	a, tt := testApp(t, repo, nil)
 	tt.Frame()
-	if tt.HasText("↓ 1") {
+	if tt.HasText("Pull") {
 		t.Fatal("pull shows while up to date")
 	}
 	testutil.RemoteWork(t, remote, "remote.txt")
 	a.fetchRemote()
 	tt.Frame()
 	tt.Frame()
-	if a.behind != 1 || !tt.HasText("↓ 1") {
+	if a.behind != 1 || !tt.HasText("Pull") {
 		t.Fatalf("behind %d; texts %q", a.behind, tt.Texts())
 	}
 	if err := tt.Click("Pull"); err != nil {
@@ -29,8 +29,8 @@ func TestPullButton(t *testing.T) {
 	}
 	tt.Frame()
 	tt.Frame()
-	if a.behind != 0 || a.pull.err != "" || tt.HasText("↓ 1") {
-		t.Fatalf("behind %d, err %q after pulling", a.behind, a.pull.err)
+	if a.behind != 0 || a.alert.open {
+		t.Fatalf("behind %d, alert %+v after pulling", a.behind, a.alert)
 	}
 	if a.commits[1].Subject != "Remote work" {
 		t.Fatalf("history %+v", a.commits[:2])

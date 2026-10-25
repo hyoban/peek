@@ -115,10 +115,10 @@ func pictureDiffView(c *ui.Context, pd *pictureDiff) {
 	t := c.Theme()
 	ui.Row(c).FillWidth().AlignItems(ui.Start).Padding(t.Space(4)).Gap(t.Space(4)).Children(func() {
 		if pd.before != nil {
-			pictureView(c, pd.before, "Before · "+pictureSize(pd.before), statusColor(t, "D"))
+			pictureView(c, pd.before, "Before · "+pictureSize(pd.before), statusColor(c, "D"))
 		}
 		if pd.after != nil {
-			pictureView(c, pd.after, "After · "+pictureSize(pd.after), statusColor(t, "A"))
+			pictureView(c, pd.after, "After · "+pictureSize(pd.after), statusColor(c, "A"))
 		}
 	})
 }

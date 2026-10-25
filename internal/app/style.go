@@ -6,32 +6,41 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// The system colors of macOS, which differ a little in the dark.
+// The system colors of macOS, light and dark, and with Increase Contrast,
+// as NSColor's systemGreen and the others resolve in each appearance.
 var (
-	systemGreen  = [2]ui.Color{ui.Hex("#28a745"), ui.Hex("#30d158")}
-	systemRed    = [2]ui.Color{ui.Hex("#ff3b30"), ui.Hex("#ff453a")}
-	systemOrange = [2]ui.Color{ui.Hex("#f08c00"), ui.Hex("#ff9f0a")}
-	systemPurple = [2]ui.Color{ui.Hex("#af52de"), ui.Hex("#bf5af2")}
+	systemGreen  = colors{"#28cd41", "#32d74b", "#007d1b", "#5fe07a"}
+	systemRed    = colors{"#ff3b30", "#ff453a", "#d70015", "#ff6961"}
+	systemOrange = colors{"#ff9500", "#ff9f0a", "#c93400", "#ffb340"}
+	systemPurple = colors{"#af52de", "#bf5af2", "#8944ab", "#da8fff"}
 )
 
-func system(t *ui.Theme, c [2]ui.Color) ui.Color {
-	if t.Dark {
-		return c[1]
+// colors is a system color in light, dark, and the two with Increase
+// Contrast.
+type colors [4]string
+
+func system(c *ui.Context, sc colors) ui.Color {
+	i := 0
+	if c.Theme().Dark {
+		i = 1
 	}
-	return c[0]
+	if c.Preferences().HighContrast {
+		i += 2
+	}
+	return ui.Hex(sc[i])
 }
 
 // statusColor colors a change as Xcode's source control does.
-func statusColor(t *ui.Theme, s string) ui.Color {
+func statusColor(c *ui.Context, s string) ui.Color {
 	switch s {
 	case "A":
-		return system(t, systemGreen)
+		return system(c, systemGreen)
 	case "D":
-		return system(t, systemRed)
+		return system(c, systemRed)
 	case "R", "C":
-		return system(t, systemPurple)
+		return system(c, systemPurple)
 	}
-	return system(t, systemOrange)
+	return system(c, systemOrange)
 }
 
 // flat gives a borderless button the faces of its states, as toolbars'
@@ -72,4 +81,62 @@ func shortDate(t, now time.Time) string {
 		return t.Format("Jan 2")
 	}
 	return t.Format("2006/1/2")
+}
+
+// activity is a task under way in the toolbar, as Xcode's activity view
+// beside its Stop button: a small spinner, what it does, muted, and the
+// button that stops it, named stop.
+func activity(c *ui.Context, key, text, tooltip, stop string, cancel func()) {
+	t := c.Theme()
+	ui.Row(c.Key(key)).Shrink(1).MinWidth(0).Gap(t.Space(1.5)).AlignItems(ui.Center).Tooltip(tooltip).Children(func() {
+		ui.Spinner(c).Size(12, 12).Shrink(0)
+		ui.Text(c, text).TextColor(t.TextMuted).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
+	})
+	ui.Button(c.Key(key+"-stop"), "").Shrink(0).Label(stop).Tooltip(stop).
+		Children(func() { ui.Icon(c, stopIcon).Size(12, 12) }).OnClick(cancel)
+}
+
+// sheet shows a dialog while *open is true, as AppKit's sheets: attached
+// under the toolbar, what is behind it waiting and a click there doing
+// nothing; Escape and Return close it, Done being its default button,
+// last of the buttons that buttons builds.
+func sheet(c *ui.Context, open *bool, label string, width, height float32, body, buttons func()) {
+	if !*open {
+		return
+	}
+	t := c.Theme()
+	ui.Overlay(c, func() {
+		back := ui.Column(c.Key("sheet:"+label)).Absolute().Left(0).Top(0).Right(0).Bottom(0).
+			AlignItems(ui.Center).Padding(titleBarHeight, t.Space(4), t.Space(4), t.Space(4)).Modal()
+		back.Children(func() {
+			ui.Column(c).Width(width).Height(height).Shrink(1).MinHeight(0).MaxWidthPercent(100).
+				Gap(t.Space(3)).Padding(t.Space(5)).Radius(12).Background(t.Background).Border(1, t.Border).
+				Shadow(0, 10, 30, 0, ui.RGBA(0, 0, 0, 0.25)).Role(ui.RoleDialog).Label(label).Children(func() {
+				body()
+				ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Center).Gap(t.Space(2)).Children(func() {
+					buttons()
+					ui.PrimaryButton(c.Key("done"), "Done").OnClick(func() { *open = false })
+				})
+			})
+		})
+		if back.OverlayShortcut(0, ui.KeyEscape) || back.OverlayShortcut(0, ui.KeyEnter) {
+			*open = false
+		}
+	})
+}
+
+// alertState is an alert about what failed meanwhile, such as a push,
+// over the window until the user answers it.
+type alertState struct {
+	open           bool
+	title, message string
+}
+
+// showAlert tells of a failure in an alert, as AppKit's.
+func (a *app) showAlert(title, message string) {
+	a.alert = alertState{open: true, title: title, message: message}
+}
+
+func (a *app) alerts(c *ui.Context) {
+	ui.AlertDialog(c.Key("alert"), &a.alert.open, a.alert.title, a.alert.message, "OK")
 }

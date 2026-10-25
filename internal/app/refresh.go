@@ -77,9 +77,6 @@ func (a *app) applyHistory(h history) {
 	filesShown := a.filesFor >= 0 && a.filesFor == a.loadedRow
 	a.commits, a.branch, a.github, a.branchURL, a.err = h.commits, h.branch, h.github, h.branchURL, ""
 	a.canPush, a.behind, a.upstream = h.canPush, h.behind, h.upstream
-	if h.behind == 0 {
-		a.pull.err = "" // up to date after all, as pulled elsewhere
-	}
 	a.updateReviewSource(h.review, h.reviewErr)
 	a.commitRow = -1
 	if len(h.commits) > 0 {
@@ -246,26 +243,18 @@ func (a *app) reloadFiles() {
 	})
 }
 
-// watch refreshes the project shown as its files change, until another
-// shows; changes meanwhile wait for the project to show again, which
-// refreshes it then.
-func (p *projects) watch(a *app) {
-	if p.unwatch != nil {
-		p.unwatch()
-	}
+// watch refreshes the project as its files change, and fetches its
+// remote every while, until its window closes.
+func (a *app) watch() {
 	ctx, cancel := context.WithCancel(context.Background())
-	p.unwatch = cancel
-	win := p.win
+	a.unwatch = cancel
+	win := a.win
 	// The remote, at once and every while, for its new commits.
 	go func() {
 		tick := time.NewTicker(fetchEvery)
 		defer tick.Stop()
 		for {
-			win.Update(func() {
-				if p.cur == a {
-					a.fetchRemote()
-				}
-			})
+			win.Update(a.fetchRemote)
 			select {
 			case <-ctx.Done():
 				return
@@ -289,11 +278,7 @@ func (p *projects) watch(a *app) {
 			if _, err := w.Next(ctx); err != nil {
 				return
 			}
-			win.Update(func() {
-				if p.cur == a {
-					a.refresh()
-				}
-			})
+			win.Update(a.refresh)
 		}
 	}()
 }

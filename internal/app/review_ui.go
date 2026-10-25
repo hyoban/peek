@@ -31,36 +31,33 @@ func (a *app) updateReviewSource(snapshot review.Snapshot, err string) {
 
 func (a *app) reviewButton(c *ui.Context) {
 	services := c.Services()
-	label, tooltip := "Review", "Review changes with Codex"
-	elapsedText := ""
-	switch {
-	case a.review.running:
-		label, tooltip = "Reviewing…", "Codex is reviewing changes. Click to cancel."
+	if a.review.running {
+		text, tooltip := "Reviewing…", "Codex is reviewing the changes"
 		if a.review.phase != "" {
 			if a.review.started.IsZero() {
 				a.review.started = c.Now()
 			}
 			elapsed := c.Now().Sub(a.review.started).Truncate(time.Second)
-			elapsedText = elapsed.String()
-			label = fmt.Sprintf("%s %s", a.review.phase, elapsed)
-			tooltip = a.review.detail + "\nElapsed: " + elapsed.String() + "\nClick to cancel"
+			text, tooltip = fmt.Sprintf("%s %s", a.review.phase, elapsed), a.review.detail
 			c.After(time.Second)
 		}
+		activity(c, "review", text, tooltip, "Stop Review", func() { a.review.cancel() })
+		return
+	}
+	label, tooltip := "Review", "Review the changes with Codex"
+	switch {
 	case a.review.stale:
-		label, tooltip = "Review again", "Changes have changed since the last review. Click to review again."
+		label, tooltip = "Review Again", "The changes have changed since the last review"
 	case a.review.err != "":
-		label, tooltip = "Review error", a.review.err+"\nClick for details"
+		label, tooltip = "Review Error", a.review.err
 	case a.review.result != nil:
-		label = "Passed"
-		tooltip = a.review.result.Summary
+		label, tooltip = "Passed", a.review.result.Summary
 		if n := len(a.review.result.Findings); n > 0 && a.review.result.Verdict != "failed" {
 			tooltip += "\n" + count(n, "minor finding")
 		}
 		if a.review.result.Verdict == "failed" {
-			label = "Not passed"
-			tooltip += "\nReview copied to clipboard"
+			label = "Not Passed"
 		}
-		tooltip += "\nClick for details"
 	case a.reviewSourceErr != "":
 		tooltip = a.reviewSourceErr
 	case a.reviewSource.ID == "":
@@ -70,31 +67,19 @@ func (a *app) reviewButton(c *ui.Context) {
 	}
 	available := a.reviewSource.ID != "" || a.reviewSourceErr != ""
 	completed := !a.review.stale && (a.review.result != nil || a.review.err != "")
-	disabled := a.push.running || (!a.review.running && (a.switcher.running != "" || a.pull.running || !available && !completed))
-	if a.review.stale && !available && !a.review.running {
+	disabled := a.push.running || a.switcher.running != "" || a.pull.running || !available && !completed
+	if a.review.stale && !available {
 		label, tooltip = "Review", "Nothing to review"
 	}
 	ui.Button(c.Key("review"), "").Label(label).Shrink(1).MinWidth(0).Disabled(disabled).Tooltip(tooltip).
 		Children(func() {
-			if elapsedText != "" {
-				ui.Row(c).Gap(4).Shrink(1).MinWidth(0).Children(func() {
-					ui.Text(c, a.review.phase).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
-					ui.Text(c, elapsedText).SingleLine().Shrink(0)
-				})
-			} else {
-				ui.Text(c, label).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
-			}
+			ui.Text(c, label).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
 		}).OnClick(func() {
-		switch {
-		case a.review.running:
-			a.review.cancel()
-		case a.review.stale:
-			a.startReview(services)
-		case a.review.result != nil || a.review.err != "":
+		if completed {
 			a.review.open = true
-		default:
-			a.startReview(services)
+			return
 		}
+		a.startReview(services)
 	})
 }
 
@@ -140,9 +125,6 @@ func (a *app) startReview(services ui.Services) {
 				a.review.err = err.Error()
 			} else if !a.review.stale {
 				a.review.result = &result
-				if result.Verdict == "failed" {
-					services.WriteClipboard(a.review.text())
-				}
 			}
 			a.refresh()
 		}
@@ -168,10 +150,11 @@ func (r *reviewState) text() string {
 	return r.title() + "\n" + r.scope + "\n\n" + body
 }
 
+// reviewDetails is the review in a sheet, its findings to read and copy.
 func (a *app) reviewDetails(c *ui.Context) {
 	t := c.Theme()
 	services := c.Services()
-	ui.Modal(c.Key("review-details"), &a.review.open, func() {
+	sheet(c, &a.review.open, a.review.title(), 620, 480, func() {
 		ui.Text(c, a.review.title()).FontWeight(600).FontSize(fontSize + 3).Shrink(0)
 		ui.Text(c, a.review.scope).TextColor(t.TextMuted).Shrink(0)
 		ui.Scroll(c).Grow(1).FillWidth().MinHeight(0).Children(func() {
@@ -194,11 +177,12 @@ func (a *app) reviewDetails(c *ui.Context) {
 				}
 			})
 		})
-		ui.Row(c).FillWidth().Shrink(0).Justify(ui.End).Gap(t.Space(2)).Children(func() {
-			ui.Button(c.Key("review-again"), "Review again").Disabled(a.push.running || a.review.running || a.pull.running || a.reviewSource.ID == "").
-				OnClick(func() { a.startReview(services) })
-			ui.Button(c.Key("copy-review"), "Copy").OnClick(func() { services.WriteClipboard(a.review.text()) })
-			ui.Button(c.Key("close-review"), "Close").OnClick(func() { a.review.open = false })
-		})
-	}).Width(620).Height(480)
+	}, func() {
+		// Copy apart at the start, as a sheet's secondary action, and the
+		// default button last.
+		ui.Button(c.Key("copy-review"), "Copy").OnClick(func() { services.WriteClipboard(a.review.text()) })
+		ui.Spacer(c)
+		ui.Button(c.Key("review-again"), "Review Again").Disabled(a.push.running || a.review.running || a.pull.running || a.reviewSource.ID == "").
+			OnClick(func() { a.startReview(services) })
+	})
 }

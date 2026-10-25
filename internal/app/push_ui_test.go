@@ -19,7 +19,7 @@ func TestPushUI(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.push.running || a.push.failed || !tt.HasText("Shipped") {
+	if a.push.running || !tt.HasText("Shipped") {
 		t.Fatalf("push state %+v; texts %q", a.push, tt.Texts())
 	}
 	if a.commits[0].Summary != "No changes" || a.commits[1].Subject != "Update the files" {
@@ -45,7 +45,10 @@ func TestPushUI(t *testing.T) {
 	cancelled := false
 	a.push = pushState{running: true, status: "Generating commit message with Codex…", cancel: func() { cancelled = true }}
 	tt.Frame()
-	if err := tt.Click("Generating…"); err != nil {
+	if !tt.HasText("Generating…") {
+		t.Fatal("no activity", tt.Texts())
+	}
+	if err := tt.Click("Stop Shipping"); err != nil {
 		t.Fatal(err)
 	}
 	if !cancelled {
@@ -59,16 +62,20 @@ func TestPushUI(t *testing.T) {
 	if !a.canPush {
 		t.Fatal("Ship did not enable for new changes")
 	}
-	a.push = pushState{failed: true, status: "Test failure"}
+	a.push = pushState{}
+	a.showAlert("Couldn’t Ship", "Test failure")
 	tt.Frame()
-	tt.Advance(4 * time.Second)
-	if !tt.HasText("Ship failed") {
-		t.Fatal(tt.Texts())
+	if !tt.HasText("Couldn’t Ship") || !tt.HasText("Test failure") {
+		t.Fatal("no alert", tt.Texts())
 	}
-	for range 3 {
-		tt.Frame()
+	if err := tt.Click("OK"); err != nil {
+		t.Fatal(err)
 	}
-	if err := tt.Click("Ship failed"); err != nil {
+	tt.Frame()
+	if a.alert.open {
+		t.Fatal("alert stayed open")
+	}
+	if err := tt.Click("Ship"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -95,7 +102,6 @@ func TestPushButtonLayouts(t *testing.T) {
 		for _, state := range []pushState{
 			{running: true, status: "Generating commit message with Codex…"},
 			{running: true, status: "Shipping origin/main…"},
-			{failed: true, status: "Test failure"},
 			{status: "Shipped to origin/main"},
 			{},
 		} {

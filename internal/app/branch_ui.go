@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"peek/internal/git"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -27,6 +28,12 @@ type switcherState struct {
 	running  string // what is checked out meanwhile, "" for nothing
 	err      string
 	field    ui.Handle // the query's, which takes the keys as it opens
+	focus    bool      // the field is to take the keys, as the menu bar opened the switcher
+	// moved is the row the arrows or the pointer moved to, for the query
+	// movedFor; reveal scrolls it into view.
+	moved    int
+	movedFor string
+	reveal   bool
 	button   ui.Handle // the branch's name, under which the switcher shows
 }
 
@@ -79,6 +86,10 @@ func (a *app) branchLabel(c *ui.Context) {
 // branchSwitcher shows the switcher under the branch's name, out of the
 // toolbar, whose keys move among its controls alone.
 func (a *app) branchSwitcher(c *ui.Context) {
+	if a.switcher.focus {
+		a.switcher.focus = false
+		a.switcher.field.Focus(c)
+	}
 	if anchor := c.Resolve(a.switcher.button); anchor.Valid() {
 		ui.Popover(c.Key("branches"), anchor, &a.switcher.open, func() { a.switcherPanel(c) })
 	}
@@ -89,6 +100,7 @@ func (a *app) branchSwitcher(c *ui.Context) {
 func (a *app) openSwitcher() {
 	s := &a.switcher
 	s.open, s.query, s.err = true, "", ""
+	s.moved, s.movedFor = 0, "\x00" // none moved to yet
 	s.gen++
 	gen, repo := s.gen, a.repo
 	a.background(func() func() {
@@ -159,20 +171,92 @@ func (a *app) matches() (local, remote []string, prs []git.PullRequest, named in
 	return local, remote, prs, named
 }
 
-// submitSwitch checks out what Enter in the field picks: the pull request
-// the query names, else the first row.
-func (a *app) submitSwitch() {
+// switchRow is a row of the switcher, under its heading.
+type switchRow struct {
+	target        switchTarget
+	heading       string // the section it starts, "" for none
+	icon          *ui.SVG
+	title, detail string
+}
+
+// rows lists what the query keeps, in the switcher's order: the local
+// branches, the remote ones, the open pull requests, and the pull request
+// the query names where none listed is it. preferred is the row Enter
+// picks before the arrows move: the pull request named, else the first.
+func (a *app) rows() (rows []switchRow, preferred int) {
 	local, remote, prs, named := a.matches()
-	switch {
-	case named > 0:
-		a.switchTo(a.pullTarget(named))
-	case len(local) > 0:
-		a.switchTo(a.localTarget(local[0]))
-	case len(remote) > 0:
-		a.switchTo(switchTarget{branch: remote[0], remote: true})
-	case len(prs) > 0:
-		a.switchTo(a.pullTarget(prs[0].Number))
+	heading := func(title string) func() string {
+		first := true
+		return func() string {
+			if first {
+				first = false
+				return title
+			}
+			return ""
+		}
 	}
+	h := heading("Branches")
+	for _, b := range local {
+		rows = append(rows, switchRow{target: a.localTarget(b), heading: h(), icon: branchIcon, title: b})
+	}
+	h = heading("Remote Branches")
+	for _, b := range remote {
+		rows = append(rows, switchRow{target: switchTarget{branch: b, remote: true}, heading: h(), icon: branchIcon, title: b})
+	}
+	if a.github == "" {
+		return rows, 0
+	}
+	h = heading("Pull Requests")
+	listedNamed := false
+	for _, pr := range prs {
+		if pr.Number == named {
+			listedNamed, preferred = true, len(rows)
+		}
+		detail := pr.Branch
+		if pr.Draft {
+			detail = "Draft · " + detail
+		}
+		rows = append(rows, switchRow{target: a.pullTarget(pr.Number), heading: h(), icon: pullIcon,
+			title: fmt.Sprintf("#%d %s", pr.Number, pr.Title), detail: detail})
+	}
+	if named > 0 && !listedNamed {
+		preferred = len(rows)
+		rows = append(rows, switchRow{target: a.pullTarget(named), heading: h(), icon: pullIcon,
+			title: fmt.Sprintf("Check out pull request #%d", named)})
+	}
+	return rows, preferred
+}
+
+// submitSwitch checks out the row highlighted, as Enter in the field does.
+func (a *app) submitSwitch() {
+	rows, preferred := a.rows()
+	i := a.highlighted(len(rows), preferred)
+	if i >= 0 {
+		a.switchTo(rows[i].target)
+	}
+}
+
+// highlighted is the row the arrows have moved to for the query, else the
+// preferred one; -1 for no rows.
+func (a *app) highlighted(n, preferred int) int {
+	s := &a.switcher
+	if s.movedFor != s.query || s.moved >= n {
+		return min(preferred, n-1)
+	}
+	return s.moved
+}
+
+// moveHighlight moves the highlight by delta rows, round the ends, as the
+// arrows in the field ask.
+func (a *app) moveHighlight(delta int) {
+	s := &a.switcher
+	rows, preferred := a.rows()
+	n := len(rows)
+	if n == 0 {
+		return
+	}
+	s.moved, s.movedFor = (a.highlighted(n, preferred)+delta+n)%n, s.query
+	s.reveal = true
 }
 
 // localTarget is the local branch's row: the work tree it is checked out
@@ -238,47 +322,51 @@ func (a *app) switchTo(target switchTarget) {
 
 // switcherPanel is the switcher's content: the field, then the local
 // branches, the remote ones and the open pull requests, and a note of
-// what is checked out or why it was not.
+// what is checked out or why it was not. As a menu, the row under the
+// pointer or that the arrows move to is highlighted, which Enter checks
+// out.
 func (a *app) switcherPanel(c *ui.Context) {
 	t := c.Theme()
 	s := &a.switcher
 	ui.Column(c).Width(380).Gap(t.Space(1)).Children(func() {
 		ui.TextInput(c.Key("branch-query"), &s.query).Bind(&s.field).Label("Branch or pull request").
-			Placeholder("Branch, or pull request number or link").OnSubmit(a.submitSwitch)
-		local, remote, prs, named := a.matches()
+			Placeholder("Branch, or pull request number or link").OnTextKey(func(k ui.TextKey) bool {
+			switch {
+			case k.Mods == 0 && k.Key == ui.KeyDown:
+				a.moveHighlight(1)
+			case k.Mods == 0 && k.Key == ui.KeyUp:
+				a.moveHighlight(-1)
+			case k.Mods == 0 && k.Key == ui.KeyEnter:
+				a.submitSwitch()
+			default:
+				return false
+			}
+			return true
+		})
+		rows, preferred := a.rows()
+		lit := a.highlighted(len(rows), preferred)
 		ui.Scroll(c.Key("branch-list")).FillWidth().MaxHeight(380).Children(func() {
 			ui.Column(c).FillWidth().Gap(1).Children(func() {
 				if !s.listed {
 					ui.Row(c).FillWidth().Justify(ui.Center).Padding(t.Space(2)).Children(func() { ui.Spinner(c).Label("Loading") })
 				}
-				if len(local) > 0 {
-					switcherHeading(c, "Branches")
-				}
-				for _, b := range local {
-					a.switcherRow(c, a.localTarget(b), branchIcon, b, "")
-				}
-				if len(remote) > 0 {
-					switcherHeading(c, "Remote Branches")
-				}
-				for _, b := range remote {
-					a.switcherRow(c, switchTarget{branch: b, remote: true}, branchIcon, b, "")
+				for i, row := range rows {
+					if row.heading != "" {
+						switcherHeading(c, row.heading)
+					}
+					if a.switcherRow(c, row, i == lit) {
+						s.moved, s.movedFor = i, s.query
+					}
 				}
 				if a.github == "" {
 					return
 				}
-				switcherHeading(c, "Pull Requests")
-				listedNamed := false
-				for _, pr := range prs {
-					listedNamed = listedNamed || pr.Number == named
-					detail := pr.Branch
-					if pr.Draft {
-						detail = "Draft · " + detail
-					}
-					a.switcherRow(c, a.pullTarget(pr.Number), pullIcon, fmt.Sprintf("#%d %s", pr.Number, pr.Title), detail)
+				if !slices.ContainsFunc(rows, func(r switchRow) bool { return r.target.pr > 0 }) {
+					switcherHeading(c, "Pull Requests")
 				}
+				_, _, prs, named := a.matches()
 				switch {
-				case named > 0 && !listedNamed:
-					a.switcherRow(c, a.pullTarget(named), pullIcon, fmt.Sprintf("Check out pull request #%d", named), "")
+				case named > 0:
 				case !s.prsRead:
 					ui.Row(c).FillWidth().Justify(ui.Center).Padding(t.Space(2)).Children(func() { ui.Spinner(c).Label("Loading pull requests") })
 				case s.prErr != "":
@@ -295,7 +383,7 @@ func (a *app) switcherPanel(c *ui.Context) {
 				ui.Text(c, "Checking out "+s.running+"…").FontSize(smallSize).TextColor(t.TextMuted).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
 			})
 		case s.err != "":
-			ui.Text(c, s.err).FontSize(smallSize).TextColor(system(t, systemRed)).Selectable().
+			ui.Text(c, s.err).FontSize(smallSize).TextColor(system(c, systemRed)).Selectable().
 				Padding(t.Space(1), t.Space(2)).FillWidth()
 		}
 	})
@@ -313,9 +401,11 @@ func switcherNote(c *ui.Context, note string) {
 }
 
 // switcherRow is a row to check out, the branch checked out marked, and
-// those of other work trees.
-func (a *app) switcherRow(c *ui.Context, target switchTarget, svg *ui.SVG, title, detail string) {
+// those of other work trees; lit, in the accent as a menu's highlighted
+// item. It reports whether the pointer is on it, which highlights it.
+func (a *app) switcherRow(c *ui.Context, row switchRow, lit bool) (hovered bool) {
 	t := c.Theme()
+	target, title, detail := row.target, row.title, row.detail
 	key := "branch:" + target.branch
 	if target.pr > 0 {
 		key = "pr:" + strconv.Itoa(target.pr)
@@ -323,26 +413,39 @@ func (a *app) switcherRow(c *ui.Context, target switchTarget, svg *ui.SVG, title
 	current := target.pr == 0 && !target.remote && target.branch == a.branch
 	tooltip := title
 	if target.worktree != "" {
-		detail, tooltip = "Worktree", title+"\nOpen the worktree at "+target.worktree
+		detail, tooltip = "Worktree", title+"\nOpens the worktree at "+target.worktree
 	}
+	text, muted := t.Text, t.TextMuted
 	b := ui.ButtonBase(c.Key(key)).FillWidth().Padding(t.Space(1), t.Space(2)).Radius(t.Radius).
 		Label(title).Tooltip(tooltip).Disabled(a.switcher.running != "" || a.pull.running)
-	flat(b, t, false)
+	if lit {
+		text, muted = t.AccentText, t.AccentText.Alpha(0.72)
+		b.Background(t.Accent)
+		if a.switcher.reveal {
+			a.switcher.reveal = false
+			b.ScrollIntoView()
+		}
+	}
 	b.OnClick(func() { a.switchTo(target) })
 	b.Children(func() {
 		ui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-			ui.Icon(c, svg).Size(14, 14).Shrink(0).TextColor(t.TextMuted)
+			ui.Icon(c, row.icon).Size(14, 14).Shrink(0).TextColor(muted)
 			weight := 400
 			if current {
 				weight = 600
 			}
-			ui.Text(c, title).FontWeight(weight).SingleLine().Ellipsis("…").Grow(1).Shrink(1).MinWidth(0)
+			ui.Text(c, title).FontWeight(weight).TextColor(text).SingleLine().Ellipsis("…").Grow(1).Shrink(1).MinWidth(0)
 			if detail != "" {
-				ui.Text(c, detail).FontSize(smallSize).TextColor(t.TextMuted).SingleLine().Ellipsis("…").Shrink(2).MinWidth(0).MaxWidth(150)
+				ui.Text(c, detail).FontSize(smallSize).TextColor(muted).SingleLine().Ellipsis("…").Shrink(2).MinWidth(0).MaxWidth(150)
 			}
 			if current {
-				ui.Icon(c, checkIcon).Size(12, 12).Shrink(0).TextColor(t.Accent)
+				check := t.Accent
+				if lit {
+					check = t.AccentText
+				}
+				ui.Icon(c, checkIcon).Size(12, 12).Shrink(0).TextColor(check)
 			}
 		})
 	})
+	return b.Hovered() && !lit
 }

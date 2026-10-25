@@ -33,7 +33,8 @@ const (
 // commit, and the diff or the text of the chosen file.
 type app struct {
 	win      *mygo.Window
-	projects *projects // the window's, nil in tests
+	unwatch  func()    // stops watching the project, as its window closes
+	projects *projects // the windows', nil in tests
 	avatars  *avatars  // nil shows initials alone
 	repo     string
 	branch   string
@@ -61,9 +62,15 @@ type app struct {
 	// focus and inactiveTheme the one of lists without it.
 	theme, listTheme, inactiveTheme *ui.Theme
 	titleButton                     ui.Handle // the project's name, under which the projects list
+	info                            infoState
+	alert                           alertState
 
 	showHistory, showTree   bool
 	historyWidth, treeWidth float32
+	// collapsedHistory and collapsedTree are the columns the window's
+	// narrowing hid, which its widening shows again.
+	collapsedHistory, collapsedTree bool
+	fitWidth                        float32 // the window's width fit last
 	mode                    int
 	modeChoice              int // the mode switch's, which setMode follows
 
@@ -141,13 +148,9 @@ func (a *app) themed(c *ui.Context) {
 	t := c.Theme() // a copy for this pass
 	t.FontSize = fontSize * c.Preferences().TextScale
 	c.SetTheme(t)
-	// Rows hover fainter than the gray of a choice without the focus, so
-	// the row under the pointer never passes for the chosen one.
+	// Rows show nothing under the pointer, as AppKit's tables and outlines.
 	list := *t
-	list.SurfaceHover = t.Text.Alpha(0.04)
-	if t.Dark {
-		list.SurfaceHover = t.Text.Alpha(0.06)
-	}
+	list.SurfaceHover = ui.Transparent
 	inactive := list
 	inactive.Accent = t.Text.Alpha(0.12)
 	if t.Dark {
@@ -166,47 +169,95 @@ func (a *app) view(c *ui.Context) {
 	a.building = true
 	defer func() { a.building = false }()
 	a.themed(c)
-	// The shortcuts are the View menu's (viewMenu), as the menu bar holds
-	// every command of a Mac app.
+	// The shortcuts are the menu bar's (viewMenu, repositoryMenu), as it
+	// holds every command of a Mac app.
 
-	// The toolbar stays as it is whichever columns show, so its controls
-	// never move. The tree and the text keep their places whichever mode
-	// shows, the history at the end, as an inspector. The toolbar changes
-	// the state in actions, after the pass, so that all of the pass sees
-	// the same.
-	history := a.showHistory
+	// Over the window's material the sidebar shows it, and the other
+	// columns draw their own backgrounds, as AppKit's source lists do.
+	if c.Vibrancy() {
+		c.Root().Background(ui.Transparent)
+	}
+	// Each column has its part of the toolbar, which the dividers between
+	// them run through, as AppKit splits a toolbar along a split view. The
+	// tree and the text keep their places whichever mode shows, the
+	// history at the end, as an inspector. The toolbar changes the state
+	// in actions, after the pass, so that all of the pass sees the same.
+	a.fit(c.Size())
+	tree, history := a.showTree, a.showHistory
 	content := func() {
-		if a.mode == modeFiles {
-			a.codePane(c)
-		} else {
-			a.diffPane(c)
-		}
+		ui.Column(c).Fill().Background(a.theme.Background).Children(func() {
+			a.toolbar(c, !tree, !history)
+			if a.mode == modeFiles {
+				a.codePane(c)
+			} else {
+				a.diffPane(c)
+			}
+		})
 	}
 	rest := func() {
-		if a.showTree {
+		if tree {
 			ui.Split(c, &a.treeWidth, func() { a.treePane(c) }, content).Fill()
 		} else {
 			content()
 		}
 	}
-	ui.Column(c).Fill().Children(func() {
-		a.toolbar(c)
-		ui.Divider(c)
-		ui.Row(c).Grow(1).FillWidth().MinHeight(0).Children(func() {
-			if history {
-				endSplit(c, &a.historyWidth, func() { a.history(c) }, rest).Fill()
-			} else {
-				rest()
-			}
-		})
-	})
+	if history {
+		endSplit(c, &a.historyWidth, func() { a.history(c) }, rest).Fill()
+	} else {
+		rest()
+	}
 	a.branchSwitcher(c)
+	a.commitInfo(c)
+	a.alerts(c)
 	a.reviewDetails(c)
 	a.sync(c)
 	if a.redraw {
 		a.redraw = false
 		c.Services().Invalidate()
 	}
+}
+
+// minContent is the narrowest the text gets beside the side columns,
+// room for the toolbar's controls over it.
+const minContent = 480
+
+// fit hides the history, then the sidebar, where the window is too narrow
+// for them beside the text, and shows them again as it widens, as AppKit's
+// split views collapse their sidebars as the window narrows. It acts as
+// the width changes alone, so that a column shown or widened stays.
+func (a *app) fit(width, _ float32) {
+	if width == a.fitWidth {
+		return
+	}
+	a.fitWidth = width
+	need := func() float32 {
+		w := float32(minContent)
+		if a.showTree {
+			w += a.treeWidth
+		}
+		if a.showHistory {
+			w += a.historyWidth
+		}
+		return w
+	}
+	if a.showHistory && need() > width {
+		a.showHistory, a.collapsedHistory = false, true
+	}
+	if a.showTree && need() > width {
+		a.showTree, a.collapsedTree = false, true
+	}
+	if a.collapsedTree && need()+a.treeWidth <= width {
+		a.showTree, a.collapsedTree = true, false
+	}
+	if a.collapsedHistory && need()+a.historyWidth <= width {
+		a.showHistory, a.collapsedHistory = true, false
+	}
+}
+
+// toggle shows or hides a column as the user asks, which the window's
+// resizing then leaves as it is.
+func (a *app) toggle(on, collapsed *bool) {
+	*on, *collapsed = !*on, false
 }
 
 // endSplit is Split with end at the end, *size its width, as a window's
@@ -227,44 +278,62 @@ func endSplit(c *ui.Context, size *float32, end, rest func()) ui.Element {
 	})
 }
 
-// toolbar is the window's title bar, a toolbar as macOS draws one: the
-// sidebar's button beside the traffic lights, then the project, the mode
-// in the middle, and the history's button at the end, over its column.
-// Its controls take no face until hovered, Tab stops on it once and the
-// arrows move among them.
-func (a *app) toolbar(c *ui.Context) {
+// toolbarPart is the part of the window's toolbar over a column: a row of
+// the title bar's height, which drags the window, leaving the traffic
+// lights their room at the window's start and the window's edge at its
+// end. Its controls take no face until hovered, Tab stops on it once and
+// the arrows move among them.
+func toolbarPart(c *ui.Context, label string, start, end bool, build func()) {
 	t := c.Theme()
 	bar := c.TitleBar()
+	left, right := t.Space(2), t.Space(2)
+	if start {
+		left += bar.Left
+	}
+	if end {
+		right += bar.Right
+	}
 	ui.Row(c).Height(titleBarHeight).Shrink(0).FillWidth().AlignItems(ui.Center).
-		Padding(0, bar.Right+t.Space(2), 0, bar.Left+t.Space(2)).DragWindow().
-		Background(t.Surface).Children(func() {
-		ui.Toolbar(c, func() {
-			a.paneButton(c, "sidebar", sidebarIcon, &a.showTree, "Sidebar")
-			ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Gap(t.Space(1)).Children(func() {
-				a.projectTitle(c)
-				a.branchLabel(c)
-				a.pullButton(c)
-				if page := cmp.Or(a.branchURL, a.github); page != "" {
-					a.linkButton(c, "github", githubIcon, "Open on GitHub", page)
-				}
-			})
-			a.modeChoice = a.mode
-			modeSwitch(c.Key("mode"), &a.modeChoice, "Changes", "Files").Label("Mode").
-				OnChange(func() { a.setMode(a.modeChoice) })
-			// Keep both sides equally wide as the action labels change.
-			ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).
-				Justify(ui.End).Gap(t.Space(1)).Children(func() {
-				a.reviewButton(c)
-				a.pushButton(c)
-			})
-			a.paneButton(c, "history", historyIcon, &a.showHistory, "History")
-		}).Grow(1).MinWidth(0).Padding(0).Label("Toolbar")
+		Padding(0, right, 0, left).DragWindow().Children(func() {
+		ui.Toolbar(c, build).Grow(1).MinWidth(0).Padding(0).Label(label)
+	})
+}
+
+// toolbar is the part of the toolbar over the text: the project, the mode
+// in the middle and the actions, with the buttons of the columns hidden,
+// which their own parts hold while they show.
+func (a *app) toolbar(c *ui.Context, start, end bool) {
+	t := c.Theme()
+	toolbarPart(c, "Toolbar", start, end, func() {
+		if start {
+			a.paneButton(c, "sidebar", sidebarIcon, &a.showTree, &a.collapsedTree, "Sidebar")
+		}
+		ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Gap(t.Space(1)).Children(func() {
+			a.projectTitle(c)
+			a.branchLabel(c)
+			a.pullButton(c)
+			if page := cmp.Or(a.branchURL, a.github); page != "" {
+				a.linkButton(c, "github", githubIcon, "Open on GitHub", page)
+			}
+		})
+		a.modeChoice = a.mode
+		modeSwitch(c.Key("mode"), &a.modeChoice, "Changes", "Files").Label("Mode").
+			OnChange(func() { a.setMode(a.modeChoice) })
+		// Keep both sides equally wide as the action labels change.
+		ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).
+			Justify(ui.End).Gap(t.Space(1)).Children(func() {
+			a.reviewButton(c)
+			a.pushButton(c)
+		})
+		if end {
+			a.paneButton(c, "history", historyIcon, &a.showHistory, &a.collapsedHistory, "History")
+		}
 	})
 }
 
 // modeSwitch is a segmented control as macOS toolbars draw it: a filled
-// track without a border, 24 points tall, of segments as wide as one
-// another, the chosen one raised from it.
+// track, 24 points tall, of segments as wide as one another, the chosen
+// one raised from it. With Increase Contrast, the track is outlined.
 func modeSwitch(c *ui.Context, selected *int, labels ...string) ui.Element {
 	t := c.Theme()
 	const pad, inset = 10, 2
@@ -273,12 +342,15 @@ func modeSwitch(c *ui.Context, selected *int, labels ...string) ui.Element {
 		w, _ := c.MeasureText(0, ui.Span{Text: label, Size: t.FontSize})
 		widest = max(widest, w)
 	}
-	track, chosen, hover := ui.RGBA(0, 0, 0, 0.06), ui.Hex("#ffffff"), ui.RGBA(0, 0, 0, 0.04)
+	track, chosen, hover := t.Text.Alpha(0.06), t.Background, t.Text.Alpha(0.04)
 	if t.Dark {
-		track, chosen, hover = ui.RGBA(255, 255, 255, 0.1), ui.RGBA(255, 255, 255, 0.24), ui.RGBA(255, 255, 255, 0.06)
+		track, chosen, hover = t.Text.Alpha(0.1), t.Text.Alpha(0.24), t.Text.Alpha(0.06)
 	}
 	parts := ui.SegmentedBase(c, selected, len(labels))
 	parts.Track.Height(24).AlignItems(ui.Stretch).Padding(inset).Gap(inset).Radius(7).Background(track)
+	if c.Preferences().HighContrast {
+		parts.Track.Border(1, t.Border)
+	}
 	parts.Track.Children(func() {
 		for i, label := range labels {
 			s := parts.Segment(i).Width(widest + 2*pad).Radius(5).TextColor(t.Text)
@@ -296,10 +368,10 @@ func modeSwitch(c *ui.Context, selected *int, labels ...string) ui.Element {
 
 // paneButton shows or hides a column, as the sidebar buttons of macOS
 // toolbars: an icon alone, named for what a click does.
-func (a *app) paneButton(c *ui.Context, key string, svg *ui.SVG, on *bool, pane string) {
+func (a *app) paneButton(c *ui.Context, key string, svg *ui.SVG, on, collapsed *bool, pane string) {
 	action := showOrHide(*on, pane)
 	ui.Button(c.Key(key), "").Shrink(0).Label(action).Tooltip(action).
-		Children(func() { ui.Icon(c, svg).Size(16, 16) }).OnClick(func() { *on = !*on })
+		Children(func() { ui.Icon(c, svg).Size(16, 16) }).OnClick(func() { a.toggle(on, collapsed) })
 }
 
 // projectTitle is the title of the window, the project's name, which a
@@ -312,7 +384,7 @@ func (a *app) projectTitle(c *ui.Context) {
 	b.OnClick(func() {
 		if a.projects != nil {
 			r := a.titleButton.Bounds(c)
-			a.projects.switcher(r.X, r.Y+r.H+4)
+			a.projects.switcher(a.win, r.X, r.Y+r.H+4)
 		}
 	})
 	b.Children(func() {
@@ -330,14 +402,35 @@ func (a *app) linkButton(c *ui.Context, key string, svg *ui.SVG, label, url stri
 		Children(func() { ui.Icon(c, svg).Size(16, 16) }).OnClick(func() { services.OpenURL(url) })
 }
 
-// column builds one of the window's columns, all alike: the background,
-// a slim header with the title and, muted at the end, a detail such as a
-// count, a divider, and the body.
-func column(c *ui.Context, title, detail string, body func()) {
-	columnWith(c, title, mutedDetail(c, detail), body)
+// sideColumn builds a side column, the sidebar or the history: over bg,
+// its part of the toolbar holding its button, then its title as a source
+// list's section heading, small and muted, without a bar or a divider,
+// with a detail at its end such as a count, and the body.
+func sideColumn(c *ui.Context, bg ui.Color, toolbar func(), title string, detail, body func()) {
+	t := c.Theme()
+	ui.Column(c).Fill().Background(bg).Children(func() {
+		toolbar()
+		ui.Row(c).Shrink(0).FillWidth().AlignItems(ui.Center).Gap(t.Space(2)).
+			Padding(t.Space(1), t.Space(4), 0, t.Space(4)).Children(func() {
+			ui.Text(c, title).FontSize(smallSize).FontWeight(600).TextColor(t.TextMuted).SingleLine().
+				Ellipsis("…").Grow(1).MinWidth(0)
+			detail()
+		})
+		body()
+	})
 }
 
-// mutedDetail builds the detail of a column's header, muted.
+// sidebarBackground is the sidebar's: none over the window's material,
+// which shows through, and the gray of an opaque source list elsewhere,
+// as with Reduce Transparency.
+func sidebarBackground(c *ui.Context) ui.Color {
+	if c.Vibrancy() {
+		return ui.Transparent
+	}
+	return c.Theme().Surface
+}
+
+// mutedDetail builds the detail of a heading, muted.
 func mutedDetail(c *ui.Context, detail string) func() {
 	return func() {
 		if detail != "" {
@@ -346,28 +439,22 @@ func mutedDetail(c *ui.Context, detail string) func() {
 	}
 }
 
-// columnWith is a column whose header ends with what detail builds.
-func columnWith(c *ui.Context, title string, detail, body func()) {
-	columnLinked(c, title, "", detail, body)
-}
-
-// columnLinked is a column whose title links its references to pull
-// requests and issues, as #123, to the GitHub repository at github, where
-// there is one.
-func columnLinked(c *ui.Context, title, github string, detail, body func()) {
+// jumpBar is the bar over the text, as Xcode's jump bar: the title, its
+// references to pull requests and issues, as #123, linked to the GitHub
+// repository at github where there is one, what detail builds at its end,
+// a divider, and the body.
+func jumpBar(c *ui.Context, title, github string, detail, body func()) {
 	t := c.Theme()
-	ui.Column(c).Fill().Background(t.Background).Children(func() {
-		ui.Row(c).Height(30).Shrink(0).FillWidth().AlignItems(ui.Center).Gap(t.Space(2)).
-			Padding(0, t.Space(3)).Children(func() {
-			ui.RichText(c).FontWeight(600).SingleLine().Ellipsis("…").
-				Grow(1).MinWidth(0).Tooltip(title).Children(func() {
-				linkedText(c, title, github)
-			})
-			detail()
+	ui.Row(c).Height(30).Shrink(0).FillWidth().AlignItems(ui.Center).Gap(t.Space(2)).
+		Padding(0, t.Space(3)).Children(func() {
+		ui.RichText(c).FontWeight(600).SingleLine().Ellipsis("…").
+			Grow(1).MinWidth(0).Tooltip(title).Children(func() {
+			linkedText(c, title, github)
 		})
-		ui.Divider(c)
-		body()
+		detail()
 	})
+	ui.Divider(c)
+	body()
 }
 
 // issueRef finds a reference to a pull request or an issue, #123, not
@@ -433,7 +520,12 @@ func (a *app) history(c *ui.Context) {
 	if n > 0 && a.commits[0].Hash == git.Worktree {
 		n--
 	}
-	column(c, "History", count(n, "commit"), func() {
+	sideColumn(c, a.theme.Background, func() {
+		toolbarPart(c, "History Toolbar", false, true, func() {
+			ui.Spacer(c)
+			a.paneButton(c, "history", historyIcon, &a.showHistory, &a.collapsedHistory, "History")
+		})
+	}, "History", mutedDetail(c, count(n, "commit")), func() {
 		switch {
 		case a.err != "":
 			emptyNote(c, a.err)
@@ -460,7 +552,7 @@ func (a *app) commitItem(row ui.ListRow) {
 	text, muted := in.text, in.muted
 	item := ui.Row(c).FillWidth().Gap(t.Space(2.5)).Padding(t.Space(2), t.Space(2)).AlignItems(ui.Start).Children(func() {
 		if cm.Hash == git.Worktree {
-			orange := system(t, systemOrange)
+			orange := system(c, systemOrange)
 			badge := ui.Box(c).Size(30, 30).Shrink(0).Radius(999).Center().
 				Background(orange.Alpha(0.16)).TextColor(orange)
 			if in.onAccent {
@@ -502,40 +594,89 @@ func (a *app) commitItem(row ui.ListRow) {
 		})
 	})
 	if cm.Hash != git.Worktree {
-		a.commitDetails(c, item, cm)
+		a.commitMenu(c, item, row.Index, cm)
 	}
 }
 
-// commitDetails shows more of the commit as the pointer rests on its row:
-// who and when in full, the whole hash and the message. The card
-// goes beside the row, toward the window's middle, as the history is at
-// its end.
-func (a *app) commitDetails(c *ui.Context, item ui.Element, cm git.Commit) {
+// commitMenu is the context menu of a commit's row: its details, which
+// the jump bar's button shows too, copying its hash or message, and its
+// page on GitHub.
+func (a *app) commitMenu(c *ui.Context, item ui.Element, i int, cm git.Commit) {
+	services := c.Services()
+	item.ContextMenu(func(m *ui.Menu) {
+		if m.Item("Show Info").Chosen() {
+			a.commitRow, a.info.open = i, true
+		}
+		m.Separator()
+		if m.Item("Copy Commit Hash").Chosen() {
+			services.WriteClipboard(cm.Hash)
+		}
+		if m.Item("Copy Commit Message").Chosen() {
+			services.WriteClipboard(strings.TrimSpace(cm.Subject + "\n\n" + cm.Body))
+		}
+		if a.github != "" {
+			m.Separator()
+			if m.Item("Open on GitHub").Chosen() {
+				services.OpenURL(a.github + "/commit/" + cm.Hash)
+			}
+		}
+	})
+}
+
+// infoState is the popover of the commit shown, under the jump bar's
+// button: who and when in full, the whole hash and the message.
+type infoState struct {
+	open   bool
+	button ui.Handle
+}
+
+// infoButton shows the commit's details, as the info buttons of Mac apps.
+func (a *app) infoButton(c *ui.Context) {
+	cm, ok := a.current()
+	if !ok || cm.Hash == git.Worktree {
+		return
+	}
 	t := c.Theme()
-	ui.TooltipBase(c, item, func(tip ui.Element) {
-		tip.AttachTo(item, ui.AnchorTopStart, ui.AnchorTopEnd).MarginEnd(t.Space(1.5))
-		tip.Width(t.Space(80)).Padding(t.Space(3)).Radius(t.Space(2)).
-			Background(t.Background).Border(1, t.Border).Shadow(0, 4, 16, 0, ui.RGBA(0, 0, 0, 0.18))
-		tip.Children(func() {
-			ui.Column(c).FillWidth().Gap(t.Space(2)).Children(func() {
-				// The pointer goes through the card, so nothing in it can
-				// scroll: the message is cut to lines as wrapped, after who
-				// and when, which stay in view.
-				ui.Text(c, cm.Subject).FontWeight(600).TextColor(t.Text).MaxLines(3)
-				ui.Column(c).FillWidth().Gap(t.Space(1.5)).Children(func() {
-					a.personLine(c, git.Person{Name: cm.Author, Email: cm.Email}, "")
-					for _, co := range cm.CoAuthors {
-						a.personLine(c, co, "Co-author")
-					}
-				})
-				ui.Column(c).FillWidth().Gap(t.Space(0.5)).Children(func() {
-					ui.Text(c, cm.Time.Format("Monday, January 2, 2006 at 15:04")).FontSize(smallSize).TextColor(t.TextMuted)
-					ui.Text(c, cm.Hash).FontSize(smallSize).Font(monoFamily).TextColor(t.TextMuted).SingleLine()
-				})
-				if cm.Body != "" {
-					ui.Text(c, cm.Body).FontSize(smallSize).TextColor(t.Text).MaxLines(10)
+	b := ui.ButtonBase(c.Key("info")).Bind(&a.info.button).Size(22, 22).Shrink(0).Center().Radius(5).
+		Label("Show Info").Tooltip("Show Info")
+	flat(b, t, a.info.open)
+	b.OnClick(func() { a.info.open = !a.info.open })
+	b.Children(func() { ui.Icon(c, infoIcon).Size(15, 15).TextColor(t.TextMuted) })
+}
+
+// commitInfo is the popover of infoButton, out of the jump bar.
+func (a *app) commitInfo(c *ui.Context) {
+	cm, ok := a.current()
+	anchor := c.Resolve(a.info.button)
+	if !ok || cm.Hash == git.Worktree || !anchor.Valid() {
+		a.info.open = false
+		return
+	}
+	t := c.Theme()
+	services := c.Services()
+	ui.Popover(c.Key("commit-info"), anchor, &a.info.open, func() {
+		ui.Column(c).Width(t.Space(84)).Gap(t.Space(2)).Children(func() {
+			ui.Text(c, cm.Subject).FontWeight(600).TextColor(t.Text).Selectable()
+			ui.Column(c).FillWidth().Gap(t.Space(1.5)).Children(func() {
+				a.personLine(c, git.Person{Name: cm.Author, Email: cm.Email}, "")
+				for _, co := range cm.CoAuthors {
+					a.personLine(c, co, "Co-author")
 				}
 			})
+			ui.Column(c).FillWidth().Gap(t.Space(0.5)).Children(func() {
+				ui.Text(c, cm.Time.Format("Monday, January 2, 2006 at 15:04")).FontSize(smallSize).TextColor(t.TextMuted)
+				ui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, cm.Hash).FontSize(smallSize).Font(monoFamily).TextColor(t.TextMuted).
+						SingleLine().Ellipsis("…").Selectable().Grow(1).MinWidth(0)
+					ui.Button(c.Key("copy-hash"), "Copy").FontSize(smallSize).Shrink(0).
+						OnClick(func() { services.WriteClipboard(cm.Hash) })
+				})
+			})
+			if cm.Body != "" {
+				ui.Scroll(c.Key("body")).FillWidth().MaxHeight(240).Children(func() {
+					ui.Text(c, cm.Body).FontSize(smallSize).TextColor(t.Text).Selectable().FillWidth()
+				})
+			}
 		})
 	})
 }
@@ -601,7 +742,12 @@ func (a *app) treePane(c *ui.Context) {
 			lineCounts(c, added, deleted, false)
 		}
 	}
-	columnWith(c, title, detail, func() {
+	sideColumn(c, sidebarBackground(c), func() {
+		toolbarPart(c, "Sidebar Toolbar", true, false, func() {
+			ui.Spacer(c)
+			a.paneButton(c, "sidebar", sidebarIcon, &a.showTree, &a.collapsedTree, "Sidebar")
+		})
+	}, title, detail, func() {
 		if tree.dirs == nil {
 			loading(c)
 			return
@@ -635,9 +781,17 @@ func (a *app) treeItem(c *ui.Context, tree *pathTree, p string, selected, focuse
 		// acts once the outline is built, as it changes the outline's rows.
 		row.KeepFocus().OnClick(func() { tree.flip(p) })
 	}
-	if tree == &a.changeTree {
-		row.ContextMenu(func(m *ui.Menu) { a.readMenu(m, p) })
-	}
+	services := c.Services()
+	row.ContextMenu(func(m *ui.Menu) {
+		if tree == &a.changeTree {
+			a.readMenu(m, p)
+			if isGroup(p) {
+				return
+			}
+			m.Separator()
+		}
+		a.fileMenu(services, m, itemPath(p), !isFile)
+	})
 	if isGroup(p) {
 		row.Children(func() {
 			ui.Text(c, tree.labels[p]).FontSize(smallSize).FontWeight(600).TextColor(muted).SingleLine().Grow(1)
@@ -673,10 +827,40 @@ func (a *app) treeItem(c *ui.Context, tree *pathTree, p string, selected, focuse
 	})
 }
 
+// fileMenu is the part of a file's or a folder's context menu about where
+// it is: its path to copy, it in Finder or in its editor, as the work tree
+// has it, and its page on GitHub, as the commit shown has it.
+func (a *app) fileMenu(services ui.Services, m *ui.Menu, p string, isDir bool) {
+	local := filepath.Join(a.repo, filepath.FromSlash(p))
+	there := exists(local)
+	if m.Item("Copy Path").Chosen() {
+		services.WriteClipboard(p)
+	}
+	if m.Item("Show in Finder").Disabled(!there).Chosen() {
+		mygo.Shell.ShowItemInFolder(local)
+	}
+	if !isDir && m.Item("Open with External Editor").Disabled(!there).Chosen() {
+		mygo.Shell.OpenPath(local)
+	}
+	cm, ok := a.current()
+	if a.github == "" || !ok || cm.Hash == git.Worktree {
+		return
+	}
+	kind := "blob/"
+	if isDir {
+		kind = "tree/"
+	}
+	m.Separator()
+	gone := a.mode == modeChanges && a.changes[p].Status == "D"
+	if m.Item("Open on GitHub").Disabled(gone).Chosen() {
+		services.OpenURL(a.github + "/" + kind + cm.Hash + "/" + p)
+	}
+}
+
 // statusMark is the letter of a change, as Xcode's navigator shows it.
 func statusMark(c *ui.Context, status string, onAccent bool) {
 	t := c.Theme()
-	color := statusColor(t, status)
+	color := statusColor(c, status)
 	if onAccent {
 		color = t.AccentText
 	}
@@ -703,7 +887,7 @@ func (a *app) codePane(c *ui.Context) {
 	if a.picture != nil {
 		detail = pictureSize(a.picture)
 	}
-	columnWith(c, a.openFile, func() {
+	jumpBar(c, a.openFile, "", func() {
 		if detail != "" {
 			ui.Text(c, detail).FontSize(smallSize).TextColor(c.Theme().TextMuted).SingleLine().Shrink(0)
 		}
@@ -970,47 +1154,25 @@ func Run(args []string) {
 	p := newProjects()
 	fileicons.FollowVSCode()
 	fileicons.Warm()
+	// Folders opened from Finder, the Dock or File ▸ Open Recent.
+	mygo.App.OnOpenFile(func(path string) {
+		go p.openFolder(path, nil)
+	})
+	// A Mac app stays open without windows, and opens one again as its
+	// Dock icon is clicked.
+	mygo.App.OnWindowAllClosed(func() {})
+	mygo.App.OnActivate(func(hasVisibleWindows bool) {
+		if !hasVisibleWindows && len(p.apps) == 0 {
+			p.showWelcome()
+		}
+	})
+	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { p.quitting = true })
 	mygo.App.WhenReady(func() {
-		mygo.App.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
-			{Role: mygo.RoleAppMenu},
-			{Role: mygo.RoleFileMenu, Submenu: []*mygo.MenuItem{
-				{Label: "Open Folder…", Accelerator: "CmdOrCtrl+O", Click: func(*mygo.MenuItem, *mygo.Window) { p.choose() }},
-				mygo.Separator(),
-				{Role: mygo.RoleClose},
-			}},
-			{Role: mygo.RoleEditMenu},
-			p.viewMenu(),
-			{Role: mygo.RoleWindowMenu},
-		}))
-		p.win = mygo.NewWindow(mygo.WindowOptions{
-			Title:     "Peek",
-			Width:     1440,
-			Height:    900,
-			MinWidth:  640,
-			MinHeight: 400,
-			// Opens where the user left it last time.
-			StateKey:             "main",
-			TitleBarStyle:        mygo.TitleBarHidden,
-			TrafficLightPosition: &trafficLightsAt,
-			Content:              ui.View(p.view),
-		})
-		p.win.OnClosed(func() {
-			for _, a := range p.apps {
-				if a.push.cancel != nil {
-					a.push.cancel()
-				}
-				if a.review.cancel != nil {
-					a.review.cancel()
-				}
-			}
-		})
-		switch {
-		case err == nil:
+		p.setMenu()
+		if err == nil {
 			p.open(repo)
-		case len(p.recent) > 0:
-			p.open(p.recent[0])
-		default:
-			p.choose()
+		} else {
+			p.restore()
 		}
 	})
 	if err := mygo.App.Run(); err != nil {

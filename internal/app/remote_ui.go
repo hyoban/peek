@@ -16,32 +16,23 @@ const fetchEvery = 3 * time.Minute
 type pullState struct {
 	fetching bool
 	running  bool
-	err      string // why the last pull failed, "" for none
 }
 
 // pullButton tells of the commits the branch's upstream has and the
 // branch has not, beside its name, as last fetched; a click brings them
 // in by fast-forward.
 func (a *app) pullButton(c *ui.Context) {
-	if a.behind == 0 && a.pull.err == "" && !a.pull.running {
+	if a.behind == 0 && !a.pull.running {
 		return
 	}
 	t := c.Theme()
-	label := "↓ " + strconv.Itoa(a.behind)
-	tooltip := count(a.behind, "new commit") + " on " + a.upstream + "\nClick to pull (fast-forward only)"
-	color := t.Accent
-	switch {
-	case a.pull.running:
+	tooltip := "Pull " + count(a.behind, "new commit") + " from " + a.upstream + ", fast-forward only"
+	if a.pull.running {
 		tooltip = "Pulling " + a.upstream + "…"
-	case a.pull.err != "":
-		tooltip, color = "Pull failed: "+a.pull.err+"\nClick to retry", system(t, systemRed)
-		if a.behind == 0 {
-			label = "↓"
-		}
 	}
 	busy := a.push.running || a.review.running || a.switcher.running != ""
 	b := ui.ButtonBase(c.Key("pull")).Shrink(0).Padding(t.Space(0.5), t.Space(1.5)).Radius(t.Radius).
-		TextColor(color).Label("Pull").Tooltip(tooltip).Disabled(busy || a.pull.running)
+		TextColor(t.Accent).Label("Pull").Tooltip(tooltip).Disabled(busy || a.pull.running)
 	flat(b, t, false)
 	b.OnClick(a.startPull)
 	b.Children(func() {
@@ -49,7 +40,10 @@ func (a *app) pullButton(c *ui.Context) {
 			ui.Spinner(c).Size(12, 12).Label("Pulling")
 			return
 		}
-		ui.Text(c, label).FontSize(smallSize).FontWeight(600).SingleLine()
+		ui.Row(c).Gap(t.Space(0.5)).AlignItems(ui.Center).Children(func() {
+			ui.Icon(c, pullArrow).Size(11, 11).Shrink(0)
+			ui.Text(c, strconv.Itoa(a.behind)).FontSize(smallSize).FontWeight(600).SingleLine()
+		})
 	})
 }
 
@@ -57,7 +51,7 @@ func (a *app) startPull() {
 	if a.pull.running || a.push.running || a.review.running || a.switcher.running != "" {
 		return
 	}
-	a.pull.running, a.pull.err = true, ""
+	a.pull.running = true
 	repo := a.repo
 	a.background(func() func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -66,7 +60,7 @@ func (a *app) startPull() {
 		return func() {
 			a.pull.running = false
 			if err != nil {
-				a.pull.err = err.Error()
+				a.showAlert("Couldn’t Pull "+a.upstream, err.Error())
 			}
 			a.refresh()
 		}

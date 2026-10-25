@@ -41,6 +41,38 @@ func TestSwitcherUI(t *testing.T) {
 		t.Fatalf("branch %q, switcher %+v", a.branch, a.switcher)
 	}
 
+	// The arrows move the highlight among the rows, which Enter checks out.
+	if err := tt.Click("Switch Branch"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	rows, _ := a.rows()
+	if len(rows) < 2 || a.highlighted(len(rows), 0) != 0 {
+		t.Fatalf("rows %+v", rows)
+	}
+	tt.Key(0, ui.KeyDown)
+	tt.Frame()
+	if a.highlighted(len(rows), 0) != 1 {
+		t.Fatal("Down did not move the highlight")
+	}
+	tt.Key(0, ui.KeyUp)
+	tt.Key(0, ui.KeyUp)
+	tt.Frame()
+	if got := a.highlighted(len(rows), 0); got != len(rows)-1 {
+		t.Fatalf("Up from the first row went to %d", got)
+	}
+	tt.Key(0, ui.KeyDown)
+	tt.Key(0, ui.KeyDown)
+	tt.Frame()
+	want := rows[1].target.branch
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if a.branch != want || a.switcher.open {
+		t.Fatalf("branch %q, want %q; switcher %+v", a.branch, want, a.switcher)
+	}
+	a.switchTo(switchTarget{branch: "feature"})
+	tt.Frame()
+
 	// A number typed and entered checks out its pull request.
 	if err := tt.Click("Switch Branch"); err != nil {
 		t.Fatal(err)

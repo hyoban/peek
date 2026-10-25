@@ -37,7 +37,7 @@ func TestReviewUI(t *testing.T) {
 	if !tt.HasText("No actionable defects found.") {
 		t.Fatal("missing review details")
 	}
-	if err := tt.Click("Close"); err != nil {
+	if err := tt.Click("Done"); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(repo, "docs/new.md"), []byte("new content\n"), 0o644); err != nil {
@@ -45,25 +45,25 @@ func TestReviewUI(t *testing.T) {
 	}
 	a.refresh()
 	tt.Frame()
-	if !tt.HasText("Review again") || tt.HasText("Passed") {
+	if !tt.HasText("Review Again") || tt.HasText("Passed") {
 		t.Fatal("stale verdict still shown", tt.Texts())
 	}
 	if err := os.WriteFile(os.Getenv("PEEK_TEST_REVIEW_RESPONSE"), []byte(testutil.FailingReview), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := tt.Click("Review again"); err != nil {
+	if err := tt.Click("Review Again"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !tt.HasText("Not passed") {
+	if !tt.HasText("Not Passed") {
 		t.Fatal("missing failing verdict", tt.Texts())
 	}
 	wantClipboard := "Review not passed\nUncommitted changes\n\nEmpty inputs now crash.\n\n[P2] Handle empty inputs\ncalc.py:2\nRestore the guard so an empty list does not divide by zero."
-	if got := tt.Clipboard(); got != wantClipboard {
-		t.Fatalf("review not copied in full: %q", got)
+	if got := tt.Clipboard(); got != "Keep this clipboard" {
+		t.Fatalf("failing review changed the clipboard: %q", got)
 	}
 	tt.SetClipboard("Copied something else")
-	if err := tt.Click("Not passed"); err != nil {
+	if err := tt.Click("Not Passed"); err != nil {
 		t.Fatal(err)
 	}
 	if !tt.HasText("calc.py:2") || !tt.HasText("[P2] Handle empty inputs") {
@@ -79,11 +79,11 @@ func TestReviewUI(t *testing.T) {
 	if err := os.WriteFile(os.Getenv("PEEK_TEST_REVIEW_RESPONSE"), []byte("not JSON"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := tt.Click("Review again"); err != nil {
+	if err := tt.Click("Review Again"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !tt.HasText("Review error") || tt.HasText("Passed") {
+	if !tt.HasText("Review Error") || tt.HasText("Passed") {
 		t.Fatal("invalid result treated as a verdict", tt.Texts())
 	}
 	if tt.Clipboard() != "Copied something else" {
@@ -107,7 +107,10 @@ func TestReviewCancelAndLayout(t *testing.T) {
 		cancelled := false
 		a.review = reviewState{running: true, cancel: func() { cancelled = true }}
 		tt.Frame()
-		if err := tt.Click("Reviewing…"); err != nil {
+		if !tt.HasText("Reviewing…") {
+			t.Fatal("no activity", tt.Texts())
+		}
+		if err := tt.Click("Stop Review"); err != nil {
 			t.Fatal(err)
 		}
 		if !cancelled {
@@ -141,7 +144,10 @@ func TestReviewCancelAndLayout(t *testing.T) {
 		a.review.phase = "Inspecting…"
 		tt.Frame()
 		cancelled = false
-		if err := tt.Click("Inspecting… 12s"); err != nil || !cancelled {
+		if !tt.HasText("Inspecting… 12s") {
+			t.Fatal("no phase", tt.Texts())
+		}
+		if err := tt.Click("Stop Review"); err != nil || !cancelled {
 			t.Fatalf("progress button did not cancel: %v", err)
 		}
 		if got, ok := tt.Find("Changes"); !ok || got != mode {
@@ -171,7 +177,7 @@ func TestReviewNothingToDo(t *testing.T) {
 	a.review = reviewState{sourceID: "old", result: &review.Result{Verdict: "passed"}}
 	a.updateReviewSource(review.Snapshot{}, "")
 	tt.Frame()
-	if !tt.HasText("Review") || tt.HasText("Review again") || tt.HasText("Passed") {
+	if !tt.HasText("Review") || tt.HasText("Review Again") || tt.HasText("Passed") {
 		t.Fatal("obsolete result still invites a review", tt.Texts())
 	}
 }

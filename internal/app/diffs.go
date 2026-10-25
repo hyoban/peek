@@ -115,7 +115,7 @@ func (a *app) diffsUnder(item string) []*fileDiff {
 // lineCounts shows the lines added and deleted, green and red as GitHub's.
 func lineCounts(c *ui.Context, added, deleted int, onAccent bool) {
 	t := c.Theme()
-	plus, minus := statusColor(t, "A"), statusColor(t, "D")
+	plus, minus := statusColor(c, "A"), statusColor(c, "D")
 	if onAccent {
 		plus, minus = t.AccentText, t.AccentText
 	}
@@ -220,7 +220,10 @@ func (a *app) diffPane(c *ui.Context) {
 	if n := len(a.diffs); n > 0 {
 		detail = count(n, "file")
 	}
-	columnLinked(c, title, a.github, mutedDetail(c, detail), func() {
+	jumpBar(c, title, a.github, func() {
+		mutedDetail(c, detail)()
+		a.infoButton(c)
+	}, func() {
 		if len(a.diffs) == 0 {
 			emptyNote(c, "No changes")
 			return
@@ -247,6 +250,12 @@ func (a *app) diffHeader(c *ui.Context, d *fileDiff) {
 	dir, name := path.Split(ch.Path)
 	bar := ui.Row(c).FillWidth().Height(32).AlignItems(ui.Center).Gap(t.Space(2)).Padding(0, t.Space(4)).
 		Background(t.Surface).BorderColor(t.Border.Alpha(0.6)).BorderWidth(0, 0, 1)
+	services := c.Services()
+	bar.ContextMenu(func(m *ui.Menu) {
+		a.readMenu(m, ch.Path)
+		m.Separator()
+		a.fileMenu(services, m, ch.Path, false)
+	})
 	if d.read {
 		// A click on a read file's bar shows its diff again, or folds it,
 		// as GitHub's Viewed files open: still marked read. The arrow,
