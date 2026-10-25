@@ -407,16 +407,26 @@ func (a *app) commitItem(row ui.ListRow) {
 			})
 			return
 		}
-		ui.Avatar(c, cm.Author, a.avatar(cm.Email)).Size(30, 30).Shrink(0)
-		// As Mail lists messages: who and when on top, then what.
+		// Avatar rounds and sizes its picture for its own size, not this
+		// one, so the picture is cut to the circle here.
+		if bm := a.avatar(cm.Email); bm != nil {
+			ui.Box(c).Size(30, 30).Shrink(0).Radius(15).Clip().Role(ui.RoleImage).Label(cm.Author).Children(func() {
+				ui.Image(c, bm).Fit(ui.Cover).Size(30, 30)
+			})
+		} else {
+			ui.Avatar(c, cm.Author, nil).Size(30, 30).Radius(15).Shrink(0)
+		}
+		// What first, then when, then who.
 		ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
 			ui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(ui.Baseline).Children(func() {
-				ui.Text(c, cm.Author).FontWeight(600).TextColor(text).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
+				ui.Text(c, cm.Subject).FontWeight(600).TextColor(text).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
 				ui.Text(c, shortDate(cm.Time, time.Now())).FontSize(smallSize).TextColor(muted).SingleLine().Shrink(0).
 					Tooltip(cm.Time.Format("Monday, January 2, 2006 at 15:04"))
 			})
-			ui.Text(c, cm.Subject).TextColor(text).SingleLine().Ellipsis("…")
-			ui.Text(c, cm.Short).FontSize(smallSize).Font(monoFamily).TextColor(muted).SingleLine()
+			ui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(ui.Baseline).Children(func() {
+				ui.Text(c, cm.Author).FontSize(smallSize).TextColor(muted).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
+				ui.Text(c, cm.Short).FontSize(smallSize).Font(monoFamily).TextColor(muted).SingleLine().Shrink(0)
+			})
 		})
 	})
 }
