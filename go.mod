@@ -18,4 +18,4 @@ require (
 
 // The fork's native-tooltips branch, on 0.6.4, leaves Tooltip's tips to
 // AppKit, which shows them as its own, until MyGo does.
-replace github.com/egoist/mygo => github.com/hyoban/mygo v0.6.4-0.20261025074610-39f0299f2677
+replace github.com/egoist/mygo => github.com/hyoban/mygo v0.6.4-0.20261025084114-3f065aa463bd
