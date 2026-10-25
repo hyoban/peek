@@ -2,7 +2,7 @@
 
 A native git diff viewer for macOS, built in Go with [MyGo](https://github.com/egoist/mygo).
 
-Open a repository and peek at its history: what each commit changed, the uncommitted changes in the work tree, and every file as the commit has it. Each repository opens in its own window, which refreshes as the repository changes.
+Open a repository and peek at its history: what each commit changed, the uncommitted changes in the work tree, and every file as the commit has it. Repositories open in one window, switched from the project's name in the toolbar, and it refreshes as the repository changes.
 
 ## Changes
 
@@ -36,7 +36,7 @@ All of the commit's files, to read any of them as it was then.
 - Pictures shown as pictures, and Markdown files as a preview with the repository's images, with a toggle to the source
 - File and folder icons from the icon theme VS Code is set to, when it draws SVGs (as [Flow Icons](https://github.com/thang-nm/Flow-Icons) does), or else from [file-icons](https://github.com/file-icons/atom)
 - Authors' and co-authors' avatars, the commit's details and message on hover, references such as `#123` linked to their pull request or issue, and a link to the branch on GitHub
-- Each repository in its own window, switched from the project's name in the toolbar, and the windows open at quitting opened again
+- One window for every repository, switched from the project's name in the toolbar or the menu bar, each kept as you left it, and the repositories open at quitting opened again
 - Switch branches, or check out a pull request by number or link with the [GitHub CLI](https://cli.github.com), from the branch in the toolbar
 - Fetches the branch's remote every few minutes, shows how many new commits it has beside the branch, and pulls them by fast-forward with a click
 - **Ship**: commit all changes with a Codex-written message and push, from the history's toolbar

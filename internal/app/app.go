@@ -1187,8 +1187,8 @@ func Run(args []string) {
 	// again as it is opened from Finder.
 	mygo.App.OnWindowAllClosed(func() {})
 	mygo.App.OnActivate(func(hasVisibleWindows bool) {
-		if !hasVisibleWindows && len(p.apps) == 0 {
-			p.showWelcome()
+		if !hasVisibleWindows && p.win == nil {
+			p.showWindow()
 		}
 	})
 	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { p.quitting = true })

@@ -40,7 +40,7 @@ func TestMenuBarItems(t *testing.T) {
 		}
 	}
 	if !checked[openLabel] || checked[closedLabel] {
-		t.Errorf("checked %v, want the repository with a window alone", checked)
+		t.Errorf("checked %v, want the repository shown alone", checked)
 	}
 }
 

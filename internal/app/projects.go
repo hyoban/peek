@@ -16,18 +16,18 @@ import (
 
 const maxRecent = 12 // the projects the switcher lists
 
-// projects are the repositories open, a window each, as a Mac app opens a
-// document in a window of its own, and the one whose window has the focus,
-// which the menu bar acts on. All of it runs on the main thread.
+// projects are the repositories open, all in one window, which shows one
+// of them at a time, the one the menu bar acts on, the others kept as the
+// user left them. All of it runs on the main thread.
 type projects struct {
 	avatars *avatars
 	apps    map[string]*app // the projects open, by repository
-	cur     *app            // the project of the window with the focus, nil for none
+	cur     *app            // the project the window shows, nil for none
 	recent  []string        // the repositories opened, the latest first
 	dir     string          // where recent and the projects open are kept, "" for nowhere
 	inline  bool            // no windows, the apps' loads on the UI thread, for tests
 	menu    *menuItems      // the menu bar's items that follow the project, nil in tests
-	empty   *mygo.Window    // the window asking for a project while none is open
+	win     *mygo.Window    // the window, which shows the project shown; nil while closed and in tests
 	bar     *menuBar        // the item in the menu bar, nil in tests
 	// quitting keeps the projects open as the app quits, for the next
 	// launch to open them again.
@@ -77,23 +77,18 @@ func exists(p string) bool {
 	return err == nil
 }
 
-// view shows the project opened last, as a window would, for tests.
+// view shows the project shown, or the welcome while none is, the window's
+// whole content: each project builds its own widgets, which keep their
+// state apart, as the user left them.
 func (p *projects) view(c *ui.Context) {
 	if p.cur == nil {
 		p.welcome(c)
+		p.syncMenu()
 		return
 	}
-	// Each project builds its own widgets, which keep their state apart.
-	ui.Column(c).Key(p.cur.repo).Fill().Children(func() { p.cur.view(c) })
-}
-
-// window is the view of a project's window, whose state the menu bar
-// shows while it has the focus.
-func (p *projects) window(c *ui.Context, a *app) {
-	a.view(c)
-	if a == p.cur {
-		p.syncMenu()
-	}
+	a := p.cur
+	ui.Column(c).Key(a.repo).Fill().Children(func() { a.view(c) })
+	p.syncMenu()
 	p.syncTitle()
 }
 
@@ -101,7 +96,7 @@ func (p *projects) window(c *ui.Context, a *app) {
 // window: what to do, the way to open a folder, and the recent projects.
 func (p *projects) welcome(c *ui.Context) {
 	t := c.Theme()
-	ui.Column(c).Fill().Children(func() {
+	ui.Column(c).Fill().Background(t.Background).Children(func() {
 		ui.Row(c).Height(titleBarHeight).Shrink(0).FillWidth().DragWindow()
 		ui.Column(c).Grow(1).FillWidth().Center().Gap(t.Space(2)).Padding(t.Space(6)).Children(func() {
 			ui.Icon(c, repoIcon).Size(48, 48).TextColor(t.TextMuted).Margin(0, 0, t.Space(2), 0)
@@ -131,38 +126,69 @@ func (p *projects) welcome(c *ui.Context) {
 	})
 }
 
-// showWelcome opens the welcome window, or brings it to the front.
-func (p *projects) showWelcome() {
-	if p.empty != nil {
-		p.empty.Focus()
+// showWindow opens the window, where it was last, or brings it to the
+// front: the one window, which every project shows in, switched from the
+// project's name, as the user asks of Peek over one window a project.
+func (p *projects) showWindow() {
+	if p.inline {
 		return
 	}
-	p.empty = mygo.NewWindow(mygo.WindowOptions{
+	if p.win != nil {
+		p.win.Focus()
+		return
+	}
+	p.win = mygo.NewWindow(mygo.WindowOptions{
 		Title:                "Peek",
-		Width:                520,
-		Height:               480,
-		DisableResize:        true,
-		DisableMaximize:      true,
+		Width:                1440,
+		Height:               900,
+		MinWidth:             640,
+		MinHeight:            400,
+		StateKey:             "main",
 		TitleBarStyle:        mygo.TitleBarHidden,
 		TrafficLightPosition: &trafficLightsAt,
-		Content:              ui.View(p.welcome),
+		Vibrancy:             mygo.VibrancySidebar,
+		Content:              ui.View(p.view),
 	})
-	win := p.empty
+	win := p.win
 	win.OnClosed(func() {
-		if p.empty == win {
-			p.empty = nil
+		// Closing it closes the projects, as the app stays in the menu bar.
+		for _, a := range p.apps {
+			a.close()
 		}
+		if !p.quitting {
+			p.apps, p.cur = map[string]*app{}, nil
+			p.saveOpen()
+		}
+		if p.win == win {
+			p.win = nil
+		}
+		p.syncMenu()
 	})
 }
 
-// open shows the repository in its window, as the user left it if it is
-// open, or in a new one, taking the columns of the window with the focus,
-// and puts it first among the recent ones.
+// close stops what the project does in the background, as its window
+// closes.
+func (a *app) close() {
+	if a.push.cancel != nil {
+		a.push.cancel()
+	}
+	if a.review.cancel != nil {
+		a.review.cancel()
+	}
+	if a.unwatch != nil {
+		a.unwatch()
+	}
+}
+
+// open shows the repository in the window, as the user left it if it was
+// shown before, or anew, with the columns of the project shown, and puts
+// it first among the recent ones.
 func (p *projects) open(repo string) {
+	p.showWindow()
 	a := p.apps[repo]
 	if a == nil {
 		a = newApp(repo)
-		a.projects, a.avatars, a.inline = p, p.avatars, p.inline
+		a.projects, a.avatars, a.inline, a.win = p, p.avatars, p.inline, p.win
 		if cur := p.cur; cur != nil { // the columns as they are
 			a.showHistory, a.showTree = cur.showHistory, cur.showTree
 			a.historyWidth, a.treeWidth = cur.historyWidth, cur.treeWidth
@@ -170,18 +196,17 @@ func (p *projects) open(repo string) {
 		}
 		p.apps[repo] = a
 		if !p.inline {
-			p.newWindow(a)
+			a.watch()
 		}
 		a.loadCommits()
 	} else if a != p.cur {
-		a.refresh() // what changed since it last had the focus
-		if a.win != nil {
-			a.win.Focus()
-		}
+		a.refresh() // what changed since it last showed
 	}
 	p.cur = a
-	if p.empty != nil {
-		p.empty.Close()
+	if p.win != nil {
+		p.win.SetTitle(path.Base(repo))
+		p.win.SetRepresentedFile(repo) // its folder the window's, as a document's file is
+		p.win.Update(func() {})
 	}
 	recent := []string{repo}
 	for _, r := range p.recent {
@@ -192,55 +217,13 @@ func (p *projects) open(repo string) {
 	p.recent = recent
 	p.writeList("recent", recent)
 	if !p.inline {
-		mygo.App.AddRecentDocument(repo) // File ▸ Open Recent and the Dock's menu
+		mygo.App.AddRecentDocument(repo) // File ▸ Open Recent
 		p.saveOpen()
 	}
 }
 
-// newWindow opens the project's window, where it was last, named for the
-// project, its folder the window's, as a document's file is.
-func (p *projects) newWindow(a *app) {
-	a.win = mygo.NewWindow(mygo.WindowOptions{
-		Title:                path.Base(a.repo),
-		Width:                1440,
-		Height:               900,
-		MinWidth:             640,
-		MinHeight:            400,
-		StateKey:             "project:" + a.repo,
-		TitleBarStyle:        mygo.TitleBarHidden,
-		TrafficLightPosition: &trafficLightsAt,
-		Vibrancy:             mygo.VibrancySidebar,
-		Content:              ui.View(func(c *ui.Context) { p.window(c, a) }),
-	})
-	a.win.SetRepresentedFile(a.repo)
-	a.win.OnFocus(func() {
-		p.cur = a
-		p.syncMenu()
-	})
-	a.win.OnClosed(func() {
-		if a.push.cancel != nil {
-			a.push.cancel()
-		}
-		if a.review.cancel != nil {
-			a.review.cancel()
-		}
-		if a.unwatch != nil {
-			a.unwatch()
-		}
-		delete(p.apps, a.repo)
-		if p.cur == a {
-			p.cur = nil
-			p.syncMenu()
-		}
-		if !p.quitting {
-			p.saveOpen()
-		}
-	})
-	a.watch()
-}
-
-// saveOpen keeps the projects open, the one with the focus first, for the
-// next launch to open them again.
+// saveOpen keeps the projects open, the one shown first, for the next
+// launch to open them again.
 func (p *projects) saveOpen() {
 	var open []string
 	for _, repo := range p.recent {
@@ -294,10 +277,7 @@ func (p *projects) label(repo string) string {
 // choose asks for a folder and opens the repository it is in, asking
 // again while the folder is in none.
 func (p *projects) choose() {
-	var win *mygo.Window
-	if p.cur != nil {
-		win = p.cur.win
-	}
+	win := p.win
 	go func() {
 		for {
 			paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
@@ -390,8 +370,8 @@ func (p *projects) setMenu() {
 			}
 			fn(a)
 			p.syncMenu()
-			if a.win != nil {
-				a.win.Update(func() {}) // to draw what changed
+			if p.win != nil {
+				p.win.Update(func() {}) // to draw what changed
 			}
 		}
 	}
@@ -579,10 +559,10 @@ func (p *projects) restore() {
 		open = p.recent[:1]
 	}
 	if len(open) == 0 {
-		p.showWelcome()
+		p.showWindow()
 		return
 	}
-	// The one with the focus last, so that it is in front.
+	// The one shown last, so that it shows.
 	for _, repo := range slices.Backward(open) {
 		p.open(repo)
 	}

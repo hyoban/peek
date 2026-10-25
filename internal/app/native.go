@@ -21,10 +21,11 @@ func followApp() {
 }
 
 // notify tells of work finished, as a push or a review, in a notification
-// where the user is not looking at its window; a click brings the window
-// to the front and runs then on its thread.
+// where the user is not looking at its project; a click shows it in the
+// window, in front, and runs then on its thread.
 func (a *app) notify(title, body string, then func()) {
-	if a.inline || a.win == nil || appActive && a.win.IsFocused() {
+	shown := a.projects == nil || a.projects.cur == a
+	if a.inline || a.win == nil || appActive && a.win.IsFocused() && shown {
 		return
 	}
 	win := a.win
@@ -36,6 +37,9 @@ func (a *app) notify(title, body string, then func()) {
 	})
 	n.OnClick(func() {
 		win.Update(func() {
+			if a.projects != nil && a.projects.apps[a.repo] == a {
+				a.projects.openRepo(a.repo)
+			}
 			win.Focus()
 			if then != nil {
 				then()

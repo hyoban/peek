@@ -16,8 +16,9 @@ import (
 
 // Peek has no Dock icon: its item in the menu bar is where it always is,
 // whether windows show or not. A click opens its menu, of the recent
-// repositories, what each has to commit and to pull; the count beside the
-// icon is of the commits to pull of them all.
+// repositories, what each has to commit and to pull, and a right click
+// brings Peek to the front; the count beside the icon is of the commits
+// to pull of them all.
 type menuBar struct {
 	tray *mygo.Tray
 	// status is that of the repositories without a window, read every
@@ -61,7 +62,7 @@ func (p *projects) setMenuBar() {
 		p.readStatus() // for the next
 	}
 	tray.OnClick(popUp)
-	tray.OnRightClick(popUp)
+	tray.OnRightClick(p.activate)
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) { tray.Destroy() })
 	p.readStatus()
 	go func() {
@@ -71,8 +72,8 @@ func (p *projects) setMenuBar() {
 	}()
 }
 
-// menuBarItems are the menu's: the recent repositories, those with a
-// window checked, as the Window menu checks its windows; the commits to
+// menuBarItems are the menu's: the recent repositories, the one shown
+// checked, as the project switcher checks it; the commits to
 // pull; and the File menu's Open Folder, and Quit.
 func (p *projects) menuBarItems() []*mygo.MenuItem {
 	var items, pulls []*mygo.MenuItem
@@ -82,9 +83,9 @@ func (p *projects) menuBarItems() []*mygo.MenuItem {
 			Label:   p.label(repo) + repoDetail(p.apps[repo], s),
 			ToolTip: repo,
 			Type:    mygo.MenuItemCheckbox,
-			Checked: p.apps[repo] != nil,
+			Checked: p.cur != nil && p.cur.repo == repo,
 			Click: func(it *mygo.MenuItem, _ *mygo.Window) {
-				it.SetChecked(true) // checked as it opens, not toggled
+				it.SetChecked(true) // checked as it shows, not toggled
 				p.openRepo(repo)
 			},
 		})
@@ -203,12 +204,25 @@ func (p *projects) syncTitle() {
 	}
 }
 
-// openRepo opens the repository's window, in front.
+// activate brings Peek to the front, as a right click on its item asks:
+// the window, opened again where it was closed, with the projects open at
+// quitting, or the latest.
+func (p *projects) activate() {
+	if p.win == nil {
+		p.restore()
+	}
+	mygo.App.Focus()
+	if p.win != nil {
+		p.win.Focus()
+	}
+}
+
+// openRepo shows the repository in the window, in front.
 func (p *projects) openRepo(repo string) {
 	p.open(repo)
 	mygo.App.Focus()
-	if a := p.apps[repo]; a != nil && a.win != nil {
-		a.win.Focus()
+	if p.win != nil {
+		p.win.Focus()
 	}
 }
 
