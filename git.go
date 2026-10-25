@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -19,8 +20,11 @@ type commit struct {
 	Body    string // the message after the subject
 	Author  string
 	Email   string
-	Time    time.Time
-	Summary string // what the work tree's entry says of its changes
+	// CoAuthors are the people the message's Co-authored-by trailers
+	// name, as GitHub credits them, less the author.
+	CoAuthors []person
+	Time      time.Time
+	Summary   string // what the work tree's entry says of its changes
 }
 
 // worktree is the hash of the entry for the changes not committed yet:
@@ -90,23 +94,77 @@ func currentBranch(repo string) string {
 func loadCommits(repo string, limit int) ([]commit, error) {
 	// The body spans lines, so the records end with a separator of
 	// their own.
-	const sep, end = "\x1f", "\x1e"
+	const sep, end, each = "\x1f", "\x1e", "\x1d"
 	out, err := git(repo, "log", fmt.Sprintf("-n%d", limit),
-		"--format=%H"+sep+"%h"+sep+"%s"+sep+"%an"+sep+"%ae"+sep+"%at"+sep+"%b"+end)
+		"--format=%H"+sep+"%h"+sep+"%s"+sep+"%an"+sep+"%ae"+sep+"%at"+sep+
+			"%(trailers:key=Co-authored-by,valueonly,unfold,separator=%x1d)"+sep+"%b"+end)
 	if err != nil {
 		return nil, err
 	}
 	var commits []commit
 	for record := range strings.SplitSeq(out, end) {
 		f := strings.Split(strings.TrimLeft(record, "\n"), sep)
-		if len(f) != 7 {
+		if len(f) != 8 {
 			continue
 		}
 		unix, _ := strconv.ParseInt(f[5], 10, 64)
-		commits = append(commits, commit{Hash: f[0], Short: f[1], Subject: f[2], Body: strings.TrimSpace(f[6]),
-			Author: f[3], Email: f[4], Time: time.Unix(unix, 0)})
+		cm := commit{Hash: f[0], Short: f[1], Subject: f[2], Author: f[3], Email: f[4], Time: time.Unix(unix, 0)}
+		var credited []string // the emails of the trailers read
+		for v := range strings.SplitSeq(f[6], each) {
+			p, ok := parsePerson(v)
+			if !ok {
+				continue
+			}
+			credited = append(credited, p.Email)
+			if !strings.EqualFold(p.Email, cm.Email) &&
+				!slices.ContainsFunc(cm.CoAuthors, func(q person) bool { return strings.EqualFold(q.Email, p.Email) }) {
+				cm.CoAuthors = append(cm.CoAuthors, p)
+			}
+		}
+		cm.Body = withoutCoAuthors(f[7], credited)
+		commits = append(commits, cm)
 	}
 	return commits, nil
+}
+
+// person is someone a commit credits, by name and email.
+type person struct{ Name, Email string }
+
+// parsePerson reads "Name <email>", as trailers name people.
+func parsePerson(s string) (person, bool) {
+	s = strings.TrimSpace(s)
+	lt, gt := strings.LastIndex(s, "<"), strings.LastIndex(s, ">")
+	if lt < 0 || gt < lt {
+		return person{}, false
+	}
+	p := person{Name: strings.TrimSpace(s[:lt]), Email: strings.TrimSpace(s[lt+1 : gt])}
+	if p.Email == "" {
+		return person{}, false
+	}
+	if p.Name == "" {
+		p.Name = p.Email
+	}
+	return p, true
+}
+
+// withoutCoAuthors returns the body less the Co-authored-by trailers git
+// read, which show as people instead. Only the last paragraph holds
+// trailers: a line like them further up, as a squash's messages keep,
+// is text, and stays.
+func withoutCoAuthors(body string, credited []string) string {
+	body = strings.TrimSpace(body)
+	i := strings.LastIndex(body, "\n\n") // -1 for one paragraph
+	head, last := body[:i+1], body[i+1:]
+	var b strings.Builder
+	for line := range strings.Lines(last) {
+		if k, v, ok := strings.Cut(line, ":"); ok && strings.EqualFold(strings.TrimSpace(k), "Co-authored-by") {
+			if p, ok := parsePerson(v); ok && slices.ContainsFunc(credited, func(e string) bool { return strings.EqualFold(e, p.Email) }) {
+				continue
+			}
+		}
+		b.WriteString(line)
+	}
+	return strings.TrimSpace(head + b.String())
 }
 
 func loadChanges(repo, hash string) ([]change, error) {

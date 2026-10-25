@@ -598,3 +598,62 @@ func TestLoadCommitsBody(t *testing.T) {
 		t.Errorf("got %+v", got)
 	}
 }
+
+func TestLoadCommitsCoAuthors(t *testing.T) {
+	dir := testRepo(t)
+	msg := "Pair on it\n\nWhy it changed.\n\nCo-authored-by: Bob Lee <bob@example.com>\nco-authored-by: Ada <ADA@example.com>\nCo-authored-by: Cy <cy@example.com>\nCo-authored-by: Bob Again <bob@example.com>\n"
+	if _, err := gitWith(dir, nil, msg, "-c", "user.name=Ada", "-c", "user.email=ada@example.com",
+		"commit", "-q", "-a", "-F", "-"); err != nil {
+		t.Fatal(err)
+	}
+	commits, err := loadCommits(dir, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := commits[0]
+	want := []person{{"Bob Lee", "bob@example.com"}, {"Cy", "cy@example.com"}}
+	if !slices.Equal(got.CoAuthors, want) {
+		t.Errorf("co-authors %+v, want %+v", got.CoAuthors, want)
+	}
+	if got.Body != "Why it changed." {
+		t.Errorf("body %q", got.Body)
+	}
+	if s := authors(got); s != "Ada and 2 others" {
+		t.Errorf("authors %q", s)
+	}
+	if len(commits[1].CoAuthors) != 0 || authors(commits[1]) != "Ada" {
+		t.Errorf("first commit %+v", commits[1])
+	}
+}
+
+func TestCoAuthorLinesInProseStay(t *testing.T) {
+	dir := testRepo(t)
+	msg := "Squash\n\n* First\n\nCo-authored-by: Dee <dee@example.com>\n\n* Second, more prose\n\nCo-authored-by: Bob <bob@example.com>\n"
+	if _, err := gitWith(dir, nil, msg, "-c", "user.name=Ada", "-c", "user.email=ada@example.com",
+		"commit", "-q", "-a", "-F", "-"); err != nil {
+		t.Fatal(err)
+	}
+	commits, err := loadCommits(dir, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := commits[0]
+	if !slices.Equal(got.CoAuthors, []person{{"Bob", "bob@example.com"}}) {
+		t.Errorf("co-authors %+v", got.CoAuthors)
+	}
+	if want := "* First\n\nCo-authored-by: Dee <dee@example.com>\n\n* Second, more prose"; got.Body != want {
+		t.Errorf("body %q, want %q", got.Body, want)
+	}
+}
+
+func TestWithoutCoAuthors(t *testing.T) {
+	for _, tc := range []struct{ body, want string }{
+		{"Co-authored-by: Bob <bob@example.com>", ""},
+		{"Why.\n\nSigned-off-by: Ada <ada@example.com>\nCo-authored-by: Bob <BOB@example.com>", "Why.\n\nSigned-off-by: Ada <ada@example.com>"},
+		{"Why.\n\nCo-authored-by: Someone Else <else@example.com>", "Why.\n\nCo-authored-by: Someone Else <else@example.com>"},
+	} {
+		if got := withoutCoAuthors(tc.body, []string{"bob@example.com"}); got != tc.want {
+			t.Errorf("withoutCoAuthors(%q) = %q, want %q", tc.body, got, tc.want)
+		}
+	}
+}

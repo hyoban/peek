@@ -407,15 +407,23 @@ func (a *app) commitItem(row ui.ListRow) {
 			})
 			return
 		}
-		// Avatar rounds and sizes its picture for its own size, not this
-		// one, so the picture is cut to the circle here.
-		if bm := a.avatar(cm.Email); bm != nil {
-			ui.Box(c).Size(30, 30).Shrink(0).Radius(15).Clip().Role(ui.RoleImage).Label(cm.Author).Children(func() {
-				ui.Image(c, bm).Fit(ui.Cover).Size(30, 30)
-			})
-		} else {
-			ui.Avatar(c, cm.Author, nil).Size(30, 30).Radius(15).Shrink(0)
-		}
+		// The first co-author over the author's corner, as GitHub
+		// stacks them.
+		ui.Box(c).Size(30, 30).Shrink(0).Children(func() {
+			a.personAvatar(c, cm.Author, cm.Email, 30)
+			if len(cm.CoAuthors) > 0 {
+				co := cm.CoAuthors[0]
+				// A ring of the row's own color parts the two.
+				ring := t.Background
+				if row.Selected() {
+					ring = t.Accent
+				}
+				ui.Box(c).Size(19, 19).Radius(9.5).Center().Background(ring).
+					Absolute().Right(-4).Bottom(-4).Children(func() {
+					a.personAvatar(c, co.Name, co.Email, 16)
+				})
+			}
+		})
 		// What first, across the whole line, then when and who under it.
 		// The hash is in the details.
 		ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
@@ -423,12 +431,12 @@ func (a *app) commitItem(row ui.ListRow) {
 			ui.Row(c).FillWidth().Gap(t.Space(1.5)).AlignItems(ui.Baseline).Children(func() {
 				ui.Text(c, shortDate(cm.Time, time.Now())).FontSize(smallSize).TextColor(muted).SingleLine().Shrink(0)
 				ui.Text(c, "·").FontSize(smallSize).TextColor(muted).Shrink(0)
-				ui.Text(c, cm.Author).FontSize(smallSize).TextColor(muted).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
+				ui.Text(c, authors(cm)).FontSize(smallSize).TextColor(muted).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
 			})
 		})
 	})
 	if cm.Hash != worktree {
-		commitDetails(c, item, cm)
+		a.commitDetails(c, item, cm)
 	}
 }
 
@@ -436,7 +444,7 @@ func (a *app) commitItem(row ui.ListRow) {
 // who and when in full, the whole hash and the message. The card
 // goes beside the row, toward the window's middle, as the history is at
 // its end.
-func commitDetails(c *ui.Context, item ui.Element, cm commit) {
+func (a *app) commitDetails(c *ui.Context, item ui.Element, cm commit) {
 	t := c.Theme()
 	ui.TooltipBase(c, item, func(tip ui.Element) {
 		tip.AttachTo(item, ui.AnchorTopStart, ui.AnchorTopEnd).MarginEnd(t.Space(1.5))
@@ -448,8 +456,13 @@ func commitDetails(c *ui.Context, item ui.Element, cm commit) {
 				// scroll: the message is cut to lines as wrapped, after who
 				// and when, which stay in view.
 				ui.Text(c, cm.Subject).FontWeight(600).TextColor(t.Text).MaxLines(3)
+				ui.Column(c).FillWidth().Gap(t.Space(1.5)).Children(func() {
+					a.personLine(c, person{cm.Author, cm.Email}, "")
+					for _, co := range cm.CoAuthors {
+						a.personLine(c, co, "Co-author")
+					}
+				})
 				ui.Column(c).FillWidth().Gap(t.Space(0.5)).Children(func() {
-					ui.Text(c, cm.Author+" <"+cm.Email+">").FontSize(smallSize).TextColor(t.TextMuted).SingleLine()
 					ui.Text(c, cm.Time.Format("Monday, January 2, 2006 at 15:04")).FontSize(smallSize).TextColor(t.TextMuted)
 					ui.Text(c, cm.Hash).FontSize(smallSize).Font(monoFamily).TextColor(t.TextMuted).SingleLine()
 				})
@@ -459,6 +472,54 @@ func commitDetails(c *ui.Context, item ui.Element, cm commit) {
 			})
 		})
 	})
+}
+
+// personAvatar is the picture of someone, size DIPs across. Avatar lays
+// out its picture and initials for its own size, not this one: the
+// picture is cut to the circle here, and the initials scaled to it.
+func (a *app) personAvatar(c *ui.Context, name, email string, size float32) ui.Element {
+	box := ui.Box(c).Size(size, size).Shrink(0).Radius(size / 2).Role(ui.RoleImage).Label(name)
+	if bm := a.avatar(email); bm != nil {
+		return box.Clip().Children(func() {
+			ui.Image(c, bm).Fit(ui.Cover).Size(size, size)
+		})
+	}
+	// Avatar at its own size, centered on the box out of its layout,
+	// and scaled to it about its middle.
+	own := c.Theme().FontSize * 2.25
+	k, off := size/own, (size-own)/2
+	return box.Children(func() { ui.Avatar(c, name, nil).Absolute().Left(off).Top(off).Scale(k, k) })
+}
+
+// personLine is someone of a commit in its details: picture, then name,
+// with their part where it is not the author's, over email.
+func (a *app) personLine(c *ui.Context, p person, role string) {
+	t := c.Theme()
+	ui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
+		a.personAvatar(c, p.Name, p.Email, 26)
+		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
+			ui.Row(c).FillWidth().Gap(t.Space(1.5)).AlignItems(ui.Baseline).Children(func() {
+				ui.Text(c, p.Name).FontSize(smallSize).FontWeight(600).TextColor(t.Text).SingleLine().Ellipsis("…").MinWidth(0)
+				if role != "" {
+					ui.Text(c, role).FontSize(smallSize-1).TextColor(t.TextMuted).SingleLine().Shrink(0).
+						Padding(0, t.Space(1)).Radius(t.Space(1)).Background(t.TextMuted.Alpha(0.12))
+				}
+			})
+			ui.Text(c, p.Email).FontSize(smallSize).TextColor(t.TextMuted).SingleLine().Ellipsis("…")
+		})
+	})
+}
+
+// authors names who made the commit: the author and a co-author, or the
+// author and how many others.
+func authors(cm commit) string {
+	switch len(cm.CoAuthors) {
+	case 0:
+		return cm.Author
+	case 1:
+		return cm.Author + " and " + cm.CoAuthors[0].Name
+	}
+	return cm.Author + " and " + count(len(cm.CoAuthors), "other")
 }
 
 func (a *app) treePane(c *ui.Context) {
