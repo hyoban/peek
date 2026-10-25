@@ -4,6 +4,8 @@ import (
 	"log"
 	"os"
 	"path"
+	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -42,6 +44,7 @@ type app struct {
 	review                   reviewState
 	reviewSource             reviewSnapshot
 	reviewSourceErr          string
+	switcher                 switcherState
 	// theme is this pass's, and inactiveTheme the one of lists without
 	// the keyboard focus.
 	theme, inactiveTheme *ui.Theme
@@ -174,6 +177,7 @@ func (a *app) view(c *ui.Context) {
 			}
 		})
 	})
+	a.branchSwitcher(c)
 	a.reviewDetails(c)
 	a.sync(c)
 	if a.redraw {
@@ -297,20 +301,6 @@ func (a *app) projectTitle(c *ui.Context) {
 			ui.Text(c, path.Base(a.repo)).FontWeight(700).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
 			ui.Icon(c, chevronIcon).Size(9, 9).Shrink(0).TextColor(t.TextMuted)
 		})
-	})
-}
-
-// branchLabel is the branch checked out, muted beside the project's name,
-// which gives way to it when the toolbar is narrow.
-func (a *app) branchLabel(c *ui.Context) {
-	if a.branch == "" {
-		return
-	}
-	t := c.Theme()
-	ui.Row(c).Shrink(2).MinWidth(0).Gap(t.Space(1)).AlignItems(ui.Center).TextColor(t.TextMuted).
-		Tooltip(a.branch).Children(func() {
-		ui.Icon(c, branchIcon).Size(12, 12).Shrink(0)
-		ui.Text(c, a.branch).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
 	})
 }
 
@@ -762,7 +752,23 @@ func openApp(repo string) *app {
 	return a
 }
 
+// extendPath adds where Homebrew and users install tools to the PATH, after
+// what is there, for git to find what it runs, as git-lfs's filters and
+// hooks, and for gh: a Finder-launched app has the system's PATH alone.
+func extendPath() {
+	home, _ := os.UserHomeDir()
+	have := filepath.SplitList(os.Getenv("PATH"))
+	dirs := have
+	for _, d := range []string{"/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin", filepath.Join(home, ".local", "bin")} {
+		if !slices.Contains(have, d) && exists(d) {
+			dirs = append(dirs, d)
+		}
+	}
+	os.Setenv("PATH", strings.Join(dirs, string(os.PathListSeparator)))
+}
+
 func main() {
+	extendPath()
 	dir := "."
 	if len(os.Args) > 1 {
 		dir = os.Args[1]

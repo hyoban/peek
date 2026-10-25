@@ -69,7 +69,7 @@ func (a *app) reviewButton(c *ui.Context) {
 	}
 	available := a.reviewSource.id != "" || a.reviewSourceErr != ""
 	completed := !a.review.stale && (a.review.result != nil || a.review.err != "")
-	disabled := a.push.running || (!a.review.running && !available && !completed)
+	disabled := a.push.running || (!a.review.running && (a.switcher.running != "" || !available && !completed))
 	if a.review.stale && !available && !a.review.running {
 		label, tooltip = "Review", "Nothing to review"
 	}
@@ -98,7 +98,7 @@ func (a *app) reviewButton(c *ui.Context) {
 }
 
 func (a *app) startReview(services ui.Services) {
-	if a.review.running || a.push.running {
+	if a.review.running || a.push.running || a.switcher.running != "" {
 		return
 	}
 	if a.reviewSourceErr != "" {

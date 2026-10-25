@@ -77,14 +77,12 @@ func repoRoot(dir string) (string, error) {
 // currentBranch returns the branch checked out, or the short hash of a
 // detached HEAD.
 func currentBranch(repo string) string {
-	out, err := git(repo, "rev-parse", "--abbrev-ref", "HEAD")
-	if err != nil {
-		return ""
+	// The ref in full, less refs/heads/: --abbrev-ref and --short make
+	// heads/v1 of a branch a tag shares its name with.
+	if out, err := git(repo, "symbolic-ref", "--quiet", "HEAD"); err == nil {
+		return strings.TrimPrefix(strings.TrimSpace(out), "refs/heads/")
 	}
-	if b := strings.TrimSpace(out); b != "HEAD" {
-		return b
-	}
-	out, _ = git(repo, "rev-parse", "--short", "HEAD")
+	out, _ := git(repo, "rev-parse", "--short", "HEAD")
 	return strings.TrimSpace(out)
 }
 
