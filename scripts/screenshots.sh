@@ -69,8 +69,8 @@ git -C "$work/dify" update-ref refs/remotes/origin/main "$upstream"
 git -C "$work/dify" branch -q -u origin/main
 git -C "$work/dify" config core.sshCommand false
 
-# The number of Peek's window on screen, its largest, or with "wallpaper"
-# the desktop's wallpaper's.
+# The number of Peek's window on screen, its largest, and where it is in
+# points, or with "wallpaper" the desktop's wallpaper's number.
 cat >"$work/window.swift" <<'SWIFT'
 import CoreGraphics
 let all = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as! [[String: Any]]
@@ -84,27 +84,44 @@ let area = { (w: [String: Any]) -> Double in
 	let b = w["kCGWindowBounds"] as! [String: Double]
 	return b["Width"]! * b["Height"]!
 }
-if let w = peek.max(by: { area($0) < area($1) }) { print(w["kCGWindowNumber"]!) }
+if let w = peek.max(by: { area($0) < area($1) }) {
+	let b = w["kCGWindowBounds"] as! [String: Double]
+	print(w["kCGWindowNumber"]!, wallpaper ? "" : "\(Int(b["X"]!)),\(Int(b["Y"]!)),\(Int(b["Width"]!)),\(Int(b["Height"]!))")
+}
 SWIFT
 
-# compose puts a window's capture, with its shadow, in the middle of the
-# wallpaper, filling it, with a margin of points around it.
+# compose puts the window, as the screen showed it at x,y,w,h, its glass
+# over the desktop, back over the desktop's wallpaper where it was, with a
+# margin of points around it and its shadow, which the screen leaves out.
 cat >"$work/compose.swift" <<'SWIFT'
 import AppKit
 let a = CommandLine.arguments
 let window = NSImage(contentsOfFile: a[1])!, wall = NSImage(contentsOfFile: a[2])!
+let at = a[4].split(separator: ",").map { CGFloat(Double($0)!) }
+let (x, y, w, h) = (at[0], at[1], at[2], at[3])
+let margin = CGFloat(Double(a[5])!), radius = CGFloat(Double(a[6])!)
 let rep = window.representations[0]
-let scale = CGFloat(rep.pixelsWide) / window.size.width
-let margin = CGFloat(Double(a[4])!) * scale
-let w = CGFloat(rep.pixelsWide) + 2 * margin, h = CGFloat(rep.pixelsHigh) + 2 * margin
-let out = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(w), pixelsHigh: Int(h), bitsPerSample: 8,
+let s = CGFloat(rep.pixelsWide) / w // pixels a point
+let screen = wall.size // in points
+let W = (w + 2 * margin) * s, H = (h + 2 * margin) * s
+let out = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(W), pixelsHigh: Int(H), bitsPerSample: 8,
 	samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
 NSGraphicsContext.saveGraphicsState()
 NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: out)
-let fill = max(w / wall.size.width, h / wall.size.height)
-let ws = NSSize(width: wall.size.width * fill, height: wall.size.height * fill)
-wall.draw(in: NSRect(x: (w - ws.width) / 2, y: (h - ws.height) / 2, width: ws.width, height: ws.height))
-window.draw(in: NSRect(x: margin, y: margin, width: CGFloat(rep.pixelsWide), height: CGFloat(rep.pixelsHigh)))
+// The wallpaper around the window, from the top left of the screen.
+let crop = NSRect(x: x - margin, y: screen.height - (y + h + margin), width: w + 2 * margin, height: h + 2 * margin)
+wall.draw(in: NSRect(x: 0, y: 0, width: W, height: H), from: crop, operation: .copy, fraction: 1)
+let frame = NSRect(x: margin * s, y: margin * s, width: w * s, height: h * s)
+let shadow = NSShadow()
+shadow.shadowColor = NSColor.black.withAlphaComponent(0.45)
+shadow.shadowBlurRadius = 40 * s
+shadow.shadowOffset = NSSize(width: 0, height: -16 * s)
+NSGraphicsContext.saveGraphicsState()
+shadow.set()
+NSBezierPath(roundedRect: frame.insetBy(dx: 1, dy: 1), xRadius: radius * s, yRadius: radius * s).fill()
+NSGraphicsContext.restoreGraphicsState()
+NSBezierPath(roundedRect: frame, xRadius: radius * s, yRadius: radius * s).addClip()
+window.draw(in: frame)
 NSGraphicsContext.restoreGraphicsState()
 try! out.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: a[3]))
 SWIFT
@@ -122,14 +139,18 @@ shoot() { # mode appearance
 	sleep 10 # the history, the diffs and the avatars
 	launch # in front, drawn as active
 	sleep 1
-	screencapture -x -l "$(swift "$work/window.swift")" "$work/window.png"
-	swift "$work/compose.swift" "$work/window.png" "$work/wallpaper.png" "$docs/$1-$2.png" 60
+	# The window as the screen shows it, its glass over the wallpaper,
+	# Stage Manager having put the other apps aside.
+	local bounds
+	bounds=$(swift "$work/window.swift" | cut -d' ' -f2)
+	screencapture -x -R "$bounds" "$work/window.png"
+	swift "$work/compose.swift" "$work/window.png" "$work/wallpaper.png" "$docs/$1-$2.png" "$bounds" 60 16
 	echo "$docs/$1-$2.png"
 }
 
 for look in light dark; do
 	if [ "$look" = dark ]; then dark true; else dark false; fi
-	screencapture -x -o -l "$(swift "$work/window.swift" wallpaper)" "$work/wallpaper.png"
+	screencapture -x -o -l "$(swift "$work/window.swift" wallpaper | cut -d' ' -f1)" "$work/wallpaper.png"
 	shoot changes "$look"
 	shoot files "$look"
 done
