@@ -226,7 +226,7 @@ func (a *app) close() {
 		a.push.cancel()
 	}
 	a.review.stop()
-	a.explain.stop()
+	a.answer.stop()
 	if a.unwatch != nil {
 		a.unwatch()
 	}
@@ -371,13 +371,13 @@ func (p *projects) openFolder(dir string, parent *mygo.Window) bool {
 // the focus: checked, named for what choosing them does, or disabled
 // where it cannot.
 type menuItems struct {
-	changes, files, sidebar, history, viewed *menuItem
-	layout, nextChange, previousChange       *menuItem
-	find                                     *menuItem
-	refresh, pull, ship, review, explain     *menuItem
-	branch                                   *menuItem
-	github, finder                           *menuItem
-	menuBar, hideInactive                    *menuItem
+	changes, files, sidebar, history, viewed  *menuItem
+	layout, nextChange, previousChange        *menuItem
+	find                                      *menuItem
+	refresh, pull, ship, ask, review, explain *menuItem
+	branch                                    *menuItem
+	github, finder                            *menuItem
+	menuBar, hideInactive                     *menuItem
 }
 
 // menuItem is an item of the menu bar, and what it last showed, so that
@@ -463,15 +463,16 @@ func (p *projects) setMenu() {
 				a.review.stop()
 				return
 			}
-			a.startReview(ui.Services{})
+			a.startReview("")
 		}),
 		explain: item("Explain Changes", "Shift+Cmd+E", func(a *app) {
-			if a.explain.running {
-				a.explain.stop()
+			if a.answer.running {
+				a.answer.stop()
 				return
 			}
-			a.startExplain(ui.Services{})
+			a.startAnswer(askTemplates[0].name, askTemplates[0].request)
 		}),
+		ask: item("New Conversation with Codex…", "Shift+Cmd+A", func(a *app) { a.openAsk() }),
 		branch: item("Switch Branch…", "Cmd+B", func(a *app) {
 			a.openSwitcher()
 			a.switcher.focus = true
@@ -534,7 +535,9 @@ func (p *projects) setMenu() {
 		{Label: "Repository", Submenu: []*mygo.MenuItem{
 			m.refresh.MenuItem,
 			mygo.Separator(),
-			m.pull.MenuItem, m.ship.MenuItem, m.review.MenuItem, m.explain.MenuItem,
+			m.pull.MenuItem, m.ship.MenuItem,
+			mygo.Separator(),
+			m.ask.MenuItem, m.review.MenuItem, m.explain.MenuItem,
 			mygo.Separator(),
 			m.branch.MenuItem,
 			mygo.Separator(),
@@ -557,7 +560,7 @@ func (p *projects) syncMenu() {
 	m.hideInactive.show("Hide When Inactive", true, p.hideInactive)
 	if a == nil {
 		for _, item := range []*menuItem{m.changes, m.files, m.sidebar, m.history, m.viewed, m.find, m.layout, m.nextChange, m.previousChange,
-			m.refresh, m.pull, m.ship, m.review, m.explain, m.branch, m.github, m.finder} {
+			m.refresh, m.pull, m.ship, m.ask, m.review, m.explain, m.branch, m.github, m.finder} {
 			item.show(item.shownLabel, false, item.shownChecked)
 		}
 		return
@@ -594,13 +597,14 @@ func (p *projects) syncMenu() {
 		review = "Stop Review"
 	}
 	target, targetErr := a.reviewTarget()
-	m.review.show(review, a.review.running || (target.ID != "" || targetErr != "") && !busy, false)
+	m.review.show(review, a.review.running || (target.ID != "" || targetErr != "") && !busy && !a.answer.running, false)
 	explain := "Explain Changes"
-	if a.explain.running {
-		explain = "Stop Explaining"
+	if a.answer.running {
+		explain = "Stop Codex"
 	}
-	_, explainable, _ := a.explainable()
-	m.explain.show(explain, a.explain.running || explainable != "" && !busy, false)
+	_, answerable, _ := a.answerable()
+	m.explain.show(explain, a.answer.running || answerable != "" && !busy && !a.review.running, false)
+	m.ask.show("New Conversation with Codex…", !busy && !a.codexRunning(), false)
 	m.branch.show("Switch Branch…", a.branch != "" && !busy, false)
 	m.github.show("Open on GitHub", a.githubPage() != "", false)
 	m.finder.show("Show in Finder", true, false)

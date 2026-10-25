@@ -169,7 +169,7 @@ func TestCodexReviewSmoke(t *testing.T) {
 	snapshot := reviewTestSnapshot(t, repo)
 	var phases []string
 	run := func(ctx context.Context, repo string, snapshot Snapshot) (Result, error) {
-		return Codex(ctx, repo, snapshot, func(phase, detail string) {
+		return Codex(ctx, repo, snapshot, "", func(phase, detail string) {
 			phases = append(phases, phase)
 		})
 	}

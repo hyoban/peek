@@ -18,6 +18,7 @@ type reviewState struct {
 	// head and base are the commits the review was of: base "" for the
 	// uncommitted changes, else the commits from it to head.
 	head, base string
+	request    string // what the user asked more of it, "" for none
 	result     *review.Result
 }
 
@@ -64,62 +65,10 @@ func (a *app) reviewSourceOf(scope string) review.Snapshot {
 	return a.reviewSource
 }
 
-func (a *app) reviewButton(c *ui.Context) { drawTool(c, "review", a.reviewTool(c)) }
-
-// reviewTool is the Review button as the review's state has it.
-func (a *app) reviewTool(c *ui.Context) toolButton {
-	services := c.Services()
-	if a.review.running {
-		return a.review.activity(c, "Reviewing…", "Codex is reviewing the changes", "Stop Review")
-	}
-	target, targetErr := a.reviewTarget()
-	// A review of other changes than those selected stays for them, and
-	// the selected ones are offered instead.
-	other := a.review.sourceID != "" && (a.review.scope == review.BranchScope) != (target.Scope == review.BranchScope)
-	label, tooltip := "Review", "Review the changes with Codex"
-	switch {
-	case other && targetErr != "":
-		tooltip = targetErr
-	case other && target.ID == "":
-		tooltip = "Nothing to review"
-	case other:
-		tooltip = "Review " + target.Scope + " with Codex"
-	case a.review.stale:
-		label, tooltip = "Review Again", "The changes have changed since the last review"
-	case a.review.err != "":
-		label, tooltip = "Review Error", a.review.err
-	case a.review.result != nil:
-		label, tooltip = "Passed", a.review.result.Summary
-		if n := len(a.review.result.Findings); n > 0 && a.review.result.Verdict != "failed" {
-			tooltip += "\n" + count(n, "minor finding")
-		}
-		if a.review.result.Verdict == "failed" {
-			label = "Not Passed"
-		}
-	case targetErr != "":
-		tooltip = targetErr
-	case target.ID == "":
-		tooltip = "Nothing to review"
-	default:
-		tooltip = "Review " + target.Scope + " with Codex"
-	}
-	available := target.ID != "" || targetErr != ""
-	completed := !other && !a.review.stale && (a.review.result != nil || a.review.err != "")
-	disabled := a.changing() || !available && !completed
-	if a.review.stale && !other && !available {
-		label, tooltip = "Review", "Nothing to review"
-	}
-	return toolButton{label: label, tooltip: tooltip, disabled: disabled, click: func() {
-		if completed {
-			a.review.open = true
-			return
-		}
-		a.startReview(services)
-	}}
-}
-
-func (a *app) startReview(services ui.Services) {
-	if a.review.running || a.changing() {
+// startReview has Codex review the changes, as request asks where the
+// user asked more: "" for none.
+func (a *app) startReview(request string) {
+	if a.codexRunning() || a.changing() {
 		return
 	}
 	snapshot, targetErr := a.reviewTarget()
@@ -133,13 +82,13 @@ func (a *app) startReview(services ui.Services) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	repo := a.repo
 	a.review = reviewState{codexTask: codexTask{running: true, cancel: cancel, phase: "Checking…", detail: "Checking the review snapshot"},
-		sourceID: snapshot.ID, scope: snapshot.Scope, head: snapshot.Head, base: snapshot.Base}
+		sourceID: snapshot.ID, scope: snapshot.Scope, head: snapshot.Head, base: snapshot.Base, request: request}
 	progress := a.codexProgress(ctx, &a.review.codexTask, func() bool { return !a.review.stale && a.review.sourceID == snapshot.ID })
 	a.background(func() func() {
 		defer cancel()
 		run := func(ctx context.Context, repo string, snapshot review.Snapshot) (review.Result, error) {
 			progress("Starting…", "Starting Codex")
-			result, err := review.Codex(ctx, repo, snapshot, progress)
+			result, err := review.Codex(ctx, repo, snapshot, request, progress)
 			progress("Checking…", "Validating the review result and checking for changes")
 			return result, err
 		}
@@ -154,6 +103,7 @@ func (a *app) startReview(services ui.Services) {
 				a.review.result = &result
 			}
 			if !a.review.stale && (a.review.result != nil || a.review.err != "") {
+				a.lastCodex = codexReview
 				body := a.review.err
 				if a.review.result != nil {
 					body = a.review.result.Summary
@@ -186,7 +136,6 @@ func (r *reviewState) text() string {
 
 // reviewDetails is the review in a sheet, its findings to read and copy.
 func (a *app) reviewDetails(c *ui.Context) {
-	services := c.Services()
 	r := &a.review
 	a.resultSheet(c, &a.reviewSheet, &r.open, r.title(), r.scope, func(c *ui.Context) {
 		t := c.Theme()
@@ -206,5 +155,5 @@ func (a *app) reviewDetails(c *ui.Context) {
 				})
 			}
 		}
-	}, r.text(), "Review Again", a.changing() || r.running || a.reviewTargetID() == "", func() { a.startReview(services) })
+	}, r.text(), "Review Again", a.changing() || a.codexRunning() || a.reviewTargetID() == "", func() { a.startReview(r.request) })
 }

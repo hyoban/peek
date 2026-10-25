@@ -54,7 +54,7 @@ func TestCodexReviewStreamsBeforeCompletion(t *testing.T) {
 	t.Setenv("PEEK_TEST_CODEX_ACK", ack)
 	repo := testutil.Repo(t)
 	var callbackErr error
-	result, err := Codex(context.Background(), repo, reviewTestSnapshot(t, repo), func(phase, detail string) {
+	result, err := Codex(context.Background(), repo, reviewTestSnapshot(t, repo), "", func(phase, detail string) {
 		if phase == "Inspecting…" && detail == "git diff" {
 			callbackErr = os.WriteFile(ack, nil, 0o600)
 		}

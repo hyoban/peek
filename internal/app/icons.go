@@ -23,7 +23,11 @@ var (
 	previewIcon  = icon(`<path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/>`)
 	splitIcon    = icon(`<rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M8 2.5v11M3.5 6h2.5M10 6h2.5M3.5 9h2.5M10 9h2.5"/>`)
 	unifiedIcon  = icon(`<rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M4 5.5h8M4 8h8M4 10.5h5"/>`)
-	commentIcon  = icon(`<path d="M2.5 3.5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H7l-3 2.5v-2.5h-.5a1 1 0 0 1-1-1z"/>`)
+	// templatesIcon is the conversation's templates', two switches, as
+	// Xcode's options of a conversation; sendIcon sends it.
+	templatesIcon = icon(`<rect x="1.5" y="2.5" width="13" height="5" rx="2.5"/><circle cx="11.5" cy="5" r="1.2"/><rect x="1.5" y="8.5" width="13" height="5" rx="2.5"/><circle cx="4.5" cy="11" r="1.2"/>`)
+	sendIcon      = icon(`<path d="M8 13.5v-11M3.5 7L8 2.5 12.5 7" stroke-width="1.8"/>`)
+	commentIcon   = icon(`<path d="M2.5 3.5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H7l-3 2.5v-2.5h-.5a1 1 0 0 1-1-1z"/>`)
 )
 
 // githubIcon is GitHub's mark, from Primer's Octicons (MIT), filled.

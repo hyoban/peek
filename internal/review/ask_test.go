@@ -27,8 +27,8 @@ func TestCommitSnapshot(t *testing.T) {
 	}
 }
 
-func TestExplain(t *testing.T) {
-	testutil.FakeReviewCodex(t, `{"explanation":"  It **starts** the program.  "}`)
+func TestAsk(t *testing.T) {
+	testutil.FakeReviewCodex(t, `{"answer":"  It **starts** the program.  "}`)
 	promptFile := filepath.Join(t.TempDir(), "prompt")
 	t.Setenv("PEEK_TEST_REVIEW_PROMPT", promptFile)
 	repo := testutil.Repo(t)
@@ -38,19 +38,20 @@ func TestExplain(t *testing.T) {
 		t.Fatal(err)
 	}
 	var phases []string
-	text, err := Explain(context.Background(), repo, snapshot, func(phase, _ string) { phases = append(phases, phase) })
+	text, err := Ask(context.Background(), repo, snapshot, "Explain the changes.", func(phase, _ string) { phases = append(phases, phase) })
 	if err != nil || text != "It **starts** the program." {
-		t.Fatalf("explanation %q, %v", text, err)
+		t.Fatalf("answer %q, %v", text, err)
 	}
 	prompt, err := os.ReadFile(promptFile)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(prompt), "git diff --no-ext-diff --no-textconv "+snapshot.Base+" "+head+" --") {
+	if !strings.HasPrefix(string(prompt), "Explain the changes.\n") ||
+		!strings.Contains(string(prompt), "git diff --no-ext-diff --no-textconv "+snapshot.Base+" "+head+" --") {
 		t.Errorf("prompt %s", prompt)
 	}
-	testutil.FakeReviewCodex(t, `{"explanation":" "}`)
-	if _, err := Explain(context.Background(), repo, snapshot, nil); err == nil {
-		t.Error("an empty explanation is no error")
+	testutil.FakeReviewCodex(t, `{"answer":" "}`)
+	if _, err := Ask(context.Background(), repo, snapshot, "Explain the changes.", nil); err == nil {
+		t.Error("an empty answer is no error")
 	}
 }

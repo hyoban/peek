@@ -6,8 +6,6 @@ import (
 	"peek/internal/git"
 	"peek/internal/testutil"
 	"testing"
-
-	"github.com/egoist/mygo/ui"
 )
 
 func TestPullButton(t *testing.T) {
@@ -49,7 +47,7 @@ func TestPullBlocksOtherOperations(t *testing.T) {
 	a.pull.running = true
 	tt.Frame()
 	a.startPush()
-	a.startReview(ui.Services{})
+	a.startReview("")
 	a.switchTo(switchTarget{branch: "feature"})
 	tt.Frame()
 	if a.push.running || a.push.status != "" || a.review.running || a.switcher.running != "" {

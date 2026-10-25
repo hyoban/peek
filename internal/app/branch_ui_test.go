@@ -190,7 +190,7 @@ func TestShipWaitsForCheckout(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.startPush()
-	a.startReview(ui.Services{})
+	a.startReview("")
 	tt.Frame()
 	if a.push.status != "" || a.review.running {
 		t.Fatalf("started during a checkout: push %+v, review %+v", a.push, a.review)

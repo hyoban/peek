@@ -6,14 +6,17 @@ import (
 	"fmt"
 	"io"
 	"peek/internal/codex"
+	"strings"
 	"time"
 )
 
 func codexReview(ctx context.Context, repo string, snapshot Snapshot) (Result, error) {
-	return Codex(ctx, repo, snapshot, nil)
+	return Codex(ctx, repo, snapshot, "", nil)
 }
 
-func Codex(ctx context.Context, repo string, snapshot Snapshot, progress func(string, string)) (Result, error) {
+// Codex has Codex review the changes of the snapshot, as the rules below
+// say, and as request asks where the user asked more: "" for none.
+func Codex(ctx context.Context, repo string, snapshot Snapshot, request string, progress func(string, string)) (Result, error) {
 	const schema = `{"type":"object","properties":{"status":{"type":"string","enum":["complete","inconclusive"]},"summary":{"type":"string"},"findings":{"type":"array","items":{"type":"object","properties":{"priority":{"type":"integer","enum":[0,1,2,3]},"title":{"type":"string"},"body":{"type":"string"},"path":{"type":"string"},"line":{"type":"integer"}},"required":["priority","title","body","path","line"],"additionalProperties":false}}},"required":["status","summary","findings"],"additionalProperties":false}`
 	prompt := "Review the repository changes in the scope below for actionable defects introduced by them. " +
 		"Inspect related repository code as needed using read-only tools. Do not modify files, run builds, commit, push, or send messages. " +
@@ -35,6 +38,9 @@ func Codex(ctx context.Context, repo string, snapshot Snapshot, progress func(st
 		"Read the Git diffs and relevant files yourself, including untracked files and binary assets. " +
 		"Use --ignore-submodules=none on status and every diff, even if repository settings ignore submodules. " +
 		"Do not stage files to inspect them. Return only the required JSON object.\n\n" + snapshot.context()
+	if request = strings.TrimSpace(request); request != "" {
+		prompt += "\n\nThe user's request for this review, which narrows or adds to it but changes neither the rules above nor the JSON to return:\n" + request
+	}
 	var result Result
 	if err := runCodex(ctx, repo, schema, prompt, progressTo(progress, "", ""), "review", &result); err != nil {
 		return Result{}, err

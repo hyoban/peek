@@ -62,9 +62,8 @@ func (a *app) toolbarSpec(c *ui.Context) *mygo.Toolbar {
 		mygo.ToolbarItem{ID: "history-separator", Kind: mygo.ToolbarSeparator, Divider: 1},
 		mygo.ToolbarItem{ID: "history-start", Kind: mygo.ToolbarFlexibleSpace},
 	)
-	items = append(items, toolItems("explain", a.explainTool(c))...)
-	items = append(items, toolItems("review", a.reviewTool(c))...)
 	items = append(items, toolItems("push", a.pushTool(c))...)
+	items = append(items, codexItems(a.codexTool(c))...)
 	items = append(items, mygo.ToolbarItem{ID: "history", Symbol: "sidebar.right", Label: showOrHide(a.showHistory, "History"),
 		ToolTip: showOrHide(a.showHistory, "History"), Click: func() { a.toggle(&a.showHistory, &a.collapsedHistory) }})
 	return &mygo.Toolbar{
@@ -94,6 +93,17 @@ func toolItems(key string, b toolButton) []mygo.ToolbarItem {
 		{ID: key, Title: b.label, Label: b.label, ToolTip: b.tooltip, Disabled: b.disabled, Hidden: b.busy, Click: b.click},
 		{ID: key + "-activity", Kind: mygo.ToolbarActivity, Title: b.label, Label: b.stop, ToolTip: tooltip, Hidden: !b.busy, Click: b.cancel},
 	}
+}
+
+// codexItems are the items of Codex's button: the button, a bubble and
+// the verdict of the review where it came last, or the request under way,
+// which stops it, as toolItems.
+func codexItems(b toolButton) []mygo.ToolbarItem {
+	items := toolItems("codex", b)
+	if !b.busy {
+		items[0].Symbol, items[0].Label = "plus.bubble", "Ask Codex"
+	}
+	return items
 }
 
 // pullItems are the Pull button's: the commits to pull, or the pull under

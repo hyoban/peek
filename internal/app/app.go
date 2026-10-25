@@ -59,7 +59,9 @@ type app struct {
 	upstream                 string // the upstream's name, where the branch is behind it
 	pull                     pullState
 	review                   reviewState
-	explain                  explainState
+	answer                   answerState
+	ask                      askState
+	lastCodex                codexResult // which result came last
 	// reviewSource is what a review is of where the work tree or a commit
 	// shows: the uncommitted changes, else the commits not pushed yet.
 	reviewSource    review.Snapshot
@@ -81,7 +83,7 @@ type app struct {
 	// over the room the columns leave it.
 	nativeBar bool
 	// The windows of AppKit's own the sheets and the switcher show in.
-	reviewSheet, explainSheet, switcherPopover child
+	reviewSheet, answerSheet, switcherPopover, askPopoverWin child
 
 	showHistory, showTree   bool
 	historyWidth, treeWidth float32
@@ -154,6 +156,7 @@ func newApp(repo string) *app {
 		filesFor:     -1,
 		changeTree:   newPathTree(),
 		allTree:      newPathTree(),
+		ask:          askState{template: -1},
 	}
 }
 
@@ -249,8 +252,9 @@ func (a *app) view(c *ui.Context) {
 	}
 	a.branchSwitcher(c)
 	a.alerts(c)
+	a.askPopover(c)
 	a.reviewDetails(c)
-	a.explanationDetails(c)
+	a.answerDetails(c)
 	a.sync(c)
 	// Over the window's material the sidebar shows it, and the other
 	// columns draw their own backgrounds, as AppKit's source lists do: the
@@ -430,13 +434,12 @@ func toolGroup(c *ui.Context, label string, build func()) ui.Element {
 	}).Shrink(0).Padding(0).Label(label)
 }
 
-// actions are the toolbar's work on the commits: explaining and
-// reviewing the changes and shipping them, over the history, which they add to, or at the end
+// actions are the toolbar's work on the commits: shipping them, and
+// asking Codex about the changes, which it explains and reviews, over the history, which they add to, or at the end
 // of the text's part while the history hides.
 func (a *app) actions(c *ui.Context) {
-	a.explainButton(c)
-	a.reviewButton(c)
 	a.pushButton(c)
+	a.codexButton(c)
 }
 
 // repository is the toolbar's controls of the repository: the project,
