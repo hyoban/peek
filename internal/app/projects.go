@@ -200,7 +200,6 @@ func (p *projects) showWindow() {
 		MinHeight:     400,
 		StateKey:      "main",
 		TitleBarStyle: mygo.TitleBarHidden,
-		Vibrancy:      mygo.VibrancySidebar,
 		Content:       ui.View(p.view),
 	})
 	win := p.win

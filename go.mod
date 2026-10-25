@@ -16,11 +16,11 @@ require (
 	golang.org/x/text v0.43.0 // indirect
 )
 
-// The fork's native-toolbar branch, on MyGo's main, leaves Tooltip's
-// tips to AppKit, which shows them as its own; scrolls as AppKit's scroll
-// views do: overlay scroll bars, and content a touchpad pulls past its
-// ends springing back; gives macOS's Services and Writing Tools the
-// selected text, in AppKit's context menus of text; and shows AppKit's
-// toolbar over the content's columns, the sidebars on the window's color.
+// The fork's native-sidebar-material branch, on MyGo's main, leaves
+// Tooltip's tips to AppKit, which shows them as its own; scrolls as
+// AppKit's scroll views do: overlay scroll bars, and content a touchpad
+// pulls past its ends springing back; gives macOS's Services and Writing
+// Tools the selected text, in AppKit's context menus of text; and shows
+// AppKit's toolbar over the content's columns, the sidebars on its glass.
 // Until MyGo does.
-replace github.com/egoist/mygo => github.com/hyoban/mygo v0.6.4-0.20261025125608-17b1dd3cd27d
+replace github.com/egoist/mygo => github.com/hyoban/mygo v0.6.4-0.20261025140218-5f159035e223
