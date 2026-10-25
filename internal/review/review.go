@@ -1,6 +1,6 @@
 // Package review has Codex review a repository's uncommitted changes, its
 // commits not pushed yet, or its branch's changes, and tells whether a
-// result is out of date.
+// result is out of date; and has it explain those changes or a commit's.
 package review
 
 import (

@@ -12,15 +12,13 @@ import (
 )
 
 type reviewState struct {
-	running, stale, open bool
-	cancel               context.CancelFunc
+	codexTask
+	stale, open          bool
 	sourceID, scope, err string
 	// head and base are the commits the review was of: base "" for the
 	// uncommitted changes, else the commits from it to head.
-	head, base    string
-	phase, detail string
-	started       time.Time
-	result        *review.Result
+	head, base string
+	result     *review.Result
 }
 
 func (a *app) updateReviewSource(snapshot review.Snapshot, err string) {
@@ -40,9 +38,7 @@ func (a *app) updateBranchReview(snapshot review.Snapshot) {
 // outdated marks the review out of date, stopping it where it runs.
 func (r *reviewState) outdated() {
 	r.stale = true
-	if r.cancel != nil {
-		r.cancel()
-	}
+	r.stop()
 }
 
 // reviewTarget is what a review would be of, as the history's selection
@@ -71,16 +67,7 @@ func (a *app) reviewSourceOf(scope string) review.Snapshot {
 func (a *app) reviewButton(c *ui.Context) {
 	services := c.Services()
 	if a.review.running {
-		text, tooltip := "Reviewing…", "Codex is reviewing the changes"
-		if a.review.phase != "" {
-			if a.review.started.IsZero() {
-				a.review.started = c.Now()
-			}
-			elapsed := c.Now().Sub(a.review.started).Truncate(time.Second)
-			text, tooltip = fmt.Sprintf("%s %s", a.review.phase, elapsed), a.review.detail
-			c.After(time.Second)
-		}
-		activity(c, "review", text, tooltip, "Stop Review", func() { a.review.cancel() })
+		a.review.activity(c, "review", "Reviewing…", "Codex is reviewing the changes", "Stop Review")
 		return
 	}
 	target, targetErr := a.reviewTarget()
@@ -116,7 +103,7 @@ func (a *app) reviewButton(c *ui.Context) {
 	}
 	available := target.ID != "" || targetErr != ""
 	completed := !other && !a.review.stale && (a.review.result != nil || a.review.err != "")
-	disabled := a.push.running || a.switcher.running != "" || a.pull.running || !available && !completed
+	disabled := a.changing() || !available && !completed
 	if a.review.stale && !other && !available {
 		label, tooltip = "Review", "Nothing to review"
 	}
@@ -130,7 +117,7 @@ func (a *app) reviewButton(c *ui.Context) {
 }
 
 func (a *app) startReview(services ui.Services) {
-	if a.review.running || a.push.running || a.switcher.running != "" || a.pull.running {
+	if a.review.running || a.changing() {
 		return
 	}
 	snapshot, targetErr := a.reviewTarget()
@@ -143,18 +130,9 @@ func (a *app) startReview(services ui.Services) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	repo := a.repo
-	a.review = reviewState{running: true, cancel: cancel, sourceID: snapshot.ID, scope: snapshot.Scope, head: snapshot.Head, base: snapshot.Base,
-		phase: "Checking…", detail: "Checking the review snapshot"}
-	win, inline := a.win, a.inline
-	progress := func(phase, detail string) {
-		if !inline {
-			win.Update(func() {
-				if ctx.Err() == nil && a.review.running && !a.review.stale && a.review.sourceID == snapshot.ID {
-					a.review.phase, a.review.detail = phase, detail
-				}
-			})
-		}
-	}
+	a.review = reviewState{codexTask: codexTask{running: true, cancel: cancel, phase: "Checking…", detail: "Checking the review snapshot"},
+		sourceID: snapshot.ID, scope: snapshot.Scope, head: snapshot.Head, base: snapshot.Base}
+	progress := a.codexProgress(ctx, &a.review.codexTask, func() bool { return !a.review.stale && a.review.sourceID == snapshot.ID })
 	a.background(func() func() {
 		defer cancel()
 		run := func(ctx context.Context, repo string, snapshot review.Snapshot) (review.Result, error) {
@@ -165,7 +143,7 @@ func (a *app) startReview(services ui.Services) {
 		}
 		result, err := review.Run(ctx, repo, snapshot, run)
 		return func() {
-			a.review.running, a.review.cancel = false, nil
+			a.review.finish()
 			if errors.Is(err, review.ErrChanged) || a.reviewSourceOf(snapshot.Scope).ID != snapshot.ID {
 				a.review.stale = true
 			} else if err != nil {
@@ -208,35 +186,23 @@ func (r *reviewState) text() string {
 func (a *app) reviewDetails(c *ui.Context) {
 	t := c.Theme()
 	services := c.Services()
-	sheet(c, &a.review.open, a.review.title(), 620, 480, func() {
-		ui.Text(c, a.review.title()).FontWeight(600).FontSize(fontSize + 3).Shrink(0)
-		ui.Text(c, a.review.scope).TextColor(t.TextMuted).Shrink(0)
-		ui.Scroll(c).Grow(1).FillWidth().MinHeight(0).Children(func() {
-			ui.Column(c).FillWidth().Gap(t.Space(3)).Children(func() {
-				if a.review.stale {
-					ui.Text(c, "This review is out of date. Review the current changes again.")
-				}
-				if a.review.err != "" {
-					ui.Text(c, a.review.err).Selectable()
-				}
-				if result := a.review.result; result != nil {
-					ui.Text(c, result.Summary).Selectable()
-					for i, f := range result.Findings {
-						ui.Column(c).Key(i).FillWidth().Gap(t.Space(1)).Children(func() {
-							ui.Text(c, fmt.Sprintf("[P%d] %s", f.Priority, f.Title)).FontWeight(600).Selectable()
-							ui.Text(c, fmt.Sprintf("%s:%d", f.Path, f.Line)).TextColor(t.TextMuted).Selectable()
-							ui.Text(c, f.Body).Selectable()
-						})
-					}
-				}
-			})
-		})
-	}, func() {
-		// Copy apart at the start, as a sheet's secondary action, and the
-		// default button last.
-		ui.Button(c.Key("copy-review"), "Copy").OnClick(func() { services.WriteClipboard(a.review.text()) })
-		ui.Spacer(c)
-		ui.Button(c.Key("review-again"), "Review Again").Disabled(a.push.running || a.review.running || a.pull.running || a.reviewTargetID() == "").
-			OnClick(func() { a.startReview(services) })
-	})
+	r := &a.review
+	resultSheet(c, &r.open, r.title(), r.scope, func() {
+		if r.stale {
+			ui.Text(c, "This review is out of date. Review the current changes again.")
+		}
+		if r.err != "" {
+			ui.Text(c, r.err).Selectable()
+		}
+		if result := r.result; result != nil {
+			ui.Text(c, result.Summary).Selectable()
+			for i, f := range result.Findings {
+				ui.Column(c).Key(i).FillWidth().Gap(t.Space(1)).Children(func() {
+					ui.Text(c, findingTitle(f)).FontWeight(600).Selectable()
+					ui.Text(c, fmt.Sprintf("%s:%d", f.Path, f.Line)).TextColor(t.TextMuted).Selectable()
+					ui.Text(c, f.Body).Selectable()
+				})
+			}
+		}
+	}, r.text(), "Review Again", a.changing() || r.running || a.reviewTargetID() == "", func() { a.startReview(services) })
 }

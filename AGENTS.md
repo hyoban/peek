@@ -4,7 +4,7 @@
 
 `main.go` only starts `internal/app`, the window. Beside it, under
 `internal/`: `git` runs git and gh, `codex` runs the Codex CLI, `review`
-builds Codex reviews on both, `fileicons` draws file icons, `filekind`
+builds Codex reviews and explanations on both, `fileicons` draws file icons, `filekind`
 tells code from tests, docs and generated files, and `testutil`
 holds the repositories and fake CLIs the tests share.
 

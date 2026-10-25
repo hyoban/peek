@@ -3,10 +3,30 @@ package review
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"strings"
 )
 
 const maxEvent = 64 * 1024
+
+// progressTo feeds Codex's events to report as a review's stages, or,
+// with phase and detail, as those of other work, only what Codex inspects
+// told apart; nil where report is.
+func progressTo(report func(string, string), phase, detail string) io.Writer {
+	if report == nil {
+		return nil
+	}
+	if phase != "" {
+		stage := report
+		report = func(p, d string) {
+			if p != "Inspecting…" {
+				p, d = phase, detail
+			}
+			stage(p, d)
+		}
+	}
+	return &progressWriter{report: report}
+}
 
 // Consume JSONL incrementally. Command output can be very large; discard
 // oversized events without retaining their contents or interrupting Codex.

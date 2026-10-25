@@ -100,12 +100,14 @@ func TestReviewCancelAndLayout(t *testing.T) {
 		tt := ui.NewTester(a.view, width, 800)
 		tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Left: 68})
 		tt.Frame()
+		tt.Frame() // the toolbar laid out for the width of its controls
 		mode, ok := tt.Find("Changes")
 		if !ok {
 			t.Fatal("missing mode switch")
 		}
 		cancelled := false
 		a.review = reviewState{running: true, cancel: func() { cancelled = true }}
+		tt.Frame()
 		tt.Frame()
 		if !tt.HasText("Reviewing…") {
 			t.Fatal("no activity", tt.Texts())
@@ -130,7 +132,9 @@ func TestReviewCancelAndLayout(t *testing.T) {
 		} {
 			a.review = state
 			tt.Frame()
-			if got, ok := tt.Find("Changes"); !ok || got != mode {
+			tt.Frame()
+			// At the narrowest, the mode gives way to the controls at the end.
+			if got, ok := tt.Find("Changes"); !ok || width > 640 && got != mode {
 				t.Fatalf("mode switch moved at %d: %v → %v", width, mode, got)
 			}
 		}
@@ -143,6 +147,7 @@ func TestReviewCancelAndLayout(t *testing.T) {
 		}
 		a.review.phase = "Inspecting…"
 		tt.Frame()
+		tt.Frame() // the toolbar laid out for the stage's width
 		cancelled = false
 		if !tt.HasText("Inspecting… 12s") {
 			t.Fatal("no phase", tt.Texts())
@@ -150,7 +155,7 @@ func TestReviewCancelAndLayout(t *testing.T) {
 		if err := tt.Click("Stop Review"); err != nil || !cancelled {
 			t.Fatalf("progress button did not cancel: %v", err)
 		}
-		if got, ok := tt.Find("Changes"); !ok || got != mode {
+		if got, ok := tt.Find("Changes"); !ok || width > 640 && got != mode {
 			t.Fatal("progress moved the mode switch")
 		}
 		a.review = reviewState{result: &review.Result{Verdict: "passed", Summary: "Passed"}}

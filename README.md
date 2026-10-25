@@ -41,6 +41,7 @@ All of the commit's files, to read any of them as it was then.
 - Fetches the branch's remote every few minutes, shows how many new commits it has beside the branch, and pulls them by fast-forward with a click
 - **Ship**: commit all changes with a Codex-written message and push, from the history's toolbar
 - **Review**: have Codex review the uncommitted changes or the unpushed commits, from the history's toolbar
+- **Explain**: have Codex explain the changes shown, the uncommitted changes, a commit or the branch's, from the history's toolbar
 - **Show in Menu Bar**, in the app menu, puts Peek in the menu bar in place of the Dock: its menu lists the recent repositories with their branches and the files they change, and the commits to pull, pulled with a click, whose count shows beside its icon; a right click brings Peek to the front
 - **Hide When Inactive**, in the app menu, hides Peek as another app comes to the front
 - The remotes' new commits counted on the Dock icon, while it shows
@@ -70,6 +71,7 @@ All of the commit's files, to read any of them as it was then.
 | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>P</kbd> | Pull |
 | <kbd>⌘</kbd> <kbd>P</kbd> | Ship |
 | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>R</kbd> | Review changes |
+| <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>E</kbd> | Explain changes |
 | <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>R</kbd> | Show the repository in Finder |
 
 ## Usage
@@ -138,6 +140,15 @@ a failed review does not prevent a later push. The two operations cannot run
 at the same time. Review has no assembled-diff size limit; Git metadata output
 is still bounded. Dirty submodules must be committed or cleaned before
 reviewing, including untracked files inside them.
+
+### Explain with Codex
+
+Click **Explain** in the history's toolbar (or press <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>E</kbd>) to have Codex
+explain the changes of the entry chosen in the history: the uncommitted changes, a commit, or the branch's
+changes. As for a review, Peek only tells Codex where the changes are, and Codex reads them and the code
+around them itself, in a read-only sandbox with your settings. Once it is ready the button reads **Explanation**;
+click it to read it, in Markdown, copy it, or explain again. An explanation of the uncommitted
+changes goes out of date as they change.
 
 To build `Peek.app` and a `.dmg` into `build/`:
 

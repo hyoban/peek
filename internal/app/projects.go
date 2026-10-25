@@ -224,9 +224,8 @@ func (a *app) close() {
 	if a.push.cancel != nil {
 		a.push.cancel()
 	}
-	if a.review.cancel != nil {
-		a.review.cancel()
-	}
+	a.review.stop()
+	a.explain.stop()
 	if a.unwatch != nil {
 		a.unwatch()
 	}
@@ -373,7 +372,8 @@ type menuItems struct {
 	changes, files, sidebar, history, viewed *menuItem
 	layout, nextChange, previousChange       *menuItem
 	find                                     *menuItem
-	refresh, pull, ship, review, branch      *menuItem
+	refresh, pull, ship, review, explain     *menuItem
+	branch                                   *menuItem
 	github, finder                           *menuItem
 	menuBar, hideInactive                    *menuItem
 }
@@ -458,10 +458,17 @@ func (p *projects) setMenu() {
 		}),
 		review: item("Review Changes", "Shift+Cmd+R", func(a *app) {
 			if a.review.running {
-				a.review.cancel()
+				a.review.stop()
 				return
 			}
 			a.startReview(ui.Services{})
+		}),
+		explain: item("Explain Changes", "Shift+Cmd+E", func(a *app) {
+			if a.explain.running {
+				a.explain.stop()
+				return
+			}
+			a.startExplain(ui.Services{})
 		}),
 		branch: item("Switch Branch…", "Cmd+B", func(a *app) {
 			a.openSwitcher()
@@ -525,7 +532,7 @@ func (p *projects) setMenu() {
 		{Label: "Repository", Submenu: []*mygo.MenuItem{
 			m.refresh.MenuItem,
 			mygo.Separator(),
-			m.pull.MenuItem, m.ship.MenuItem, m.review.MenuItem,
+			m.pull.MenuItem, m.ship.MenuItem, m.review.MenuItem, m.explain.MenuItem,
 			mygo.Separator(),
 			m.branch.MenuItem,
 			mygo.Separator(),
@@ -548,7 +555,7 @@ func (p *projects) syncMenu() {
 	m.hideInactive.show("Hide When Inactive", true, p.hideInactive)
 	if a == nil {
 		for _, item := range []*menuItem{m.changes, m.files, m.sidebar, m.history, m.viewed, m.find, m.layout, m.nextChange, m.previousChange,
-			m.refresh, m.pull, m.ship, m.review, m.branch, m.github, m.finder} {
+			m.refresh, m.pull, m.ship, m.review, m.explain, m.branch, m.github, m.finder} {
 			item.show(item.shownLabel, false, item.shownChecked)
 		}
 		return
@@ -586,6 +593,12 @@ func (p *projects) syncMenu() {
 	}
 	target, targetErr := a.reviewTarget()
 	m.review.show(review, a.review.running || (target.ID != "" || targetErr != "") && !busy, false)
+	explain := "Explain Changes"
+	if a.explain.running {
+		explain = "Stop Explaining"
+	}
+	_, explainable, _ := a.explainable()
+	m.explain.show(explain, a.explain.running || explainable != "" && !busy, false)
 	m.branch.show("Switch Branch…", a.branch != "" && !busy, false)
 	m.github.show("Open on GitHub", a.githubPage() != "", false)
 	m.finder.show("Show in Finder", true, false)

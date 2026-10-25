@@ -59,6 +59,7 @@ type app struct {
 	upstream                 string // the upstream's name, where the branch is behind it
 	pull                     pullState
 	review                   reviewState
+	explain                  explainState
 	// reviewSource is what a review is of where the work tree or a commit
 	// shows: the uncommitted changes, else the commits not pushed yet.
 	reviewSource    review.Snapshot
@@ -70,6 +71,8 @@ type app struct {
 	// focus and inactiveTheme the one of lists without it.
 	theme, listTheme, inactiveTheme *ui.Theme
 	titleButton                     ui.Handle // the project's name, under which the projects list
+	endTools                        ui.Handle // the controls at the end of the text's toolbar
+	endWidth                        float32   // their width, as last laid out
 	alert                           alertState
 
 	showHistory, showTree   bool
@@ -232,6 +235,7 @@ func (a *app) view(c *ui.Context) {
 	a.branchSwitcher(c)
 	a.alerts(c)
 	a.reviewDetails(c)
+	a.explanationDetails(c)
 	a.sync(c)
 	if a.redraw {
 		a.redraw = false
@@ -326,10 +330,11 @@ func toolGroup(c *ui.Context, label string, build func()) ui.Element {
 	return ui.Toolbar(c, build).Shrink(0).Padding(0).Label(label)
 }
 
-// actions are the toolbar's work on the commits: reviewing the changes
-// and shipping them, over the history, which they add to, or at the end
+// actions are the toolbar's work on the commits: explaining and
+// reviewing the changes and shipping them, over the history, which they add to, or at the end
 // of the text's part while the history hides.
 func (a *app) actions(c *ui.Context) {
+	a.explainButton(c)
 	a.reviewButton(c)
 	a.pushButton(c)
 }
@@ -366,8 +371,13 @@ func (a *app) toolbar(c *ui.Context, start, end bool) {
 			modeSwitch(c.Key("mode"), &a.modeChoice, "Changes", "Files").Label("Mode").
 				OnChange(func() { a.setMode(a.modeChoice) })
 		})
-		// Both sides as wide, so that the mode stays in the middle.
-		ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Justify(ui.End).Gap(t.Space(1)).Children(func() {
+		// Both sides as wide, so that the mode stays in the middle, where
+		// the controls at the end have the room, as they had last: else the
+		// mode gives way, as an NSToolbar's centered item does.
+		if w := a.endTools.Bounds(c).W; w != a.endWidth {
+			a.endWidth, a.redraw = w, true
+		}
+		ui.Row(c).Grow(1).Basis(0).MinWidth(a.endWidth).AlignItems(ui.Center).Justify(ui.End).Gap(t.Space(1)).Children(func() {
 			toolGroup(c, "Toolbar", func() {
 				if page := a.githubPage(); page != "" {
 					a.linkButton(c, "github", githubIcon, "Open on GitHub", page)
@@ -376,7 +386,7 @@ func (a *app) toolbar(c *ui.Context, start, end bool) {
 					a.actions(c)
 					a.paneButton(c, "history", historyIcon, &a.showHistory, &a.collapsedHistory, "History")
 				}
-			})
+			}).Bind(&a.endTools)
 		})
 	})
 }

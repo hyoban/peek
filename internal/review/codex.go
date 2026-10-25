@@ -35,20 +35,27 @@ func Codex(ctx context.Context, repo string, snapshot Snapshot, progress func(st
 		"Read the Git diffs and relevant files yourself, including untracked files and binary assets. " +
 		"Use --ignore-submodules=none on status and every diff, even if repository settings ignore submodules. " +
 		"Do not stage files to inspect them. Return only the required JSON object.\n\n" + snapshot.context()
-	var events io.Writer
-	if progress != nil {
-		events = &progressWriter{report: progress}
-	}
-	data, err := codex.JSON(ctx, repo, schema, prompt, 10*time.Minute, events)
-	if err != nil {
+	var result Result
+	if err := runCodex(ctx, repo, schema, prompt, progressTo(progress, "", ""), "review", &result); err != nil {
 		return Result{}, err
 	}
-	var result Result
-	if err := json.Unmarshal(data, &result); err != nil {
-		return Result{}, fmt.Errorf("invalid Codex review: %w", err)
-	}
-	err = result.validate()
+	err := result.validate()
 	return result, err
+}
+
+// runCodex has Codex do what the prompt asks over the repository, in a
+// read-only sandbox with the user's settings, its JSON answer, of the
+// schema, read into result, the answer named what; progress, where not
+// nil, is fed its events.
+func runCodex(ctx context.Context, repo, schema, prompt string, progress io.Writer, what string, result any) error {
+	data, err := codex.JSON(ctx, repo, schema, prompt, 10*time.Minute, progress)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(data, result); err != nil {
+		return fmt.Errorf("invalid Codex %s: %w", what, err)
+	}
+	return nil
 }
 
 func (s Snapshot) context() string {
