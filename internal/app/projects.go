@@ -28,6 +28,7 @@ type projects struct {
 	inline  bool            // no windows, the apps' loads on the UI thread, for tests
 	menu    *menuItems      // the menu bar's items that follow the project, nil in tests
 	empty   *mygo.Window    // the window asking for a project while none is open
+	badge   int             // the count on the Dock icon
 	// quitting keeps the projects open as the app quits, for the next
 	// launch to open them again.
 	quitting bool
@@ -93,6 +94,7 @@ func (p *projects) window(c *ui.Context, a *app) {
 	if a == p.cur {
 		p.syncMenu()
 	}
+	p.syncBadge()
 }
 
 // welcome is the window before any project opens, as a Mac app's welcome
@@ -164,6 +166,7 @@ func (p *projects) open(repo string) {
 		if cur := p.cur; cur != nil { // the columns as they are
 			a.showHistory, a.showTree = cur.showHistory, cur.showTree
 			a.historyWidth, a.treeWidth = cur.historyWidth, cur.treeWidth
+			a.split = cur.split
 		}
 		p.apps[repo] = a
 		if !p.inline {
@@ -336,6 +339,7 @@ func (p *projects) openFolder(dir string, parent *mygo.Window) bool {
 // where it cannot.
 type menuItems struct {
 	changes, files, sidebar, history, viewed *menuItem
+	layout, nextChange, previousChange       *menuItem
 	find                                     *menuItem
 	refresh, pull, ship, review, branch      *menuItem
 	github, finder                           *menuItem
@@ -406,9 +410,12 @@ func (p *projects) setMenu() {
 				a.setRead(d, !d.read)
 			}
 		}),
-		find:    item("Find…", "Cmd+F", func(a *app) { a.find(editor.Find) }),
-		refresh: item("Refresh", "Cmd+R", func(a *app) { a.refresh() }),
-		pull:    item("Pull", "Shift+Cmd+P", func(a *app) { a.startPull() }),
+		layout:         item("Show Side by Side", "Ctrl+Cmd+D", func(a *app) { a.split = !a.split }),
+		nextChange:     item("Next Change", "Ctrl+Cmd+Down", func(a *app) { a.goChange(1) }),
+		previousChange: item("Previous Change", "Ctrl+Cmd+Up", func(a *app) { a.goChange(-1) }),
+		find:           item("Find…", "Cmd+F", func(a *app) { a.find(editor.Find) }),
+		refresh:        item("Refresh", "Cmd+R", func(a *app) { a.refresh() }),
+		pull:           item("Pull", "Shift+Cmd+P", func(a *app) { a.startPull() }),
 		ship: item("Ship", "Cmd+P", func(a *app) {
 			if a.push.running {
 				a.push.cancel()
@@ -459,6 +466,9 @@ func (p *projects) setMenu() {
 			mygo.Separator(),
 			m.sidebar.MenuItem, m.history.MenuItem,
 			mygo.Separator(),
+			m.layout.MenuItem,
+			mygo.Separator(),
+			m.nextChange.MenuItem, m.previousChange.MenuItem,
 			m.viewed.MenuItem,
 			mygo.Separator(),
 			{Role: mygo.RoleToggleFullScreen},
@@ -486,7 +496,7 @@ func (p *projects) syncMenu() {
 		return
 	}
 	if a == nil {
-		for _, item := range []*menuItem{m.changes, m.files, m.sidebar, m.history, m.viewed, m.find,
+		for _, item := range []*menuItem{m.changes, m.files, m.sidebar, m.history, m.viewed, m.find, m.layout, m.nextChange, m.previousChange,
 			m.refresh, m.pull, m.ship, m.review, m.branch, m.github, m.finder} {
 			item.show(item.shownLabel, false, item.shownChecked)
 		}
@@ -503,6 +513,14 @@ func (p *projects) syncMenu() {
 		viewed = "Mark as Not Viewed"
 	}
 	m.viewed.show(viewed, a.mode == modeChanges && d != nil, false)
+	layout := "Show Side by Side"
+	if a.split {
+		layout = "Show Unified"
+	}
+	diffs := a.mode == modeChanges && len(a.diffs) > 0
+	m.layout.show(layout, a.mode == modeChanges, false)
+	m.nextChange.show("Next Change", diffs, false)
+	m.previousChange.show("Previous Change", diffs, false)
 	m.find.show("Find…", a.findable(), false)
 	m.refresh.show("Refresh", true, false)
 	m.pull.show("Pull", a.behind > 0 && !busy, false)

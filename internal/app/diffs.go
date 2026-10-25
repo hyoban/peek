@@ -22,8 +22,11 @@ type fileDiff struct {
 	note    string       // why the diff does not show
 	loading bool
 	stale   bool // the file may have changed since it loaded
-	read    bool // marked read: its diff folds away under its header
-	opened  bool // read, its diff shown again by a click on its header
+	// patch marks a diff of the patch's lines alone, as of a file too
+	// large to show whole, whose lines are not numbered as the file's.
+	patch  bool
+	read   bool // marked read: its diff folds away under its header
+	opened bool // read, its diff shown again by a click on its header
 }
 
 // folded reports whether the diff folds away under its header.
@@ -221,7 +224,16 @@ func (a *app) diffPane(c *ui.Context) {
 	if n := len(a.diffs); n > 0 {
 		detail = count(n, "file")
 	}
-	jumpBar(c, title, a.github, mutedDetail(c, detail), func() {
+	jumpBar(c, title, a.github, func() {
+		mutedDetail(c, detail)()
+		if len(a.diffs) > 0 {
+			a.commentsButton(c)
+			toolGroup(c, "Diff Toolbar", func() {
+				a.changeButtons(c)
+				a.layoutButton(c)
+			})
+		}
+	}, func() {
 		if len(a.diffs) == 0 {
 			emptyNote(c, "No changes")
 			return
@@ -274,6 +286,7 @@ func (a *app) commitMessage(c *ui.Context) {
 					Tooltip(cm.Hash).ContextMenu(func(m *ui.Menu) {
 					if m.Item("Copy Commit Hash").Chosen() {
 						services.WriteClipboard(cm.Hash)
+						c.Toast("Commit Hash Copied")
 					}
 				})
 			})
@@ -294,6 +307,8 @@ func (a *app) diffHeader(c *ui.Context, d *fileDiff) {
 	services := c.Services()
 	bar.ContextMenu(func(m *ui.Menu) {
 		a.readMenu(m, ch.Path)
+		m.Separator()
+		a.linesMenu(c, m, d)
 		m.Separator()
 		a.fileMenu(services, m, ch.Path, false)
 	})
@@ -319,6 +334,9 @@ func (a *app) diffHeader(c *ui.Context, d *fileDiff) {
 		}
 		ui.Text(c, where).FontSize(smallSize).TextColor(t.TextMuted).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
 		if d.state != nil {
+			if r, ok := d.state.SelectedLines(); ok && !d.patch {
+				a.linesButton(c, d, r)
+			}
 			added, deleted := d.state.Stats()
 			lineCounts(c, added, deleted, false)
 		}
@@ -344,6 +362,7 @@ func (a *app) diffBody(c *ui.Context, d *fileDiff) {
 	case d.state == nil:
 		ui.Row(c).FillWidth().Padding(t.Space(4), t.Space(3)).Children(func() { ui.Spinner(c).Label("Loading") })
 	default:
+		a.configure(c, d)
 		editor.DiffView(c.Key("diff:"+d.change.Path), d.state).FillWidth().Padding(0, 0, t.Space(4))
 	}
 }
@@ -370,12 +389,20 @@ func (a *app) loadDiff(d *fileDiff) {
 		if note == "" && before == after {
 			note = "Only the file's mode changed"
 		}
+		// A file too large to show whole shows its patch's lines.
+		var patch *editor.FilePatch
+		if note == tooLarge {
+			patch = filePatch(a.repo, cm.Hash, ch)
+		}
 		var state *editor.DiffState
-		if note == "" && !shown {
+		if patch != nil || note == "" && !shown {
+			if patch != nil {
+				before, after, note = "", "", ""
+			}
 			state = &editor.DiffState{
 				Old:        codeBuffer(ch.Path, before),
 				New:        codeBuffer(ch.Path, after),
-				Layout:     editor.DiffUnified,
+				Layout:     a.diffLayout(),
 				FitContent: true,
 				// Long lines wrap, as Xcode's do: a diff that scrolled
 				// sideways would drift with the slant of every vertical
@@ -385,12 +412,20 @@ func (a *app) loadDiff(d *fileDiff) {
 				Font:  codeFont,
 				Theme: codeTheme,
 			}
+			if patch != nil {
+				state.SetPatch(*patch)
+			}
 			state.Stats() // diffs the texts here rather than in a frame
 		}
 		return func() {
 			d.loading = false
 			if gen != a.diffGen {
 				return // another commit was chosen meanwhile
+			}
+			d.patch = patch != nil
+			if d.patch {
+				d.note, d.state = "", state
+				return
 			}
 			if note == "" && d.state != nil {
 				// The diff shown follows its texts, keeping its place
@@ -416,7 +451,26 @@ func resetText(b *editor.Buffer, text string) {
 	}
 }
 
-const maxTextSize = 8 << 20
+const (
+	maxTextSize  = 8 << 20
+	maxPatchSize = 4 << 20
+)
+
+const tooLarge = "This file is too large to show"
+
+// filePatch reads the patch of the change to a file, nil where it has
+// none of lines to show or is too large too.
+func filePatch(repo, hash string, ch git.Change) *editor.FilePatch {
+	out, err := git.Patch(repo, hash, ch, maxPatchSize)
+	if err != nil {
+		return nil
+	}
+	files, err := editor.ParsePatch(out)
+	if err != nil || len(files) != 1 || files[0].Binary || len(files[0].Hunks) == 0 {
+		return nil
+	}
+	return &files[0]
+}
 
 // monoFamily is the font of code: MonoLisa where it is installed, else
 // the system's monospaced font.
@@ -443,7 +497,7 @@ func textNote(texts ...string) string {
 	}
 	for _, text := range texts {
 		if len(text) > maxTextSize {
-			return "This file is too large to show"
+			return tooLarge
 		}
 	}
 	return ""

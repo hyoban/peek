@@ -329,6 +329,23 @@ func FileText(repo, hash, p string) (string, error) {
 	return git(repo, "show", hash+":"+p)
 }
 
+// Patch returns git's patch of the change the commit makes to a file, or
+// the work tree's against HEAD, of limit bytes at most: ErrTooLarge where
+// it is longer. A file git does not track has none.
+func Patch(repo, hash string, ch Change, limit int) (string, error) {
+	args := []string{"show", "--format=", "-M", "--root", hash}
+	if hash == Worktree {
+		args = []string{"diff", "-M", "HEAD"}
+	}
+	paths := []string{ch.Path}
+	if ch.Old != ch.Path {
+		paths = append(paths, ch.Old)
+	}
+	// a/ and b/ whatever the user's diff.noprefix or diff.mnemonicPrefix.
+	args = append(args, "--no-ext-diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/", "--")
+	return Bounded(repo, limit, append(args, paths...)...)
+}
+
 // ListFiles returns every file of the commit, or of the work tree: the
 // files git tracks and those it does not ignore, less those deleted.
 func ListFiles(repo, hash string) ([]string, error) {

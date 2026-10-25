@@ -254,7 +254,9 @@ func (a *app) watch() {
 		tick := time.NewTicker(fetchEvery)
 		defer tick.Stop()
 		for {
-			win.Update(a.fetchRemote)
+			if networkAllows() {
+				win.Update(a.fetchRemote)
+			}
 			select {
 			case <-ctx.Done():
 				return

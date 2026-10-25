@@ -97,6 +97,11 @@ type app struct {
 	// scrollTarget is the file the diffs scroll to for the tree, -1 once
 	// there; settledFirst the first row then, until the user scrolls.
 	scrollTarget, settledFirst int
+	split                      bool                  // the diffs side by side
+	change                     changeMark            // the change Next and Previous Change went to last
+	comments                   map[string][]*comment // the user's comments on lines, by commit and path
+	diffWidth                  float32               // the diffs' column's, for their annotations
+	frames                     int                   // counts the frames, for what waits for the next
 
 	// Files mode.
 	allTree  pathTree
@@ -168,6 +173,7 @@ func (a *app) view(c *ui.Context) {
 	}
 	a.building = true
 	defer func() { a.building = false }()
+	a.frames++
 	a.themed(c)
 	// The shortcuts are the menu bar's (viewMenu, repositoryMenu), as it
 	// holds every command of a Mac app.
@@ -184,6 +190,13 @@ func (a *app) view(c *ui.Context) {
 	// in actions, after the pass, so that all of the pass sees the same.
 	a.fit(c.Size())
 	tree, history := a.showTree, a.showHistory
+	a.diffWidth, _ = c.Size()
+	if tree {
+		a.diffWidth -= a.treeWidth
+	}
+	if history {
+		a.diffWidth -= a.historyWidth
+	}
 	content := func() {
 		ui.Column(c).Fill().Background(a.theme.Background).Children(func() {
 			a.toolbar(c, !tree, !history)
@@ -642,9 +655,11 @@ func (a *app) commitMenu(c *ui.Context, item ui.Element, i int, cm git.Commit) {
 	item.ContextMenu(func(m *ui.Menu) {
 		if m.Item("Copy Commit Hash").Chosen() {
 			services.WriteClipboard(cm.Hash)
+			c.Toast("Commit Hash Copied")
 		}
 		if m.Item("Copy Commit Message").Chosen() {
 			services.WriteClipboard(commitMessage(cm))
+			c.Toast("Commit Message Copied")
 		}
 		if a.github != "" {
 			m.Separator()
@@ -1176,8 +1191,11 @@ func Run(args []string) {
 		}
 	})
 	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { p.quitting = true })
+	followApp()
 	mygo.App.WhenReady(func() {
 		p.setMenu()
+		p.setDockMenu()
+		p.followNetwork()
 		if err == nil {
 			p.open(repo)
 		} else {

@@ -27,7 +27,12 @@ All of the commit's files, to read any of them as it was then.
 - The uncommitted changes always at the top of the history
 - Changed files grouped into code, tests, docs and lockfiles or generated files, with their added and deleted lines, and each diff marked viewed once read; tests, docs and generated files start folded as viewed, and a viewed diff opens again when chosen in the sidebar
 - Filter the sidebar's files by path
-- Syntax-highlighted diffs, with unmodified lines and imports folded away
+- Syntax-highlighted diffs, with unmodified lines and imports folded away, unified or side by side
+- Step through the changes of all the files with Next and Previous Change
+- Select lines by their numbers to copy a reference to them, or their link on GitHub
+- Comment on lines from the gutter, and copy the comments as a prompt for an agent
+- The findings of a Codex review shown under the lines they are about
+- Files too large to show whole shown as their patch
 - Pictures shown as pictures, and Markdown files as a preview with the repository's images, with a toggle to the source
 - File and folder icons from the icon theme VS Code is set to, when it draws SVGs (as [Flow Icons](https://github.com/thang-nm/Flow-Icons) does), or else from [file-icons](https://github.com/file-icons/atom)
 - Authors' and co-authors' avatars, the commit's details and message on hover, references such as `#123` linked to their pull request or issue, and a link to the branch on GitHub
@@ -36,6 +41,8 @@ All of the commit's files, to read any of them as it was then.
 - Fetches the branch's remote every few minutes, shows how many new commits it has beside the branch, and pulls them by fast-forward with a click
 - **Ship**: commit all changes with a Codex-written message and push, from the history's toolbar
 - **Review**: have Codex review the uncommitted changes or the unpushed commits, from the history's toolbar
+- A notification when shipping or a review finishes while Peek is in the background, and the remotes' new commits counted on the Dock icon
+- Fetches wait while offline or on a metered connection, and run as the network comes back
 - Every command in the menu bar, as Mac apps have them
 - Follows the system's light and dark appearance
 
@@ -49,6 +56,8 @@ All of the commit's files, to read any of them as it was then.
 | <kbd>⌃</kbd> <kbd>⌘</kbd> <kbd>S</kbd> | Show or hide the sidebar |
 | <kbd>⌃</kbd> <kbd>⌘</kbd> <kbd>I</kbd> | Show or hide the history |
 | <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>V</kbd> | Mark the chosen file's diff as viewed |
+| <kbd>⌃</kbd> <kbd>⌘</kbd> <kbd>D</kbd> | Show the diffs side by side or unified |
+| <kbd>⌃</kbd> <kbd>⌘</kbd> <kbd>↓</kbd> / <kbd>⌃</kbd> <kbd>⌘</kbd> <kbd>↑</kbd> | Next / previous change |
 | <kbd>⌘</kbd> <kbd>F</kbd> | Find in the file |
 | <kbd>⌘</kbd> <kbd>G</kbd> / <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>G</kbd> | Find next / previous |
 | <kbd>⌘</kbd> <kbd>E</kbd> | Use the selection for Find |

@@ -78,8 +78,10 @@ func (a *app) startPush() {
 			case err != nil:
 				a.push.status = ""
 				a.showAlert("Couldn’t Ship", err.Error())
+				a.notify("Couldn’t Ship", err.Error(), nil)
 			default:
 				a.push.status, a.canPush = status, false
+				a.notify("Shipped", status, nil)
 			}
 			a.refresh()
 		}

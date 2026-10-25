@@ -14,9 +14,12 @@ type reviewState struct {
 	running, stale, open bool
 	cancel               context.CancelFunc
 	sourceID, scope, err string
-	phase, detail        string
-	started              time.Time
-	result               *review.Result
+	// head and base are the commits the review was of: base "" for the
+	// uncommitted changes, else the commits from it to head.
+	head, base    string
+	phase, detail string
+	started       time.Time
+	result        *review.Result
 }
 
 func (a *app) updateReviewSource(snapshot review.Snapshot, err string) {
@@ -93,7 +96,7 @@ func (a *app) startReview(services ui.Services) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	snapshot, repo := a.reviewSource, a.repo
-	a.review = reviewState{running: true, cancel: cancel, sourceID: snapshot.ID, scope: snapshot.Scope,
+	a.review = reviewState{running: true, cancel: cancel, sourceID: snapshot.ID, scope: snapshot.Scope, head: snapshot.Head, base: snapshot.Base,
 		phase: "Checking…", detail: "Checking the review snapshot"}
 	win, inline := a.win, a.inline
 	progress := func(phase, detail string) {
@@ -122,6 +125,13 @@ func (a *app) startReview(services ui.Services) {
 				a.review.err = err.Error()
 			} else if !a.review.stale {
 				a.review.result = &result
+			}
+			if !a.review.stale && (a.review.result != nil || a.review.err != "") {
+				body := a.review.err
+				if a.review.result != nil {
+					body = a.review.result.Summary
+				}
+				a.notify(a.review.title(), body, func() { a.review.open = true })
 			}
 			a.refresh()
 		}
