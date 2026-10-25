@@ -35,6 +35,8 @@ type turn struct {
 	Answer  string         `json:"answer,omitempty"`
 	Review  *review.Result `json:"review,omitempty"`
 	Err     string         `json:"error,omitempty"`
+	// partial is the answer as it streams, until it is done.
+	partial string
 }
 
 func (t *turn) done() bool { return t.Answer != "" || t.Review != nil || t.Err != "" }
@@ -351,6 +353,10 @@ func (a *app) turnView(c *ui.Context, conv *conversation, tn *turn) {
 	})
 	switch {
 	case !tn.done():
+		// What Codex wrote so far, as it streams, over what it does now.
+		if tn.partial != "" {
+			answerView(c, tn.partial)
+		}
 		phase := a.answer.phase
 		if a.review.conv == conv {
 			phase = a.review.phase
@@ -358,20 +364,27 @@ func (a *app) turnView(c *ui.Context, conv *conversation, tn *turn) {
 		if phase == "" {
 			phase = "Thinking…"
 		}
-		ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
+		stage := ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
 			ui.Spinner(c).Size(12, 12)
 			ui.Text(c, phase).TextColor(t.TextMuted)
 		})
+		// The transcript follows the answer as it grows, as it comes.
+		if n := len(tn.partial) + 1; n != a.streamed {
+			a.streamed = n
+			stage.ScrollIntoView()
+		}
 		return
-	case tn.Err != "":
+	case tn.Review != nil:
+		reviewView(c, tn.Review)
+	case tn.Answer != "":
+		answerView(c, tn.Answer)
+	}
+	// An error after what Codex wrote before it, if anything.
+	if tn.Err != "" {
 		ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Start).Children(func() {
 			ui.Icon(c, warningIcon).Size(16, 16).Shrink(0).TextColor(system(c, systemOrange))
 			ui.Text(c, tn.Err).TextColor(t.TextMuted).Selectable().Grow(1).MinWidth(0)
 		})
-	case tn.Review != nil:
-		reviewView(c, tn.Review)
-	default:
-		markdown.View(c, tn.Answer, &markdown.Options{Theme: &markdown.Theme{CodeFont: monoFamily}, WrapCode: true})
 	}
 	// Under the answer, its actions, as symbols, muted until pointed at.
 	ui.Row(c).Gap(t.Space(1)).Children(func() {
@@ -384,6 +397,12 @@ func (a *app) turnView(c *ui.Context, conv *conversation, tn *turn) {
 			c.Toast("Copied")
 		})
 	})
+}
+
+// answerView is an answer of Codex's in its conversation, as its
+// Markdown reads.
+func answerView(c *ui.Context, text string) {
+	markdown.View(c, text, &markdown.Options{Theme: &markdown.Theme{CodeFont: monoFamily}, WrapCode: true})
 }
 
 // reviewView is a review in its conversation: the verdict beside its

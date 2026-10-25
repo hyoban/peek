@@ -72,6 +72,7 @@ type app struct {
 	convFile      string
 	navigator     int
 	reply         string    // the request to follow up with
+	streamed      int       // how much of the answer streaming the transcript followed
 	replyField    ui.Handle // its field
 	// reviewSource is what a review is of where the work tree or a commit
 	// shows: the uncommitted changes, else the commits not pushed yet.

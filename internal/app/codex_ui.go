@@ -58,6 +58,23 @@ func (a *app) codexProgress(ctx context.Context, k *codexTask, current func() bo
 	}
 }
 
+// codexDelta adds the answer's text as it streams to the turn, from off
+// the UI thread, while the task runs and current tells that it is still
+// the one it is of.
+func (a *app) codexDelta(ctx context.Context, k *codexTask, current func() bool, tn *turn) func(string) {
+	win, inline := a.win, a.inline
+	return func(delta string) {
+		if inline {
+			return
+		}
+		win.Update(func() {
+			if ctx.Err() == nil && k.running && current() {
+				tn.partial += delta
+			}
+		})
+	}
+}
+
 // changing reports whether the repository is being changed: shipped,
 // pulled or checked out, which Codex waits for, to read it as it is.
 func (a *app) changing() bool {

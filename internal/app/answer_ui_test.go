@@ -62,7 +62,8 @@ func TestAnswerUI(t *testing.T) {
 		t.Fatalf("follow-up %+v, texts %q", conv.Turns, tt.Texts())
 	}
 	runs, _ := os.ReadFile(args)
-	if lines := strings.Split(strings.TrimSpace(string(runs)), "\n"); len(lines) != 2 || !strings.Contains(lines[1], "resume") || !strings.Contains(lines[1], "thread-1") {
+	// Two app servers, the second resuming Codex's conversation.
+	if lines := strings.Split(strings.TrimSpace(string(runs)), "\n"); len(lines) != 3 || lines[1] != "app-server" || lines[2] != "app-server resume thread-1" {
 		t.Fatalf("codex ran with %q", lines)
 	}
 	if got, _ := os.ReadFile(prompt); !strings.HasPrefix(string(got), "Anything else?\n") || strings.Contains(string(got), "Scope:") {

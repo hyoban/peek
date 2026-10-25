@@ -134,6 +134,35 @@ func FakeReviewCodex(t *testing.T, response string) {
 	t.Setenv("PEEK_TEST_REVIEW_RESPONSE", file)
 	script := `#!/bin/sh
 if [ -n "$PEEK_TEST_CODEX_ARGS" ]; then printf '%s\n' "$*" >> "$PEEK_TEST_CODEX_ARGS"; fi
+# The app server answers its requests a line each, streaming the response's
+# answer, the prompt kept as exec keeps it.
+if [ "$1" = app-server ]; then
+  thread="${PEEK_TEST_CODEX_THREAD:-thread-test}"
+  while IFS= read -r line; do
+    id=$(printf '%s\n' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+    case "$line" in
+      *'"method":"initialize"'*) printf '{"id":%s,"result":{}}\n' "$id" ;;
+      *'"method":"thread/start"'*)
+        case "$line" in *'"sandbox":"read-only"'*) ;; *) exit 2 ;; esac
+        printf '{"id":%s,"result":{"thread":{"id":"%s"}}}\n' "$id" "$thread" ;;
+      *'"method":"thread/resume"'*)
+        if [ -n "$PEEK_TEST_CODEX_ARGS" ]; then
+          printf 'app-server resume %s\n' "$(printf '%s\n' "$line" | sed -n 's/.*"threadId":"\([^"]*\)".*/\1/p')" >> "$PEEK_TEST_CODEX_ARGS"
+        fi
+        printf '{"id":%s,"result":{"thread":{"id":"%s"}}}\n' "$id" "$thread" ;;
+      *'"method":"turn/start"'*)
+        if [ -n "$PEEK_TEST_REVIEW_PROMPT" ]; then
+          printf '%b' "$(printf '%s\n' "$line" | sed -n 's/.*"text":"\(.*\)","type":"text".*/\1/p')" > "$PEEK_TEST_REVIEW_PROMPT"
+        fi
+        printf '{"id":%s,"result":{}}\n' "$id"
+        answer=$(sed -n 's/.*"answer":"\(.*\)"}.*/\1/p' "$PEEK_TEST_REVIEW_RESPONSE")
+        printf '{"method":"item/started","params":{"item":{"type":"agentMessage"}}}\n'
+        printf '{"method":"item/agentMessage/delta","params":{"delta":"%s"}}\n' "$answer"
+        printf '{"method":"turn/completed","params":{"turn":{"status":"completed"}}}\n' ;;
+    esac
+  done
+  exit 0
+fi
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --output-last-message) shift; output="$1" ;;

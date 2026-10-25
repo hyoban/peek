@@ -81,7 +81,9 @@ func (a *app) runAnswer(conv *conversation) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	a.answer = answerState{codexTask: codexTask{running: true, cancel: cancel, phase: "Starting…", detail: "Starting Codex"},
 		conv: conv, turn: i}
-	progress := a.codexProgress(ctx, &a.answer.codexTask, func() bool { return a.answer.conv == conv && a.answer.turn == i })
+	current := func() bool { return a.answer.conv == conv && a.answer.turn == i }
+	progress := a.codexProgress(ctx, &a.answer.codexTask, current)
+	delta := a.codexDelta(ctx, &a.answer.codexTask, current, conv.Turns[i])
 	repo := a.repo
 	a.background(func() func() {
 		defer cancel()
@@ -91,7 +93,7 @@ func (a *app) runAnswer(conv *conversation) {
 			snapshot, err = review.CommitSnapshot(repo, cm.Hash)
 		}
 		if err == nil {
-			text, session, err = review.Ask(ctx, repo, session, snapshot, request, progress)
+			text, session, err = review.Ask(ctx, repo, session, snapshot, request, progress, delta)
 		}
 		return func() {
 			e := &a.answer
@@ -105,12 +107,13 @@ func (a *app) runAnswer(conv *conversation) {
 			tn := conv.Turns[i]
 			switch {
 			case errors.Is(err, context.Canceled):
-				tn.Err = "Stopped"
+				tn.Answer, tn.Err = tn.partial, "Stopped"
 			case err != nil:
-				tn.Err = err.Error()
+				tn.Answer, tn.Err = tn.partial, err.Error()
 			default:
 				tn.Answer = text
 			}
+			tn.partial = ""
 			a.saveConversations()
 			if !errors.Is(err, context.Canceled) {
 				a.lastCodex = codexAnswer
