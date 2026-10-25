@@ -3,10 +3,10 @@ package app
 import (
 	"fmt"
 	"path"
-	"slices"
 	"strings"
 
 	"peek/internal/fileicons"
+	"peek/internal/filekind"
 	"peek/internal/git"
 
 	"github.com/egoist/mygo/ui"
@@ -48,54 +48,12 @@ func (a *app) resetDiffs() {
 	a.scrollTarget, a.settledFirst = -1, -1
 }
 
-// fileKind is what a file holds, the changes grouping code first, then
-// tests, then docs.
-type fileKind int
-
-const (
-	kindCode fileKind = iota
-	kindTest
-	kindDocs
-)
-
-var (
-	testDirs = []string{"test", "tests", "__tests__", "__mocks__", "testdata", "spec", "e2e"}
-	docsDirs = []string{"doc", "docs"}
-	docsExts = []string{".md", ".mdx", ".markdown", ".rst", ".adoc", ".org", ".txt"}
-	docsStem = []string{"readme", "license", "licence", "changelog", "changes", "notice", "authors", "contributing", "copying"}
-)
-
-// kindOf tells what the file holds by its name and where it is.
-func kindOf(p string) fileKind {
-	dirs := strings.Split(path.Dir(p), "/")
-	name := path.Base(p)
-	ext := path.Ext(name)
-	stem := strings.TrimSuffix(name, ext)
-	lower := strings.ToLower(stem)
-	switch {
-	case slices.ContainsFunc(dirs, func(d string) bool { return slices.Contains(testDirs, d) }),
-		strings.HasSuffix(lower, "_test"), strings.HasSuffix(lower, "_spec"),
-		strings.HasSuffix(lower, ".test"), strings.HasSuffix(lower, ".spec"),
-		// Button.stories.tsx, but not .storybook's config
-		strings.HasSuffix(lower, ".stories"), strings.HasSuffix(lower, ".story"),
-		strings.HasPrefix(lower, "test_") && ext == ".py",
-		// FooTest.java, FooTests.swift
-		strings.HasSuffix(stem, "Test") && stem != "Test", strings.HasSuffix(stem, "Tests") && stem != "Tests":
-		return kindTest
-	case slices.ContainsFunc(dirs, func(d string) bool { return slices.Contains(docsDirs, d) }),
-		slices.Contains(docsExts, strings.ToLower(ext)),
-		slices.ContainsFunc(docsStem, func(s string) bool { return lower == s || strings.HasPrefix(lower, s+"-") }):
-		return kindDocs
-	}
-	return kindCode
-}
-
 // newDiff is the diff of a changed file of the commit, read where it was
 // marked so, or else where it is a test or docs.
 func (a *app) newDiff(ch git.Change) *fileDiff {
 	read, ok := a.read[a.readKey(ch.Path)]
 	if !ok {
-		read = kindOf(ch.Path) != kindCode
+		read = filekind.Of(ch.Path) != filekind.Code
 	}
 	return &fileDiff{change: ch, read: read}
 }
@@ -106,7 +64,7 @@ func (a *app) openChanges() {
 	t := &a.changeTree
 	t.openAll()
 	for _, item := range t.dirs[""] {
-		if isGroup(item) && item != groupPrefix+kindNames[kindCode] {
+		if isGroup(item) && item != groupPrefix+filekind.Names[filekind.Code] {
 			t.state.Open.Remove(item)
 		}
 	}

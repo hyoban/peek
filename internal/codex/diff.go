@@ -1,21 +1,28 @@
 package codex
 
 import (
+	"context"
 	"path"
-	"sort"
+	"peek/internal/filekind"
+	"peek/internal/git"
+	"regexp"
 	"strconv"
 	"strings"
 )
 
-// Tiers of a file's diff, in the order rankDiffs embeds them, and the most
-// of each file's diff it keeps.
-const (
-	tierCode    = iota
-	tierSupport // tests, docs and config
-	tierBulk    // lockfiles and generated files
+// Groups of files in the order rankDiffs embeds them: the change list's
+// groups, then lockfiles and generated files, which say little for their
+// size. Each file's diff is cut to its group's cap.
+const groupBulk = len(filekind.Names)
+
+var (
+	groupNames = append(filekind.Names[:], "Lockfiles and generated files")
+	groupCaps  = [...]int{filekind.Code: 8 * 1024, filekind.Test: 8 * 1024, filekind.Docs: 8 * 1024, groupBulk: 2 * 1024}
 )
 
-var tierCaps = [...]int{tierCode: 8 * 1024, tierSupport: 8 * 1024, tierBulk: 2 * 1024}
+// generatedMarker finds the comment line that marks a generated file, Go's
+// convention or the @generated tag, on either side of the diff.
+var generatedMarker = regexp.MustCompile(`(?m)^[-+ ](// Code generated .* DO NOT EDIT\.$|\s*(//|#|/?\*+|--)\s*@generated\b)`)
 
 var lockfiles = map[string]bool{
 	"package-lock.json": true, "npm-shrinkwrap.json": true, "pnpm-lock.yaml": true, "yarn.lock": true,
@@ -24,34 +31,35 @@ var lockfiles = map[string]bool{
 	"podfile.lock": true, "package.resolved": true, "flake.lock": true, "mix.lock": true,
 }
 
-// rankDiffs splits a diff by file and keeps what fits the budget: code
-// first, then tests, docs and config, then lockfiles and generated files,
-// each cut to its tier's cap. complete is false when a code, test, doc or
-// config diff was cut or left out; trimming bulk files does not count.
-func rankDiffs(diff string, budget int) (ranked string, complete bool) {
-	type file struct {
-		text string
-		tier int
-	}
-	var files []file
+// rankDiffs splits a diff by file and keeps what fits the budget, in the
+// change list's groups and under their names, then lockfiles and generated
+// files, each cut to its group's cap. generated holds the files that
+// .gitattributes marks linguist-generated, or explicitly not, which wins
+// over the common rules. complete is false when a diff other than a
+// lockfile's or generated file's was cut or left out.
+func rankDiffs(diff string, budget int, generated map[string]bool) (ranked string, complete bool) {
+	groups := make([][]string, len(groupNames))
 	for _, text := range splitDiff(diff) {
-		files = append(files, file{text, diffTier(text)})
+		g := diffGroup(text, generated)
+		groups[g] = append(groups[g], text)
 	}
-	sort.SliceStable(files, func(i, j int) bool { return files[i].tier < files[j].tier })
 	var b strings.Builder
 	complete, left := true, false
-	for _, f := range files {
-		text := f.text
-		if limit := tierCaps[f.tier]; len(text) > limit {
-			text = cutDiff(text, limit)
-			complete = complete && f.tier == tierBulk
+	for g, files := range groups {
+		heading := "## " + groupNames[g] + "\n"
+		for _, text := range files {
+			if limit := groupCaps[g]; len(text) > limit {
+				text = cutDiff(text, limit)
+				complete = complete && g == groupBulk
+			}
+			if b.Len()+len(heading)+len(text) > budget {
+				left = true
+				complete = complete && g == groupBulk
+				continue
+			}
+			b.WriteString(heading + text)
+			heading = ""
 		}
-		if b.Len()+len(text) > budget {
-			left = true
-			complete = complete && f.tier == tierBulk
-			continue
-		}
-		b.WriteString(text)
 	}
 	if left {
 		b.WriteString("[Diffs of the other files in the summary are left out for space.]\n")
@@ -93,23 +101,55 @@ func diffPath(text string) string {
 	return header
 }
 
-func diffTier(text string) int {
-	p := strings.ToLower(diffPath(text))
-	name, ext := path.Base(p), path.Ext(p)
-	switch {
-	case lockfiles[name], ext == ".lock", ext == ".map", ext == ".snap", ext == ".svg",
-		strings.HasSuffix(name, ".min.js"), strings.HasSuffix(name, ".min.css"),
-		strings.Contains(text, "Code generated") && strings.Contains(text, "DO NOT EDIT"):
-		return tierBulk
-	case strings.Contains(name, "_test."), strings.Contains(name, ".test."), strings.Contains(name, ".spec."),
-		strings.HasPrefix(name, "."), strings.HasPrefix(name, "readme"), strings.HasPrefix(name, "license"),
-		strings.Contains("/"+p, "/test/"), strings.Contains("/"+p, "/tests/"),
-		strings.Contains("/"+p, "/__tests__/"), strings.Contains("/"+p, "/testdata/"):
-		return tierSupport
+// diffPaths lists the paths of a diff's files, as diffPath reads them.
+func diffPaths(diff string) []string {
+	var paths []string
+	for _, text := range splitDiff(diff) {
+		paths = append(paths, diffPath(text))
 	}
-	switch ext {
-	case ".md", ".mdx", ".txt", ".rst", ".json", ".yaml", ".yml", ".toml", ".ini", ".xml", ".cfg", ".conf", ".env", "":
-		return tierSupport
+	return paths
+}
+
+func diffGroup(text string, generated map[string]bool) int {
+	p := diffPath(text)
+	name := strings.ToLower(path.Base(p))
+	if g, ok := generated[p]; ok {
+		if g {
+			return groupBulk
+		}
+	} else if ext := path.Ext(name); lockfiles[name] || ext == ".lock" || ext == ".map" || ext == ".snap" ||
+		strings.HasSuffix(name, ".min.js") || strings.HasSuffix(name, ".min.css") ||
+		strings.HasSuffix(name, ".pb.go") || strings.HasSuffix(name, "_pb2.py") ||
+		strings.HasSuffix(name, ".g.dart") || strings.HasSuffix(name, ".freezed.dart") ||
+		strings.Contains(name, ".generated.") ||
+		generatedMarker.MatchString(text) {
+		return groupBulk
 	}
-	return tierCode
+	return int(filekind.Of(p))
+}
+
+// generatedAttrs reads linguist-generated for these paths from the
+// .gitattributes of the tree, so a change to them counts in its own commit.
+// Paths it leaves out have the attribute unspecified. It reads none where
+// Git fails, as Git before 2.40 does without check-attr --source, since the
+// common rules can still group the files.
+func generatedAttrs(ctx context.Context, repo, tree string, paths []string) map[string]bool {
+	if len(paths) == 0 {
+		return nil
+	}
+	out, err := git.Run(ctx, repo, append([]string{"check-attr", "-z", "--source", tree, "linguist-generated", "--"}, paths...)...)
+	if err != nil {
+		return nil
+	}
+	generated := map[string]bool{}
+	fields := strings.Split(out, "\x00")
+	for i := 0; i+2 < len(fields); i += 3 {
+		switch fields[i+2] {
+		case "set", "true":
+			generated[fields[i]] = true
+		case "unset", "false":
+			generated[fields[i]] = false
+		}
+	}
+	return generated
 }

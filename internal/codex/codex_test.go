@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"peek/internal/filekind"
 	"peek/internal/git"
 	"peek/internal/testutil"
 	"strings"
@@ -59,7 +61,7 @@ func TestCommitMessageEmbedsSmallChanges(t *testing.T) {
 			}
 			if tc.large {
 				want = append(want, "Summary:\n", "large.txt", "+a small embedded line", "diff is cut here", "--ignore-submodules=none", "git show "+snapshot.Tree)
-				if bytes.Count(prompt, []byte("contents read only from the repository")) > tierCaps[tierSupport]/39 {
+				if bytes.Count(prompt, []byte("contents read only from the repository")) > groupCaps[filekind.Docs]/39 {
 					t.Fatal("a file's diff was embedded past its cap")
 				}
 			} else {
@@ -101,4 +103,59 @@ func TestCodexSmoke(t *testing.T) {
 		t.Fatal("Codex modified HEAD or the index")
 	}
 	t.Log(message)
+}
+
+// The staged .gitattributes decides, though it is new in this commit.
+func TestCommitMessageFollowsStagedAttributes(t *testing.T) {
+	testutil.FakeReviewCodex(t, `{"message":"Update the files"}`)
+	promptFile := filepath.Join(t.TempDir(), "prompt")
+	t.Setenv("PEEK_TEST_REVIEW_PROMPT", promptFile)
+	repo, _ := testutil.RemoteRepo(t)
+	for name, data := range map[string]string{".gitattributes": "api/*.go linguist-generated\n", "api/client.go": "package api // marked\n", "main.go": "package main // code\n"} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(repo, name)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(repo, name), []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := git.Push(context.Background(), repo, CommitMessage, func(string) {}); err != nil {
+		t.Fatal(err)
+	}
+	prompt, err := os.ReadFile(promptFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bulk := bytes.Index(prompt, []byte("## Lockfiles and generated files"))
+	if bulk < 0 || bytes.Index(prompt, []byte("// marked")) < bulk || bytes.Index(prompt, []byte("// code")) > bulk {
+		t.Fatalf("staged attributes not followed:\n%s", prompt)
+	}
+}
+
+// Git before 2.40 rejects check-attr --source; Ship then groups by the
+// common rules rather than failing.
+func TestCommitMessageWithoutCheckAttrSource(t *testing.T) {
+	testutil.FakeReviewCodex(t, `{"message":"Update the files"}`)
+	promptFile := filepath.Join(t.TempDir(), "prompt")
+	t.Setenv("PEEK_TEST_REVIEW_PROMPT", promptFile)
+	repo, _ := testutil.RemoteRepo(t)
+	real, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	script := "#!/bin/sh\nfor a in \"$@\"; do [ \"$a\" = check-attr ] && { echo 'error: unknown option source' >&2; exit 129; }; done\nexec " + real + " \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "git"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if err := os.WriteFile(filepath.Join(repo, "main.go"), []byte("package main // code\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := git.Push(context.Background(), repo, CommitMessage, func(string) {}); err != nil {
+		t.Fatal(err)
+	}
+	if prompt, err := os.ReadFile(promptFile); err != nil || !bytes.Contains(prompt, []byte("## Code\n")) || !bytes.Contains(prompt, []byte("// code")) {
+		t.Fatalf("diffs not grouped without check-attr: %v\n%s", err, prompt)
+	}
 }

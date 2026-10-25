@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"peek/internal/filekind"
 	"peek/internal/git"
 	"peek/internal/testutil"
 	"testing"
@@ -35,7 +36,7 @@ func TestRefresh(t *testing.T) {
 
 	// Lines added to a file changed already change its counts alone: the
 	// diff and the tree stay, the group of docs opened by hand with them.
-	docs := groupPrefix + kindNames[kindDocs]
+	docs := groupPrefix + filekind.Names[filekind.Docs]
 	a.changeTree.state.Open.Add(docs)
 	write("main.go", "package main\n\nfunc main() { println() }\n\nfunc other() {}\n")
 	a.refresh()

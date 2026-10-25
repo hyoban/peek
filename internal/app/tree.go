@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 
+	"peek/internal/filekind"
+
 	"github.com/egoist/mygo/ui"
 )
 
@@ -88,26 +90,24 @@ func fold(files []string) folded {
 // in it, which a directory of the same path in another group would share.
 const groupPrefix = "\x00"
 
-var kindNames = [...]string{kindCode: "Code", kindTest: "Tests", kindDocs: "Docs"}
-
 // foldGrouped builds the tree of these files in a group of each kind, as
 // the diffs list them, where they are of more than one kind.
 func foldGrouped(files []string) folded {
-	byKind := map[fileKind][]string{}
+	byKind := map[filekind.Kind][]string{}
 	for _, p := range files {
-		k := kindOf(p)
+		k := filekind.Of(p)
 		byKind[k] = append(byKind[k], p)
 	}
 	if len(byKind) < 2 {
 		return fold(files)
 	}
 	f := folded{dirs: map[string][]string{}, labels: map[string]string{}, parents: map[string]string{}}
-	for k, name := range kindNames {
-		if byKind[fileKind(k)] == nil {
+	for k, name := range filekind.Names {
+		if byKind[filekind.Kind(k)] == nil {
 			continue
 		}
 		group := groupPrefix + name
-		g := fold(byKind[fileKind(k)])
+		g := fold(byKind[filekind.Kind(k)])
 		key := func(p string) string {
 			switch {
 			case p == "":

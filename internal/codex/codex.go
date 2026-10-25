@@ -60,13 +60,14 @@ func CommitMessage(ctx context.Context, repo string, snapshot git.Snapshot) (str
 		base = empty
 	}
 	diffArgs := []string{"diff", "--no-ext-diff", "--no-textconv", "--ignore-submodules=none", "--no-color"}
-	full, err := git.Bounded(repo, commitReadLimit, append(diffArgs, base, snapshot.Tree, "--")...)
+	full, err := git.Bounded(repo, commitReadLimit, append([]string{"-c", "core.quotePath=false"}, append(diffArgs, base, snapshot.Tree, "--")...)...)
 	if err != nil && err != git.ErrTooLarge {
 		return "", err
 	}
 	diffs, complete := "", false
 	if err == nil {
-		diffs, complete = rankDiffs(full, commitDiffBudget)
+		generated := generatedAttrs(ctx, repo, snapshot.Tree, diffPaths(full))
+		diffs, complete = rankDiffs(full, commitDiffBudget, generated)
 	}
 	stat := ""
 	if !complete {
