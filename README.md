@@ -162,7 +162,7 @@ go tool mygo build
 CGO_ENABLED=0 go test ./...
 ```
 
-The screenshots above are of the installed Peek's window, over a clone of [Dify](https://github.com/langgenius/dify) with `main` at commit `9dc53da` ([#44561](https://github.com/langgenius/dify/pull/44561)), whose `origin` is the GitHub repository: that commit in Changes, and `dify-agent-runtime/internal/agentcli/config.go` in Files, in the light and the dark appearance. Take them again, into `docs/`, from a clone of Dify of your own:
+The screenshots above are of the installed Peek's window, over a clone of [Dify](https://github.com/langgenius/dify) with `main` at commit `9dc53da` ([#44561](https://github.com/langgenius/dify/pull/44561)), whose `origin` is the GitHub repository and `origin/main` 58 commits on: that commit in Changes, and `dify-agent-runtime/internal/agentcli/config.go` in Files, in the light and the dark appearance, the window with its shadow over the desktop's wallpaper. Take them again, into `docs/`, from a clone of Dify of your own:
 
 ```bash
 scripts/screenshots.sh path/to/dify
