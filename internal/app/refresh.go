@@ -11,7 +11,7 @@ import (
 
 // history is what the history column lists, read together.
 type history struct {
-	commits   []git.Commit // the work tree's entry first
+	commits   []git.Commit // the work tree's entry first, then the branch's
 	changes   []git.Change // the work tree's
 	branch    string
 	github    string // the repository's page on GitHub, "" for none
@@ -34,7 +34,15 @@ func readHistory(repo string) history {
 		summary = count(n, "file") + " changed"
 	}
 	wt := git.Commit{Hash: git.Worktree, Subject: "Uncommitted Changes", Summary: summary}
-	commits = append([]git.Commit{wt}, commits...)
+	entries := []git.Commit{wt}
+	// The branch's changes since it left the branch it is to merge into,
+	// as its pull request's diff has them, where it has commits of its own.
+	if r, ok := git.BranchBase(repo); ok {
+		entries = append(entries, git.Commit{Hash: git.Range(r.Base, r.Head), Subject: "Branch Changes",
+			Summary: count(r.Commits, "commit") + " since " + r.Onto,
+			Body:    "The changes of the branch since it left " + r.Onto + ", at " + r.Base[:7]})
+	}
+	commits = append(entries, commits...)
 	review, reviewErr := review.ReadSnapshot(repo)
 	behind, upstream := git.BehindUpstream(repo)
 	var reviewNote string
@@ -85,6 +93,12 @@ func (a *app) applyHistory(h history) {
 	if row := a.rowOf(chosen); wasChosen && row >= 0 {
 		a.commitRow = row
 	}
+	// A branch just checked out shows what it changes, where it has
+	// nothing uncommitted to show first.
+	if a.landOnBranch && h.branch == a.branch {
+		a.landOnBranch = false
+		a.commitRow = landingRow(h)
+	}
 	if !wasShown {
 		a.worktreeChanges = h.changes
 		return
@@ -103,6 +117,36 @@ func (a *app) applyHistory(h history) {
 			a.reloadFiles()
 		}
 	}
+	if now := h.commits[row].Hash; now != shown {
+		a.reloadRange(now, filesShown)
+	}
+}
+
+// landingRow is the row to show first: the branch's changes where it has
+// them and nothing uncommitted, else the work tree's.
+func landingRow(h history) int {
+	if len(h.changes) == 0 && len(h.commits) > 1 && git.IsRange(h.commits[1].Hash) {
+		return 1
+	}
+	return 0
+}
+
+// reloadRange shows the branch's changes read again once it moved, as a
+// commit or a switch moves it, the diffs of the files in place as the
+// work tree's.
+func (a *app) reloadRange(hash string, filesShown bool) {
+	a.background(func() func() {
+		changes, err := git.LoadChanges(a.repo, hash)
+		return func() {
+			if cm, ok := a.current(); err != nil || !ok || cm.Hash != hash {
+				return
+			}
+			a.updateChanges(changes)
+			if filesShown {
+				a.loadFiles(hash)
+			}
+		}
+	})
 }
 
 // changesByPath maps the changes by their new paths, and lists those.
@@ -122,9 +166,11 @@ func (a *app) hashAt(row int) (string, bool) {
 	return a.commits[row].Hash, true
 }
 
+// rowOf returns the row of the commit, or of the branch's changes for a
+// range, which a commit or a switch moves.
 func (a *app) rowOf(hash string) int {
 	for i, cm := range a.commits {
-		if cm.Hash == hash {
+		if cm.Hash == hash || git.IsRange(hash) && git.IsRange(cm.Hash) {
 			return i
 		}
 	}

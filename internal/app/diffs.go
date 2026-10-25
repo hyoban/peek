@@ -82,10 +82,21 @@ func (a *app) indexDiffs() {
 	}
 }
 
-// readKey is the key of the file's mark in the commit shown.
+// readKey is the key of the file's mark in the commit shown, and of its
+// comments.
 func (a *app) readKey(p string) string {
 	cm, _ := a.current()
-	return cm.Hash + "\x00" + p
+	return a.entryKey(cm.Hash) + "\x00" + p
+}
+
+// entryKey is the key of the marks and comments of the commit: for the
+// branch's changes, the branch's and where it left, which its new commits
+// keep.
+func (a *app) entryKey(hash string) string {
+	if base, _, ok := git.SplitRange(hash); ok {
+		return base + ".." + a.branch
+	}
+	return hash
 }
 
 // setRead marks the file's diff read or not, for as long as the app runs.
@@ -262,11 +273,11 @@ func (a *app) diffPane(c *ui.Context) {
 
 // commitMessage is the first row of the diffs, as Mail shows a message's
 // header over it: who made the commit and when, its hash, and its message,
-// to read at a glance, its subject being the jump bar's. The work tree has
-// none.
+// to read at a glance, its subject being the jump bar's. The work tree and
+// the branch's changes have none.
 func (a *app) commitMessage(c *ui.Context) {
 	cm, ok := a.current()
-	if !ok || cm.Hash == git.Worktree {
+	if !ok || cm.Hash == git.Worktree || git.IsRange(cm.Hash) {
 		ui.Row(c).FillWidth().Height(0)
 		return
 	}

@@ -115,6 +115,12 @@ func TestLineReferences(t *testing.T) {
 	if link != want {
 		t.Errorf("link %q, want %q", link, want)
 	}
+	// A branch's changes, on its comparing page.
+	link = lineLink("https://github.com/o/r", git.Range("abc", "def"), ch, editor.DiffLineRange{Side: editor.DiffNew, Start: 4, End: 4})
+	want = fmt.Sprintf("https://github.com/o/r/compare/abc...def#diff-%xR5", sha256.Sum256([]byte("new.go")))
+	if link != want {
+		t.Errorf("link %q, want %q", link, want)
+	}
 }
 
 func TestComments(t *testing.T) {

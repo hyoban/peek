@@ -206,8 +206,13 @@ func lineReference(ch git.Change, r editor.DiffLineRange) string {
 }
 
 // lineLink is the address of lines of a commit's diff on GitHub, as its
-// commit page anchors them: L for the old side's, R for the new one's.
+// commit page anchors them, or the branch's comparing page for its
+// changes: L for the old side's, R for the new one's.
 func lineLink(github, hash string, ch git.Change, r editor.DiffLineRange) string {
+	page := "commit/" + hash
+	if base, head, ok := git.SplitRange(hash); ok {
+		page = "compare/" + base + "..." + head
+	}
 	side := "R"
 	if r.Side == editor.DiffOld {
 		side = "L"
@@ -216,7 +221,7 @@ func lineLink(github, hash string, ch git.Change, r editor.DiffLineRange) string
 	if r.End > r.Start {
 		anchor += fmt.Sprintf("-%s%d", side, r.End+1)
 	}
-	return fmt.Sprintf("%s/commit/%s#diff-%x%s", github, hash, sha256.Sum256([]byte(ch.Path)), anchor)
+	return fmt.Sprintf("%s/%s#diff-%x%s", github, page, sha256.Sum256([]byte(ch.Path)), anchor)
 }
 
 // linesButton is the lines selected by their numbers in the file's
@@ -356,7 +361,7 @@ func (a *app) commentsButton(c *ui.Context) {
 		if m.Item("Delete Comments").Chosen() {
 			cm, _ := a.current()
 			for key := range a.comments {
-				if strings.HasPrefix(key, cm.Hash+"\x00") {
+				if strings.HasPrefix(key, a.entryKey(cm.Hash)+"\x00") {
 					delete(a.comments, key)
 				}
 			}
@@ -379,7 +384,7 @@ func (a *app) findings(d *fileDiff) []review.Finding {
 	if r.result == nil || r.stale || !ok || d.patch {
 		return nil
 	}
-	if r.base == "" && cm.Hash != git.Worktree || r.base != "" && cm.Hash != r.head {
+	if r.base == "" && cm.Hash != git.Worktree || r.base != "" && git.Tip(cm.Hash) != r.head {
 		return nil
 	}
 	var fs []review.Finding

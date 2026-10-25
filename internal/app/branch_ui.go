@@ -313,7 +313,7 @@ func (a *app) switchTo(target switchTarget) {
 			if err != nil {
 				s.err, s.open = err.Error(), true // the reason shows where it was asked
 			} else {
-				s.open = false
+				s.open, a.landOnBranch = false, true
 			}
 			a.refresh()
 		}

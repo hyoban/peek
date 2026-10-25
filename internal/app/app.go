@@ -85,6 +85,9 @@ type app struct {
 	// refreshing is while the history is read again, and refreshAgain
 	// that files changed meanwhile.
 	refreshing, refreshAgain bool
+	// landOnBranch is that a branch was just checked out, for the history
+	// read for it to show the branch's changes.
+	landOnBranch bool
 
 	// Changes mode.
 	changes    map[string]git.Change // by new path
@@ -557,9 +560,11 @@ func rowInk(t *ui.Theme, selected, focused bool) ink {
 }
 
 func (a *app) history(c *ui.Context) {
-	n := len(a.commits)
-	if n > 0 && a.commits[0].Hash == git.Worktree {
-		n--
+	n := 0
+	for _, cm := range a.commits {
+		if cm.Hash != git.Worktree && !git.IsRange(cm.Hash) {
+			n++
+		}
 	}
 	sideColumn(c, a.theme.Background, func() {
 		toolbarPart(c, false, true, func() {
@@ -596,14 +601,17 @@ func (a *app) commitItem(row ui.ListRow, i int) {
 	in := rowInk(t, row.Selected(), row.ListFocused())
 	text, muted := in.text, in.muted
 	item := ui.Row(c).FillWidth().Gap(t.Space(2.5)).Padding(t.Space(2), t.Space(2)).AlignItems(ui.Start).Children(func() {
-		if cm.Hash == git.Worktree {
-			orange := system(c, systemOrange)
+		if cm.Hash == git.Worktree || git.IsRange(cm.Hash) {
+			tint, glyph := system(c, systemOrange), worktreeIcon
+			if cm.Hash != git.Worktree {
+				tint, glyph = system(c, systemPurple), branchIcon
+			}
 			badge := ui.Box(c).Size(30, 30).Shrink(0).Radius(999).Center().
-				Background(orange.Alpha(0.16)).TextColor(orange)
+				Background(tint.Alpha(0.16)).TextColor(tint)
 			if in.onAccent {
 				badge.Background(t.AccentText.Alpha(0.2)).TextColor(t.AccentText)
 			}
-			badge.Children(func() { ui.Icon(c, worktreeIcon).Size(15, 15) })
+			badge.Children(func() { ui.Icon(c, glyph).Size(15, 15) })
 			ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
 				ui.Text(c, cm.Subject).FontWeight(600).TextColor(text).SingleLine()
 				ui.Text(c, cm.Summary).FontSize(smallSize).TextColor(muted).SingleLine()
@@ -638,7 +646,10 @@ func (a *app) commitItem(row ui.ListRow, i int) {
 			})
 		})
 	})
-	if cm.Hash != git.Worktree {
+	switch {
+	case git.IsRange(cm.Hash):
+		item.Tooltip(cm.Body)
+	case cm.Hash != git.Worktree:
 		item.Tooltip(commitMessage(cm))
 		a.commitMenu(c, item, i, cm)
 	}
@@ -878,7 +889,7 @@ func (a *app) fileMenu(services ui.Services, m *ui.Menu, p string, isDir bool) {
 	m.Separator()
 	gone := a.mode == modeChanges && a.changes[p].Status == "D"
 	if m.Item("Open on GitHub").Disabled(gone).Chosen() {
-		services.OpenURL(a.github + "/" + kind + cm.Hash + "/" + p)
+		services.OpenURL(a.github + "/" + kind + git.Tip(cm.Hash) + "/" + p)
 	}
 }
 
@@ -1054,7 +1065,7 @@ func (a *app) loadCommits() {
 			a.canPush, a.behind, a.upstream, a.dirty = h.canPush, h.behind, h.upstream, len(h.changes)
 			a.updateReviewSource(h.review, h.reviewErr)
 			if len(h.commits) > 0 {
-				a.commitRow = 0
+				a.commitRow = landingRow(h)
 			}
 		}
 	})

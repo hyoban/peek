@@ -34,6 +34,29 @@ type Commit struct {
 // those of the index and the work tree, against HEAD.
 const Worktree = ""
 
+// Range is the hash of the entry for a branch's changes since it left the
+// branch it is to merge into: those from base, where it left, to head, as
+// a pull request's diff has them.
+func Range(base, head string) string { return base + ".." + head }
+
+// SplitRange returns the base and head of a Range's hash.
+func SplitRange(hash string) (base, head string, ok bool) { return strings.Cut(hash, "..") }
+
+// IsRange reports whether the hash is a Range's.
+func IsRange(hash string) bool {
+	_, _, ok := SplitRange(hash)
+	return ok
+}
+
+// Tip is the commit whose files the entry has: a Range's head, else the
+// hash itself.
+func Tip(hash string) string {
+	if _, head, ok := SplitRange(hash); ok {
+		return head
+	}
+	return hash
+}
+
 // Change is a file a commit touches, as git's --name-status prints it.
 type Change struct {
 	Status string // A, M, D, R, C, T
@@ -173,6 +196,9 @@ func withoutCoAuthors(body string, credited []string) string {
 func LoadChanges(repo, hash string) ([]Change, error) {
 	if hash == Worktree {
 		return LoadWorktreeChanges(repo)
+	}
+	if base, head, ok := SplitRange(hash); ok {
+		return countedChanges(repo, "diff", "-z", "-M", base, head)
 	}
 	return countedChanges(repo, "show", "--format=", "-z", "-M", "--root", hash)
 }
@@ -315,11 +341,15 @@ func parseNameStatus(out string) []Change {
 }
 
 // FileTexts returns the text of a file a change touches before and after
-// the commit, the work tree's on disk for the uncommitted changes.
+// the commit, the work tree's on disk for the uncommitted changes, and at
+// the base and the head of a Range.
 func FileTexts(repo, hash string, ch Change) (before, after string) {
 	parent := hash + "^"
 	if hash == Worktree {
 		parent = "HEAD"
+	}
+	if base, head, ok := SplitRange(hash); ok {
+		parent, hash = base, head
 	}
 	if ch.Status != "A" {
 		before, _ = FileText(repo, parent, ch.Old)
@@ -336,16 +366,19 @@ func FileText(repo, hash, p string) (string, error) {
 		b, err := os.ReadFile(filepath.Join(repo, p))
 		return string(b), err
 	}
-	return git(repo, "show", hash+":"+p)
+	return git(repo, "show", Tip(hash)+":"+p)
 }
 
 // Patch returns git's patch of the change the commit makes to a file, or
-// the work tree's against HEAD, of limit bytes at most: ErrTooLarge where
+// the work tree's against HEAD, or a Range's, of limit bytes at most: ErrTooLarge where
 // it is longer. A file git does not track has none.
 func Patch(repo, hash string, ch Change, limit int) (string, error) {
 	args := []string{"show", "--format=", "-M", "--root", hash}
 	if hash == Worktree {
 		args = []string{"diff", "-M", "HEAD"}
+	}
+	if base, head, ok := SplitRange(hash); ok {
+		args = []string{"diff", "-M", base, head}
 	}
 	paths := []string{ch.Path}
 	if ch.Old != ch.Path {
@@ -356,11 +389,12 @@ func Patch(repo, hash string, ch Change, limit int) (string, error) {
 	return Bounded(repo, limit, append(args, paths...)...)
 }
 
-// ListFiles returns every file of the commit, or of the work tree: the
-// files git tracks and those it does not ignore, less those deleted.
+// ListFiles returns every file of the commit, a Range's head's, or of the
+// work tree: the files git tracks and those it does not ignore, less those
+// deleted.
 func ListFiles(repo, hash string) ([]string, error) {
 	if hash != Worktree {
-		out, err := git(repo, "ls-tree", "-r", "-z", "--name-only", hash)
+		out, err := git(repo, "ls-tree", "-r", "-z", "--name-only", Tip(hash))
 		return nulSeparated(out), err
 	}
 	out, err := git(repo, "ls-files", "-z", "--cached", "--others", "--exclude-standard")

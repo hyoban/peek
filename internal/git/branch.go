@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -91,4 +92,67 @@ func gitFailure(err error) error {
 		return err
 	}
 	return fmt.Errorf("%s", said)
+}
+
+// BranchRange is what the branch checked out changes since it left the
+// branch it is to merge into, Onto: from Base, the merge base of the two,
+// to Head, in Commits commits.
+type BranchRange struct {
+	Base, Head, Onto string
+	Commits          int
+}
+
+// BranchBase returns the branch's range onto the default branch of its
+// remote, or else of origin, or else the local main or master: from the
+// nearer merge base where the remote's and the local branch both are, as
+// a local one ahead of its remote leaves. ok is false on that branch
+// itself, on a detached HEAD, and where the branch has no commits of its
+// own.
+func BranchBase(repo string) (r BranchRange, ok bool) {
+	g := func(args ...string) (string, error) {
+		out, err := git(repo, args...)
+		return strings.TrimSpace(out), err
+	}
+	branch, err := g("symbolic-ref", "--quiet", "--short", "HEAD")
+	if err != nil {
+		return r, false
+	}
+	if r.Head, err = g("rev-parse", "--verify", "HEAD"); err != nil {
+		return r, false
+	}
+	var refs []string
+	remotes := []string{"origin"}
+	// gh's checkouts of forks' pull requests track a URL, not a remote.
+	if remote, _ := g("config", "--get", "branch."+branch+".remote"); remote != "" && remote != "." && remote != "origin" && !strings.Contains(remote, "/") {
+		remotes = []string{remote, "origin"}
+	}
+	for _, remote := range remotes {
+		if r.Onto = remoteDefaultBranch(repo, remote); r.Onto != "" {
+			refs = []string{"refs/remotes/" + remote + "/" + r.Onto, "refs/heads/" + r.Onto}
+			break
+		}
+	}
+	if r.Onto == "" {
+		for _, name := range []string{"main", "master"} {
+			if _, err := g("rev-parse", "--verify", "--quiet", "refs/heads/"+name); err == nil {
+				r.Onto, refs = name, []string{"refs/heads/" + name}
+				break
+			}
+		}
+	}
+	if r.Onto == "" || r.Onto == branch {
+		return r, false
+	}
+	for _, ref := range refs {
+		base, err := g("merge-base", ref, r.Head)
+		if err != nil {
+			continue // no such branch, or no history shared with it
+		}
+		out, err := g("rev-list", "--count", base+".."+r.Head)
+		n, _ := strconv.Atoi(out)
+		if err == nil && (r.Base == "" || n < r.Commits) {
+			r.Base, r.Commits = base, n
+		}
+	}
+	return r, r.Base != "" && r.Commits > 0
 }

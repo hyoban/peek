@@ -123,3 +123,73 @@ func TestCleanWorktree(t *testing.T) {
 		t.Errorf("work tree files %v", a.allTree.dirs)
 	}
 }
+
+// A branch of commits of its own lists its changes since it left main,
+// which show first where nothing is uncommitted, follow its new commits
+// in place, and show again once it is checked out.
+func TestBranchChanges(t *testing.T) {
+	repo, _ := testutil.RemoteRepo(t)
+	testutil.Git(t, repo, "add", "--all")
+	testutil.Git(t, repo, "commit", "-q", "-m", "Update the files")
+	testutil.Git(t, repo, "push", "-q", "origin", "main")
+	testutil.Git(t, repo, "switch", "-q", "-c", "feature")
+	commit := func(name, text string) {
+		if err := os.WriteFile(filepath.Join(repo, name), []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		testutil.Git(t, repo, "add", "--all")
+		testutil.Git(t, repo, "commit", "-q", "-m", "Change "+name)
+	}
+	commit("main.go", "package main\n\nfunc main() { run() }\n")
+	commit("run.go", "package main\n\nfunc run() {}\n")
+
+	a, tt := testApp(t, repo, nil)
+	settle(tt)
+	cm, ok := a.current()
+	if !ok || !git.IsRange(cm.Hash) || a.loadedRow != 1 || cm.Summary != "2 commits since main" {
+		t.Fatalf("shown %+v at row %d, want the branch's changes", cm, a.loadedRow)
+	}
+	if len(a.changes) != 2 || a.changes["run.go"].Status != "A" || a.changes["main.go"].Status != "M" {
+		t.Fatalf("changes %+v, want main.go and run.go", a.changes)
+	}
+	d := a.diffs[a.diffIndex("main.go")]
+	if d.state == nil || d.state.Old.String() != "package main\n\nfunc main() {}\n" || d.state.New.String() != "package main\n\nfunc main() { run() }\n" {
+		t.Fatal("main.go diff not from where the branch left main")
+	}
+	if !tt.HasText("Branch Changes") || !tt.HasText("4 commits") {
+		t.Errorf("history %q, want the branch's entry and 4 commits", tt.Texts())
+	}
+
+	// Another commit: the branch's entry stays shown, with it.
+	commit("main.go", "package main\n\nfunc main() { run(); run() }\n")
+	a.refresh()
+	settle(tt)
+	if cm, ok := a.current(); !ok || !git.IsRange(cm.Hash) || cm.Summary != "3 commits since main" {
+		t.Fatalf("shown %+v after a commit, want the branch's changes", cm)
+	}
+	if a.diffs[a.diffIndex("main.go")] != d || d.state.New.String() != "package main\n\nfunc main() { run(); run() }\n" {
+		t.Errorf("main.go diff not updated in place: %q", d.state.New.String())
+	}
+
+	// main has none; the branch, checked out again, shows its own.
+	a.switchTo(switchTarget{branch: "main"})
+	settle(tt)
+	if cm, ok := a.current(); !ok || cm.Hash != git.Worktree || len(a.commits) > 0 && a.rowOf(git.Range("x", "y")) >= 0 {
+		t.Fatalf("shown %+v on main, want the work tree and no branch entry", cm)
+	}
+	a.switchTo(switchTarget{branch: "feature"})
+	settle(tt)
+	if cm, ok := a.current(); !ok || !git.IsRange(cm.Hash) {
+		t.Fatalf("shown %+v on feature checked out, want the branch's changes", cm)
+	}
+
+	// Uncommitted changes show first, though.
+	a.switchTo(switchTarget{branch: "main"})
+	settle(tt)
+	os.WriteFile(filepath.Join(repo, "draft.txt"), []byte("draft\n"), 0o644)
+	a.switchTo(switchTarget{branch: "feature"})
+	settle(tt)
+	if cm, ok := a.current(); !ok || cm.Hash != git.Worktree {
+		t.Fatalf("shown %+v with a draft, want the work tree", cm)
+	}
+}
