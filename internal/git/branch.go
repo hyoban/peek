@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -102,12 +103,12 @@ type BranchRange struct {
 	Commits          int
 }
 
-// BranchBase returns the branch's range onto the default branch of its
-// remote, or else of origin, or else the local main or master: from the
-// nearer merge base where the remote's and the local branch both are, as
-// a local one ahead of its remote leaves. ok is false on that branch
-// itself, on a detached HEAD, and where the branch has no commits of its
-// own.
+// BranchBase returns the branch's range onto the branch its pull request
+// is to merge into, or else the default branch of the repository pull
+// requests go to, or else the local main or master: from the nearer merge
+// base where the remote's and the local branch both are, as a local one
+// ahead of its remote leaves. ok is false on that branch itself, on a
+// detached HEAD, and where the branch has no commits of its own.
 func BranchBase(repo string) (r BranchRange, ok bool) {
 	g := func(args ...string) (string, error) {
 		out, err := git(repo, args...)
@@ -121,14 +122,13 @@ func BranchBase(repo string) (r BranchRange, ok bool) {
 		return r, false
 	}
 	var refs []string
-	remotes := []string{"origin"}
-	// gh's checkouts of forks' pull requests track a URL, not a remote.
-	if remote, _ := g("config", "--get", "branch."+branch+".remote"); remote != "" && remote != "." && remote != "origin" && !strings.Contains(remote, "/") {
-		remotes = []string{remote, "origin"}
-	}
-	for _, remote := range remotes {
-		if r.Onto = remoteDefaultBranch(repo, remote); r.Onto != "" {
-			refs = []string{"refs/remotes/" + remote + "/" + r.Onto, "refs/heads/" + r.Onto}
+	for _, remote := range baseRemotes(repo) {
+		onto := pullBase(repo, branch, remote)
+		if onto == "" {
+			onto = remoteDefaultBranch(repo, remote)
+		}
+		if onto != "" {
+			r.Onto, refs = onto, []string{"refs/remotes/" + remote + "/" + onto, "refs/heads/" + onto}
 			break
 		}
 	}
@@ -155,4 +155,52 @@ func BranchBase(repo string) (r BranchRange, ok bool) {
 		}
 	}
 	return r, r.Base != "" && r.Commits > 0
+}
+
+// baseRemotes are the remotes whose branches pull requests merge into, in
+// order: the one gh repo set-default chose, a fork's upstream, origin. The
+// branch's own remote is not, a fork's as gh pr checkout adds it.
+func baseRemotes(repo string) []string {
+	var remotes []string
+	if out, err := git(repo, "config", "--get-regexp", `^remote\..*\.gh-resolved$`); err == nil {
+		for line := range strings.Lines(out) {
+			key, value, _ := strings.Cut(strings.TrimSpace(line), " ")
+			if value == "base" {
+				remotes = append(remotes, strings.TrimSuffix(strings.TrimPrefix(key, "remote."), ".gh-resolved"))
+			}
+		}
+	}
+	for _, name := range []string{"upstream", "origin"} {
+		if !slices.Contains(remotes, name) {
+			if _, err := git(repo, "config", "--get", "remote."+name+".url"); err == nil {
+				remotes = append(remotes, name)
+			}
+		}
+	}
+	return remotes
+}
+
+// pullBase is the branch of the remote the branch's pull request is to
+// merge into, fetched, as gh and GitHub's VS Code extension note it, ""
+// where neither does.
+func pullBase(repo, branch, remote string) string {
+	var onto string
+	if out, err := git(repo, "config", "--get", "branch."+branch+".github-pr-base-branch"); err == nil {
+		// owner#name#branch, of the repository of the remote's URL.
+		owner, rest, _ := strings.Cut(strings.TrimSpace(out), "#")
+		name, base, _ := strings.Cut(rest, "#")
+		url, _ := git(repo, "config", "--get", "remote."+remote+".url")
+		if strings.EqualFold(githubPage(strings.TrimSpace(url)), "https://github.com/"+owner+"/"+name) {
+			onto = base
+		}
+	} else if out, err := git(repo, "config", "--get", "branch."+branch+".gh-merge-base"); err == nil {
+		onto = strings.TrimSpace(out)
+	}
+	if onto == "" || onto == branch {
+		return ""
+	}
+	if _, err := git(repo, "rev-parse", "--verify", "--quiet", "refs/remotes/"+remote+"/"+onto); err != nil {
+		return ""
+	}
+	return onto
 }

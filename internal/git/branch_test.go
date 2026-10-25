@@ -157,3 +157,58 @@ func TestBranchBase(t *testing.T) {
 		t.Error("a detached HEAD has a range")
 	}
 }
+
+// A fork's branch is onto the repository its pull requests go to, as gh
+// and the VS Code extension note it, not onto the fork's own main.
+func TestBranchBaseFork(t *testing.T) {
+	repo, base := testutil.RemoteRepo(t)
+	fork := t.TempDir()
+	testutil.Git(t, fork, "clone", "-q", "--bare", base, ".")
+	testutil.RemoteWork(t, base, "theirs.txt")
+	// origin is the fork, whose main lags; lang the repository forked.
+	testutil.Git(t, repo, "remote", "set-url", "origin", fork)
+	testutil.Git(t, repo, "config", "url."+base+".insteadOf", "git@github.com:lang/app.git")
+	testutil.Git(t, repo, "remote", "add", "lang", "git@github.com:lang/app.git")
+	testutil.Git(t, repo, "fetch", "-q", "--all")
+	testutil.Git(t, repo, "switch", "-q", "-c", "feature", "lang/main")
+	commit := func(name string) {
+		if err := os.WriteFile(filepath.Join(repo, name), []byte(name+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		testutil.Git(t, repo, "add", "--all")
+		testutil.Git(t, repo, "commit", "-q", "-m", "Add "+name)
+	}
+	commit("feature.txt")
+	left := testutil.Git(t, repo, "rev-parse", "lang/main")
+	if r, ok := BranchBase(repo); !ok || r.Commits != 2 {
+		t.Fatalf("BranchBase onto the fork's main = %+v, %v; want 2 commits", r, ok)
+	}
+	// gh repo set-default's choice.
+	testutil.Git(t, repo, "config", "remote.lang.gh-resolved", "base")
+	if r, ok := BranchBase(repo); !ok || r.Base != left || r.Commits != 1 {
+		t.Errorf("BranchBase with gh's default = %+v, %v; want base %s, 1 commit", r, ok, left)
+	}
+	testutil.Git(t, repo, "config", "--unset", "remote.lang.gh-resolved")
+	// A fork's upstream, by name.
+	testutil.Git(t, repo, "remote", "rename", "lang", "upstream")
+	if r, ok := BranchBase(repo); !ok || r.Base != left || r.Commits != 1 {
+		t.Errorf("BranchBase with an upstream = %+v, %v; want base %s, 1 commit", r, ok, left)
+	}
+
+	// A pull request onto another's branch, as the VS Code extension notes.
+	testutil.Git(t, repo, "push", "-q", "upstream", "feature:parent")
+	testutil.Git(t, repo, "fetch", "-q", "upstream")
+	testutil.Git(t, repo, "switch", "-q", "-c", "child")
+	commit("child.txt")
+	parent := testutil.Git(t, repo, "rev-parse", "upstream/parent")
+	testutil.Git(t, repo, "config", "branch.child.github-pr-base-branch", "lang#app#parent")
+	if r, ok := BranchBase(repo); !ok || r.Base != parent || r.Onto != "parent" || r.Commits != 1 {
+		t.Errorf("BranchBase onto the pull request's base = %+v, %v; want parent at %s", r, ok, parent)
+	}
+	// As gh notes it.
+	testutil.Git(t, repo, "config", "--unset", "branch.child.github-pr-base-branch")
+	testutil.Git(t, repo, "config", "branch.child.gh-merge-base", "parent")
+	if r, ok := BranchBase(repo); !ok || r.Base != parent || r.Onto != "parent" {
+		t.Errorf("BranchBase onto gh's merge base = %+v, %v; want parent", r, ok)
+	}
+}
