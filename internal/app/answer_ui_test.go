@@ -188,3 +188,26 @@ func TestStartInConversation(t *testing.T) {
 		t.Fatalf("conversation %+v", draft)
 	}
 }
+
+// Delete Conversation, in a conversation's context menu, forgets it, the
+// list drawn again without it.
+func TestDeleteConversationUI(t *testing.T) {
+	repo := testutil.Repo(t)
+	a, tt := testApp(t, repo, nil)
+	for _, title := range []string{"Second", "First"} {
+		a.conversations = append(a.conversations, &conversation{ID: title, Title: title, Turns: []*turn{{Request: title, Answer: "Done."}}})
+	}
+	if err := tt.Click("Conversation Navigator"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.RightClick("Second"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem("Delete Conversation"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if len(a.conversations) != 1 || a.conversations[0].Title != "First" || tt.HasText("Second") {
+		t.Fatalf("conversations %+v, texts %q", a.conversations, tt.Texts())
+	}
+}

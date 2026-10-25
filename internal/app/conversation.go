@@ -251,15 +251,27 @@ func (a *app) conversationsPane(c *ui.Context) {
 	// No keys: the list's choice following its conversation would leave
 	// a new one, at the top where the old one was, unchosen.
 	a.convList.Label = func(i int) string { return a.conversations[i].Title }
+	// The conversation deleted goes once the list is drawn, which draws
+	// its rows to the count it was given.
+	var deleted *conversation
 	a.withFocus(c, a.convList.FocusWithin(c), func() {
 		list := ui.List(c.Key("conversations"), &a.convList, len(a.conversations)).Gap(1).Label("Conversations")
-		sideList(c, list).Rows(func(row ui.ListRow) { a.conversationItem(row, a.conversations[row.Index]) })
+		sideList(c, list).Rows(func(row ui.ListRow) {
+			conv := a.conversations[row.Index]
+			if a.conversationItem(row, conv) {
+				deleted = conv
+			}
+		})
 	})
+	if deleted != nil {
+		a.deleteConversation(deleted)
+	}
 }
 
 // conversationItem is the row of a conversation, as a source list's: its
-// title, and when and what of under it, or Codex working on it.
-func (a *app) conversationItem(row ui.ListRow, conv *conversation) {
+// title, and when and what of under it, or Codex working on it. It
+// reports whether Delete Conversation was chosen in its context menu.
+func (a *app) conversationItem(row ui.ListRow, conv *conversation) (deleted bool) {
 	c := row.Context
 	t := c.Theme()
 	in := rowInk(t, row.Selected(), row.ListFocused())
@@ -284,9 +296,10 @@ func (a *app) conversationItem(row ui.ListRow, conv *conversation) {
 		}
 		m.Separator()
 		if m.Item("Delete Conversation").Chosen() {
-			a.deleteConversation(conv)
+			deleted = true
 		}
 	})
+	return deleted
 }
 
 // text is the conversation as copied: its requests and answers.
