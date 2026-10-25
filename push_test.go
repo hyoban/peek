@@ -34,8 +34,10 @@ func pushTestRepo(t *testing.T) (string, string) {
 	return repo, remote
 }
 
-func testMessage(context.Context, string, string) (string, error) { return "Update the files", nil }
-func ignoreProgress(string)                                       {}
+func testMessage(context.Context, string, commitSnapshot) (string, error) {
+	return "Update the files", nil
+}
+func ignoreProgress(string) {}
 
 func TestPushAllChanges(t *testing.T) {
 	repo, remote := pushTestRepo(t)
@@ -46,8 +48,14 @@ func TestPushAllChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	called := 0
-	generate := func(ctx context.Context, diff, history string) (string, error) {
+	initial := pushTestGit(t, repo, "rev-parse", "HEAD")
+	generate := func(ctx context.Context, directory string, snapshot commitSnapshot) (string, error) {
 		called++
+		if directory != repo || snapshot.head != initial || snapshot.tree != pushTestGit(t, repo, "write-tree") {
+			t.Fatal("generator received the wrong repository or snapshot")
+		}
+		diff := pushTestGit(t, directory, "diff", snapshot.head, snapshot.tree)
+		history := pushTestGit(t, directory, "log", "-8", "--format=%s", snapshot.head)
 		for _, name := range []string{"main.go", "old.txt", "docs/new.md"} {
 			if !strings.Contains(diff, name) {
 				t.Errorf("diff missing %s", name)
@@ -56,7 +64,7 @@ func TestPushAllChanges(t *testing.T) {
 		if strings.Contains(diff, "private") || !strings.Contains(history, "Initial commit") {
 			t.Errorf("unexpected prompt: %s\n%s", history, diff)
 		}
-		return testMessage(ctx, diff, history)
+		return testMessage(ctx, directory, snapshot)
 	}
 	status, err := pushRepository(context.Background(), repo, generate, ignoreProgress)
 	if err != nil || status != "Pushed to origin/main" {
@@ -114,9 +122,9 @@ func TestPushFailuresPreserveWork(t *testing.T) {
 			ctx := context.Background()
 			switch scenario {
 			case "generation":
-				generate = func(context.Context, string, string) (string, error) { return "", errors.New("not logged in") }
+				generate = func(context.Context, string, commitSnapshot) (string, error) { return "", errors.New("not logged in") }
 			case "index changed":
-				generate = func(context.Context, string, string) (string, error) {
+				generate = func(context.Context, string, commitSnapshot) (string, error) {
 					pushTestGit(t, repo, "reset", "HEAD", "main.go")
 					return "Wrong snapshot", nil
 				}
@@ -157,7 +165,7 @@ func TestPushFailuresPreserveWork(t *testing.T) {
 				if err := os.Remove(filepath.Join(remote, "hooks", "pre-receive")); err != nil {
 					t.Fatal(err)
 				}
-				generate = func(context.Context, string, string) (string, error) {
+				generate = func(context.Context, string, commitSnapshot) (string, error) {
 					t.Fatal("retry must reuse commit")
 					return "", nil
 				}

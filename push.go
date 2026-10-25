@@ -12,7 +12,11 @@ import (
 	"time"
 )
 
-type messageGenerator func(context.Context, string, string) (string, error)
+type commitSnapshot struct {
+	head, tree string
+}
+
+type messageGenerator func(context.Context, string, commitSnapshot) (string, error)
 
 // Use the same destination as Push, rather than the pull upstream, which
 // may be different for a fork. Read cached remote refs without network I/O.
@@ -97,16 +101,8 @@ func pushRepository(ctx context.Context, repo string, generate messageGenerator,
 	}
 	baseTree, _ := g("rev-parse", "HEAD^{tree}")
 	if tree != baseTree {
-		diff, err := g("diff", "--cached", "--no-ext-diff", "--no-textconv", "--binary", "--no-color")
-		if err != nil {
-			return "", err
-		}
-		if len(diff) > 256*1024 {
-			return "", fmt.Errorf("the staged diff is too large for commit message generation (limit 256 KiB); commit it manually, then retry Push")
-		}
-		history, _ := g("log", "-8", "--format=%s")
 		progress("Generating commit message with Codex…")
-		message, err := generate(ctx, diff, history)
+		message, err := generate(ctx, repo, commitSnapshot{head: head, tree: tree})
 		if err != nil {
 			return "", fmt.Errorf("generate commit message: %w", err)
 		}

@@ -39,6 +39,9 @@ type app struct {
 	err                      string
 	push                     pushState
 	canPush                  bool // work tree changes or commits not yet pushed
+	review                   reviewState
+	reviewSource             reviewSnapshot
+	reviewSourceErr          string
 	// theme is this pass's, and inactiveTheme the one of lists without
 	// the keyboard focus.
 	theme, inactiveTheme *ui.Theme
@@ -167,6 +170,7 @@ func (a *app) view(c *ui.Context) {
 			}
 		})
 	})
+	a.reviewDetails(c)
 	a.sync(c)
 	if a.redraw {
 		a.redraw = false
@@ -214,9 +218,12 @@ func (a *app) toolbar(c *ui.Context) {
 			a.modeChoice = a.mode
 			modeSwitch(c.Key("mode"), &a.modeChoice, "Changes", "Files").Label("Mode").
 				OnChange(func() { a.setMode(a.modeChoice) })
-			// Keep both sides equally wide as the Push label changes.
+			// Keep both sides equally wide as the action labels change.
 			ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).
-				Justify(ui.End).Children(func() { a.pushButton(c) })
+				Justify(ui.End).Gap(t.Space(1)).Children(func() {
+				a.reviewButton(c)
+				a.pushButton(c)
+			})
 			a.paneButton(c, "history", historyIcon, &a.showHistory, "History")
 		}).Grow(1).MinWidth(0).Padding(0).Label("Toolbar")
 	})
@@ -628,6 +635,7 @@ func (a *app) loadCommits() {
 			}
 			a.commits, a.worktreeChanges, a.branch, a.github = h.commits, h.changes, h.branch, h.github
 			a.canPush = h.canPush
+			a.updateReviewSource(h.review, h.reviewErr)
 			if len(h.commits) > 0 {
 				a.commitRow = 0
 			}
@@ -762,6 +770,9 @@ func main() {
 			for _, a := range p.apps {
 				if a.push.cancel != nil {
 					a.push.cancel()
+				}
+				if a.review.cancel != nil {
+					a.review.cancel()
 				}
 			}
 		})

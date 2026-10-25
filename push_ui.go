@@ -44,7 +44,7 @@ func (a *app) pushButton(c *ui.Context) {
 	case a.push.status != "":
 		label, tooltip = "Pushed", a.push.status
 	}
-	disabled := !a.canPush && !a.push.running
+	disabled := a.review.running || (!a.canPush && !a.push.running)
 	if disabled && a.push.status == "" {
 		tooltip = "Nothing to push"
 	}
@@ -58,7 +58,7 @@ func (a *app) pushButton(c *ui.Context) {
 }
 
 func (a *app) startPush() {
-	if a.push.running || !a.canPush {
+	if a.push.running || a.review.running || !a.canPush {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)

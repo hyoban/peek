@@ -9,12 +9,14 @@ import (
 
 // history is what the history column lists, read together.
 type history struct {
-	commits []commit // the work tree's entry first
-	changes []change // the work tree's
-	branch  string
-	github  string // the repository's page on GitHub, "" for none
-	canPush bool
-	err     error
+	commits   []commit // the work tree's entry first
+	changes   []change // the work tree's
+	branch    string
+	github    string // the repository's page on GitHub, "" for none
+	canPush   bool
+	review    reviewSnapshot
+	reviewErr string
+	err       error
 }
 
 func readHistory(repo string) history {
@@ -28,8 +30,13 @@ func readHistory(repo string) history {
 	}
 	wt := commit{Hash: worktree, Subject: "Uncommitted Changes", Summary: summary}
 	commits = append([]commit{wt}, commits...)
+	review, reviewErr := readReviewSnapshot(repo)
+	var reviewNote string
+	if reviewErr != nil {
+		reviewNote = reviewErr.Error()
+	}
 	return history{commits: commits, changes: changes, branch: currentBranch(repo), github: githubURL(repo),
-		canPush: len(changes) > 0 || hasUnpushedCommits(repo), err: err}
+		canPush: len(changes) > 0 || hasUnpushedCommits(repo), review: review, reviewErr: reviewNote, err: err}
 }
 
 // refresh reads the history and the work tree again, as the watch asks
@@ -64,6 +71,7 @@ func (a *app) applyHistory(h history) {
 	filesShown := a.filesFor >= 0 && a.filesFor == a.loadedRow
 	a.commits, a.branch, a.github, a.err = h.commits, h.branch, h.github, ""
 	a.canPush = h.canPush
+	a.updateReviewSource(h.review, h.reviewErr)
 	a.commitRow = -1
 	if len(h.commits) > 0 {
 		a.commitRow = 0
