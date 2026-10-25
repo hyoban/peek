@@ -36,20 +36,21 @@ func (a *app) toolbarSpec(c *ui.Context) *mygo.Toolbar {
 	services := c.Services()
 	page := a.githubPage()
 	busy := a.push.running || a.review.running || a.pull.running
-	// The sidebar's button at the start, beside the window's buttons,
-	// where it stays as the sidebar slides, as Xcode's navigator's; the
-	// project and its branch then, as the text's title. The sidebar's
-	// navigators are its segments, as Xcode's navigators and coding
-	// assistant: the one shown chosen again hides the sidebar.
+	// The sidebar's button at its end, by the line, where it stays as the
+	// sidebar slides and in full screen, without the window's buttons, as
+	// Xcode's navigator's; the project and its branch then, as the text's
+	// title. The sidebar's navigators are its segments, as Xcode's
+	// navigators and coding assistant: the one shown chosen again hides
+	// the sidebar.
 	navigator := -1
 	if a.showTree {
 		navigator = a.navigator
 	}
 	items := []mygo.ToolbarItem{
+		{ID: "sidebar-start", Kind: mygo.ToolbarFlexibleSpace},
 		{ID: "navigator", Kind: mygo.ToolbarSegmented, Segments: []string{"Files", "Conversations"},
 			SegmentSymbols: []string{"list.bullet", "bubble.left.and.text.bubble.right"}, Selected: navigator, Label: "Navigator",
 			ToolTip: "Show the files or the conversations with Codex, or hide the sidebar", Select: a.chooseNavigator},
-		{ID: "sidebar-end", Kind: mygo.ToolbarFlexibleSpace},
 	}
 	items = append(items,
 		mygo.ToolbarItem{ID: "sidebar-separator", Kind: mygo.ToolbarSeparator, Divider: 0},
