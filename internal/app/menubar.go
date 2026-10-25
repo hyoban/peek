@@ -74,7 +74,8 @@ func (p *projects) setMenuBar() {
 
 // menuBarItems are the menu's: the recent repositories, the one shown
 // checked, as the project switcher checks it; the commits to
-// pull; and the File menu's Open Folder, and Quit.
+// pull; the File menu's Open Folder; whether Peek hides when inactive;
+// and Quit.
 func (p *projects) menuBarItems() []*mygo.MenuItem {
 	var items, pulls []*mygo.MenuItem
 	for _, repo := range p.recent {
@@ -107,6 +108,10 @@ func (p *projects) menuBarItems() []*mygo.MenuItem {
 	return append(items,
 		mygo.Separator(),
 		&mygo.MenuItem{Label: "Open Folder…", Accelerator: "Cmd+O", Click: func(*mygo.MenuItem, *mygo.Window) { p.choose() }},
+		mygo.Separator(),
+		&mygo.MenuItem{Label: "Hide When Inactive", Type: mygo.MenuItemCheckbox, Checked: p.hideInactive,
+			ToolTip: "Hide Peek as another app comes to the front",
+			Click:   func(*mygo.MenuItem, *mygo.Window) { p.setHideInactive(!p.hideInactive) }},
 		mygo.Separator(),
 		&mygo.MenuItem{Label: "Quit Peek", Accelerator: "Cmd+Q", Click: func(*mygo.MenuItem, *mygo.Window) { mygo.App.Quit() }},
 	)
@@ -211,6 +216,7 @@ func (p *projects) activate() {
 	if p.win == nil {
 		p.restore()
 	}
+	mygo.App.Show() // where it hid as inactive
 	mygo.App.Focus()
 	if p.win != nil {
 		p.win.Focus()
@@ -220,6 +226,7 @@ func (p *projects) activate() {
 // openRepo shows the repository in the window, in front.
 func (p *projects) openRepo(repo string) {
 	p.open(repo)
+	mygo.App.Show()
 	mygo.App.Focus()
 	if p.win != nil {
 		p.win.Focus()

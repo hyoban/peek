@@ -10,14 +10,20 @@ import (
 // main thread.
 var appActive = true
 
-// followApp keeps appActive, and clears the notifications of what the
-// user comes back to see, as Mail and Messages do.
-func followApp() {
+// followApp keeps appActive, clears the notifications of what the user
+// comes back to see, as Mail and Messages do, and hides Peek as another
+// app comes to the front where the user chose so, as ⌘H hides it.
+func (p *projects) followApp() {
 	mygo.App.OnDidBecomeActive(func() {
 		appActive = true
 		mygo.ClearNotifications()
 	})
-	mygo.App.OnDidResignActive(func() { appActive = false })
+	mygo.App.OnDidResignActive(func() {
+		appActive = false
+		if p.hideInactive && !p.quitting {
+			mygo.App.Hide()
+		}
+	})
 }
 
 // notify tells of work finished, as a push or a review, in a notification

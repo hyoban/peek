@@ -29,6 +29,9 @@ type projects struct {
 	menu    *menuItems      // the menu bar's items that follow the project, nil in tests
 	win     *mygo.Window    // the window, which shows the project shown; nil while closed and in tests
 	bar     *menuBar        // the item in the menu bar, nil in tests
+	// hideInactive hides Peek as another app comes to the front, as the
+	// user chooses in the menu bar's menu.
+	hideInactive bool
 	// quitting keeps the projects open as the app quits, for the next
 	// launch to open them again.
 	quitting bool
@@ -39,6 +42,7 @@ func newProjects() *projects {
 	if dir, err := os.UserConfigDir(); err == nil {
 		p.dir = filepath.Join(dir, "peek")
 		p.recent = p.readList("recent")
+		p.hideInactive = exists(filepath.Join(p.dir, hideInactiveFile))
 	}
 	return p
 }
@@ -69,6 +73,27 @@ func (p *projects) writeList(name string, repos []string) {
 	go func() {
 		os.MkdirAll(filepath.Dir(file), 0o755)
 		os.WriteFile(file, data, 0o644)
+	}()
+}
+
+// hideInactiveFile is in the app's folder while Peek hides when inactive.
+const hideInactiveFile = "hide-when-inactive"
+
+// setHideInactive chooses whether Peek hides when inactive, for the next
+// launches too.
+func (p *projects) setHideInactive(hide bool) {
+	p.hideInactive = hide
+	if p.dir == "" {
+		return
+	}
+	file := filepath.Join(p.dir, hideInactiveFile)
+	go func() {
+		if !hide {
+			os.Remove(file)
+			return
+		}
+		os.MkdirAll(p.dir, 0o755)
+		os.WriteFile(file, nil, 0o644)
 	}()
 }
 

@@ -1187,12 +1187,13 @@ func Run(args []string) {
 	// again as it is opened from Finder.
 	mygo.App.OnWindowAllClosed(func() {})
 	mygo.App.OnActivate(func(hasVisibleWindows bool) {
-		if !hasVisibleWindows && p.win == nil {
+		if !hasVisibleWindows {
+			mygo.App.Show() // where it hid as inactive
 			p.showWindow()
 		}
 	})
 	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { p.quitting = true })
-	followApp()
+	p.followApp()
 	// No Dock icon: the menu bar's item is Peek's place (menubar.go).
 	mygo.App.SetActivationPolicy(mygo.ActivationPolicyAccessory)
 	mygo.App.WhenReady(func() {
