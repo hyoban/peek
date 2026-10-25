@@ -148,6 +148,9 @@ func (p *projects) view(c *ui.Context) {
 // window: what to do, the way to open a folder, and the recent projects.
 func (p *projects) welcome(c *ui.Context) {
 	t := c.Theme()
+	if p.win != nil && !p.inline {
+		p.win.SetToolbar(nil) // the projects' toolbar, none open
+	}
 	ui.Column(c).Fill().Background(t.Background).Children(func() {
 		ui.Row(c).Height(titleBarHeight).Shrink(0).FillWidth().DragWindow()
 		ui.Column(c).Grow(1).FillWidth().Center().Gap(t.Space(2)).Padding(t.Space(6)).Children(func() {
@@ -190,16 +193,15 @@ func (p *projects) showWindow() {
 		return
 	}
 	p.win = mygo.NewWindow(mygo.WindowOptions{
-		Title:                "Peek",
-		Width:                1440,
-		Height:               900,
-		MinWidth:             640,
-		MinHeight:            400,
-		StateKey:             "main",
-		TitleBarStyle:        mygo.TitleBarHidden,
-		TrafficLightPosition: &trafficLightsAt,
-		Vibrancy:             mygo.VibrancySidebar,
-		Content:              ui.View(p.view),
+		Title:         "Peek",
+		Width:         1440,
+		Height:        900,
+		MinWidth:      640,
+		MinHeight:     400,
+		StateKey:      "main",
+		TitleBarStyle: mygo.TitleBarHidden,
+		Vibrancy:      mygo.VibrancySidebar,
+		Content:       ui.View(p.view),
 	})
 	win := p.win
 	win.OnClosed(func() {

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -85,14 +86,29 @@ func (a *app) branchLabel(c *ui.Context) {
 
 // branchSwitcher shows the switcher under the branch's name, out of the
 // toolbar, whose keys move among its controls alone: in an NSPopover,
-// where there are windows.
+// where there are windows, under the toolbar's item where AppKit's
+// toolbar shows.
 func (a *app) branchSwitcher(c *ui.Context) {
+	if a.nativeBar {
+		r, ok := a.win.ToolbarItemBounds("branch")
+		if !ok && a.switcherPopover.win == nil {
+			a.switcher.open = false // nowhere to show it from
+			return
+		}
+		a.popover(&a.switcherPopover, &a.switcher.open, r, switcherWidth+2*popoverPadding, func(c *ui.Context) {
+			a.focusSwitcher(c)
+			a.switcherPanel(c)
+		})
+		return
+	}
 	anchor := c.Resolve(a.switcher.button)
 	if !anchor.Valid() {
 		return
 	}
 	if a.native() {
-		a.popover(&a.switcherPopover, &a.switcher.open, anchor, switcherWidth+2*popoverPadding, func(c *ui.Context) {
+		b := anchor.Bounds()
+		r := mygo.Rectangle{X: int(b.X), Y: int(b.Y), Width: int(b.W), Height: int(b.H)}
+		a.popover(&a.switcherPopover, &a.switcher.open, r, switcherWidth+2*popoverPadding, func(c *ui.Context) {
 			a.focusSwitcher(c)
 			a.switcherPanel(c)
 		})

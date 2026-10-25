@@ -74,6 +74,9 @@ type app struct {
 	endTools                        ui.Handle // the controls at the end of the text's toolbar
 	endWidth                        float32   // their width, as last laid out
 	alert                           alertState
+	// nativeBar tells that AppKit's toolbar shows this pass (nativeToolbar),
+	// over the room the columns leave it.
+	nativeBar bool
 	// The windows of AppKit's own the sheets and the switcher show in.
 	reviewSheet, explainSheet, switcherPopover child
 
@@ -194,17 +197,13 @@ func (a *app) view(c *ui.Context) {
 	// The shortcuts are the menu bar's (viewMenu, repositoryMenu), as it
 	// holds every command of a Mac app.
 
-	// Over the window's material the sidebar shows it, and the other
-	// columns draw their own backgrounds, as AppKit's source lists do.
-	if c.Vibrancy() {
-		c.Root().Background(ui.Transparent)
-	}
 	// Each column has its part of the toolbar, which the dividers between
 	// them run through, as AppKit splits a toolbar along a split view. The
 	// tree and the text keep their places whichever mode shows, the
 	// history at the end, as an inspector. The toolbar changes the state
 	// in actions, after the pass, so that all of the pass sees the same.
 	a.fit(c.Size())
+	a.nativeBar = a.nativeToolbar(c)
 	tree, history := a.showTree, a.showHistory
 	a.diffWidth, _ = c.Size()
 	if tree {
@@ -225,13 +224,17 @@ func (a *app) view(c *ui.Context) {
 	}
 	rest := func() {
 		if tree {
-			ui.Split(c, &a.treeWidth, func() { a.treePane(c) }, content).Fill()
+			a.lineless(c, func() {
+				ui.Split(c, &a.treeWidth, a.themedPane(c, func() { a.treePane(c) }), a.themedPane(c, content)).Fill()
+			})
 		} else {
 			content()
 		}
 	}
 	if history {
-		endSplit(c, &a.historyWidth, func() { a.history(c) }, rest).Fill()
+		a.lineless(c, func() {
+			endSplit(c, &a.historyWidth, a.themedPane(c, func() { a.history(c) }), a.themedPane(c, rest)).Fill()
+		})
 	} else {
 		rest()
 	}
@@ -240,6 +243,13 @@ func (a *app) view(c *ui.Context) {
 	a.reviewDetails(c)
 	a.explanationDetails(c)
 	a.sync(c)
+	// Over the window's material the sidebar shows it, and the other
+	// columns draw their own backgrounds, as AppKit's source lists do: the
+	// root clear once the pass is built, as SetTheme, which the lists'
+	// themes call (withFocus), gives it the theme's background again.
+	if c.Vibrancy() {
+		c.Root().Background(ui.Transparent)
+	}
 	if a.redraw {
 		a.redraw = false
 		c.Services().Invalidate()
@@ -289,6 +299,30 @@ func (a *app) toggle(on, collapsed *bool) {
 	*on, *collapsed = !*on, false
 }
 
+// lineless builds splits whose dividers draw no line under AppKit's
+// toolbar, as Xcode's navigator and inspector meet the editor: the
+// columns' colors part them. Their panes take the window's theme again
+// (themedPane).
+func (a *app) lineless(c *ui.Context, build func()) {
+	if !a.nativeBar {
+		build()
+		return
+	}
+	bare := *a.theme
+	bare.Border = ui.Transparent
+	c.SetTheme(&bare)
+	build()
+	c.SetTheme(a.theme)
+}
+
+// themedPane builds a pane of a split in the window's theme.
+func (a *app) themedPane(c *ui.Context, build func()) func() {
+	return func() {
+		c.SetTheme(a.theme)
+		build()
+	}
+}
+
 // endSplit is Split with end at the end, *size its width, as a window's
 // inspector keeps its width while the window resizes: a Split laid out
 // the other way round, its panes the window's way.
@@ -310,12 +344,20 @@ func endSplit(c *ui.Context, size *float32, end, rest func()) ui.Element {
 // toolbarPart is the part of the window's toolbar over a column: a row of
 // the title bar's height, which drags the window, leaving the traffic
 // lights their room at the window's start and the window's edge at its
-// end. Its groups of controls are ui.Toolbars, which take no face, Tab stopping on each once and the arrows moving among their
-// controls; the names, which their toolbar would put in its overflow menu
-// for want of room, are out of them, to be cut short.
-func toolbarPart(c *ui.Context, start, end bool, build func()) {
+// end. Its groups of controls are ui.Toolbars, which take no face, Tab
+// stopping on each once and the arrows moving among their controls; the
+// names, which their toolbar would put in its overflow menu for want of
+// room, are out of them, to be cut short. Under AppKit's toolbar, it is
+// the room the toolbar takes, which shows the column's background.
+func (a *app) toolbarPart(c *ui.Context, start, end bool, build func()) {
 	t := c.Theme()
 	bar := c.TitleBar()
+	if a.nativeBar {
+		// Its room drags the window, and a double click zooms it, as the
+		// toolbar's own does, where no item is.
+		ui.Box(c).Height(max(bar.Height, titleBarHeight)).Shrink(0).FillWidth().DragWindow()
+		return
+	}
 	left, right := t.Space(2), t.Space(2)
 	if start {
 		left += bar.Left
@@ -367,7 +409,7 @@ func (a *app) repository(c *ui.Context) ui.Element {
 // the columns hidden, which their own parts hold while they show.
 func (a *app) toolbar(c *ui.Context, start, end bool) {
 	t := c.Theme()
-	toolbarPart(c, start, end, func() {
+	a.toolbarPart(c, start, end, func() {
 		if start {
 			toolGroup(c, "Sidebar", func() {
 				a.paneButton(c, "sidebar", sidebarIcon, &a.showTree, &a.collapsedTree, "Sidebar")
@@ -590,8 +632,12 @@ func (a *app) history(c *ui.Context) {
 			n++
 		}
 	}
-	sideColumn(c, a.theme.Background, func() {
-		toolbarPart(c, false, true, func() {
+	bg := a.theme.Background
+	if a.nativeBar {
+		bg = ui.Transparent // over the window's color, as an inspector
+	}
+	sideColumn(c, bg, func() {
+		a.toolbarPart(c, false, true, func() {
 			ui.Spacer(c)
 			toolGroup(c, "History Toolbar", func() {
 				a.actions(c)
@@ -774,7 +820,7 @@ func (a *app) treePane(c *ui.Context) {
 		}
 	}
 	sideColumn(c, sidebarBackground(c), func() {
-		toolbarPart(c, true, false, func() {
+		a.toolbarPart(c, true, false, func() {
 			a.repository(c)
 			toolGroup(c, "Sidebar Toolbar", func() {
 				a.paneButton(c, "sidebar", sidebarIcon, &a.showTree, &a.collapsedTree, "Sidebar")
@@ -789,18 +835,27 @@ func (a *app) treePane(c *ui.Context) {
 		default:
 			a.treeView(c.Key(key), tree, label)
 		}
-		filterBar(c, key, &tree.filterState)
+		a.filterBar(c, key, &tree.filterState)
 	})
 }
 
 // filterBar is the field at the bottom of the sidebar that filters its
 // tree, as Xcode's navigator has: Down moves to the tree, Escape clears it.
-func filterBar(c *ui.Context, key string, f *filterState) {
+func (a *app) filterBar(c *ui.Context, key string, f *filterState) {
 	t := c.Theme()
-	ui.Divider(c)
+	if !a.nativeBar {
+		ui.Divider(c)
+	}
 	ui.Row(c).Shrink(0).FillWidth().Padding(t.Space(2)).Children(func() {
-		searchField(c, "filter:"+key, &f.filter, "Filter", "Filter Files", &f.field, &f.focus,
+		field := searchField(c, "filter:"+key, &f.filter, "Filter", "Filter Files", &f.field, &f.focus,
 			func() { f.toList = true }).FillWidth()
+		if a.nativeBar {
+			// A capsule over the sidebar's color, as Xcode's filter.
+			field.Radius(t.Space(4)).Background(t.Background.Alpha(0.7)).Border(1, t.Border.Alpha(0.6))
+			if f.field.FocusWithin(c) {
+				field.Border(1, t.Accent)
+			}
+		}
 	})
 }
 

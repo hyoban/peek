@@ -88,6 +88,28 @@ func shortDate(t, now time.Time) string {
 	return t.Format("2006/1/2")
 }
 
+// toolButton is a button of the toolbar as the state has it: what it
+// shows, whether it may be clicked and what a click does; or, while its
+// work is under way (busy), what that is, and the button stopping it,
+// named stop.
+type toolButton struct {
+	label, tooltip string
+	disabled       bool
+	click          func()
+	busy           bool
+	stop           string
+	cancel         func()
+}
+
+// drawTool draws a button of the toolbar, or the activity of its work.
+func drawTool(c *ui.Context, key string, b toolButton) {
+	if b.busy {
+		activity(c, key, b.label, b.tooltip, b.stop, b.cancel)
+		return
+	}
+	ui.Button(c.Key(key), b.label).Shrink(0).Disabled(b.disabled).Tooltip(b.tooltip).OnClick(b.click)
+}
+
 // activity is a task under way in the toolbar, as Xcode's activity view
 // beside its Stop button: a small spinner, what it does, muted, and the
 // button that stops it, named stop.

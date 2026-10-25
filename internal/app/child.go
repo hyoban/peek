@@ -75,12 +75,11 @@ func (a *app) native() bool { return a.win != nil && !a.inline }
 // popover shows build in an NSPopover under anchor while *open is true,
 // width wide and as tall as its content: the system's material, arrow and
 // animation, closing as the user clicks elsewhere or presses Escape.
-func (a *app) popover(ch *child, open *bool, anchor ui.Element, width int, build func(c *ui.Context)) {
-	r := anchor.Bounds()
+func (a *app) popover(ch *child, open *bool, anchor mygo.Rectangle, width int, build func(c *ui.Context)) {
 	a.follow(ch, open, func(view func(c *ui.Context)) *mygo.Window {
 		return mygo.NewFlyout(mygo.FlyoutOptions{
 			Parent:    a.win,
-			Anchor:    mygo.Rectangle{X: int(r.X), Y: int(r.Y), Width: int(r.W), Height: int(r.H)},
+			Anchor:    anchor,
 			Width:     width,
 			Height:    max(ch.height, 120), // until its content is laid out
 			Focusable: true,

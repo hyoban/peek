@@ -64,11 +64,14 @@ func (a *app) reviewSourceOf(scope string) review.Snapshot {
 	return a.reviewSource
 }
 
-func (a *app) reviewButton(c *ui.Context) {
+func (a *app) reviewButton(c *ui.Context) { drawTool(c, "review", a.reviewTool(c)) }
+
+// reviewTool is the Review button as the review's state has it.
+func (a *app) reviewTool(c *ui.Context) toolButton {
 	services := c.Services()
 	if a.review.running {
-		a.review.activity(c, "review", "Reviewing…", "Codex is reviewing the changes", "Stop Review")
-		return
+		text, tooltip := a.review.activityText(c, "Reviewing…", "Codex is reviewing the changes")
+		return toolButton{label: text, tooltip: tooltip, busy: true, stop: "Stop Review", cancel: a.review.stop}
 	}
 	target, targetErr := a.reviewTarget()
 	// A review of other changes than those selected stays for them, and
@@ -107,13 +110,13 @@ func (a *app) reviewButton(c *ui.Context) {
 	if a.review.stale && !other && !available {
 		label, tooltip = "Review", "Nothing to review"
 	}
-	ui.Button(c.Key("review"), label).Shrink(0).Disabled(disabled).Tooltip(tooltip).OnClick(func() {
+	return toolButton{label: label, tooltip: tooltip, disabled: disabled, click: func() {
 		if completed {
 			a.review.open = true
 			return
 		}
 		a.startReview(services)
-	})
+	}}
 }
 
 func (a *app) startReview(services ui.Services) {

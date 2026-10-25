@@ -48,12 +48,15 @@ func (a *app) explainable() (cm git.Commit, id, scope string) {
 	return cm, id, scope
 }
 
-func (a *app) explainButton(c *ui.Context) {
+func (a *app) explainButton(c *ui.Context) { drawTool(c, "explain", a.explainTool(c)) }
+
+// explainTool is the Explain button as the explanation's state has it.
+func (a *app) explainTool(c *ui.Context) toolButton {
 	e := &a.explain
 	services := c.Services()
 	if e.running {
-		e.activity(c, "explain", "Explaining…", "Codex is explaining the changes", "Stop Explaining")
-		return
+		text, tooltip := e.activityText(c, "Explaining…", "Codex is explaining the changes")
+		return toolButton{label: text, tooltip: tooltip, busy: true, stop: "Stop Explaining", cancel: e.stop}
 	}
 	cm, id, scope := a.explainable()
 	done := id != "" && e.hash == cm.Hash && (e.text != "" || e.err != "")
@@ -69,13 +72,13 @@ func (a *app) explainButton(c *ui.Context) {
 	case id == "":
 		tooltip = "Nothing to explain"
 	}
-	ui.Button(c.Key("explain"), label).Shrink(0).Disabled(a.changing() || id == "").Tooltip(tooltip).OnClick(func() {
+	return toolButton{label: label, tooltip: tooltip, disabled: a.changing() || id == "", click: func() {
 		if open {
 			e.open = true
 			return
 		}
 		a.startExplain(services)
-	})
+	}}
 }
 
 // startExplain has Codex explain the changes of the entry shown.

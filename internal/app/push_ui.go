@@ -17,14 +17,16 @@ type pushState struct {
 	until   time.Time // when the success label returns to Ship
 }
 
-func (a *app) pushButton(c *ui.Context) {
+func (a *app) pushButton(c *ui.Context) { drawTool(c, "push", a.pushTool(c)) }
+
+// pushTool is the Ship button as the push's state has it.
+func (a *app) pushTool(c *ui.Context) toolButton {
 	if a.push.running {
 		text := "Shipping…"
 		if phase, _, ok := strings.Cut(a.push.status, " "); ok {
 			text = phase + "…"
 		}
-		activity(c, "push", text, a.push.status, "Stop Shipping", func() { a.push.cancel() })
-		return
+		return toolButton{label: text, tooltip: a.push.status, busy: true, stop: "Stop Shipping", cancel: func() { a.push.cancel() }}
 	}
 	if a.push.status != "" {
 		if a.push.until.IsZero() {
@@ -51,7 +53,7 @@ func (a *app) pushButton(c *ui.Context) {
 	case disabled && a.push.status == "":
 		tooltip = "Nothing to ship"
 	}
-	ui.Button(c.Key("push"), label).Shrink(0).Disabled(disabled).Tooltip(tooltip).OnClick(a.startPush)
+	return toolButton{label: label, tooltip: tooltip, disabled: disabled, click: a.startPush}
 }
 
 func (a *app) startPush() {
