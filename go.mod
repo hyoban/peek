@@ -23,4 +23,4 @@ require (
 // Tools the selected text, in AppKit's context menus of text; and shows
 // AppKit's toolbar over the content's columns, the sidebars on its glass.
 // Until MyGo does.
-replace github.com/egoist/mygo => github.com/hyoban/mygo v0.6.4-0.20261025140218-5f159035e223
+replace github.com/egoist/mygo => ../mygo

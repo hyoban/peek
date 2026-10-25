@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -27,19 +26,20 @@ func (k *codexTask) stop() {
 // finish marks the task done, as its result comes.
 func (k *codexTask) finish() { k.running, k.cancel = false, nil }
 
-// activityText tells of the task under way in the toolbar: its stage and
-// how long it has taken so far, which the next second shows anew, else
-// text, and tooltip.
-func (k *codexTask) activityText(c *ui.Context, text, tooltip string) (string, string) {
+// activity is the button of the toolbar of the task under way: its stage
+// and how long it has taken so far, which the next second shows anew,
+// else text and tooltip, and stop, which stops it.
+func (k *codexTask) activity(c *ui.Context, text, tooltip, stop string) toolButton {
+	b := toolButton{label: text, tooltip: tooltip, busy: true, stop: stop, cancel: k.stop}
 	if k.phase != "" {
 		if k.started.IsZero() {
 			k.started = c.Now()
 		}
-		elapsed := c.Now().Sub(k.started).Truncate(time.Second)
-		text, tooltip = fmt.Sprintf("%s %s", k.phase, elapsed), k.detail
+		b.label, b.tooltip = k.phase, k.detail
+		b.elapsed = c.Now().Sub(k.started).Truncate(time.Second).String()
 		c.After(time.Second)
 	}
-	return text, tooltip
+	return b
 }
 
 // codexProgress reports the task's stages from off the UI thread, while

@@ -97,14 +97,21 @@ type toolButton struct {
 	disabled       bool
 	click          func()
 	busy           bool
-	stop           string
-	cancel         func()
+	// elapsed is how long the work under way has taken, stop names the
+	// button that stops it and cancel stops it.
+	elapsed string
+	stop    string
+	cancel  func()
 }
 
 // drawTool draws a button of the toolbar, or the activity of its work.
 func drawTool(c *ui.Context, key string, b toolButton) {
 	if b.busy {
-		activity(c, key, b.label, b.tooltip, b.stop, b.cancel)
+		text := b.label
+		if b.elapsed != "" {
+			text += " " + b.elapsed
+		}
+		activity(c, key, text, b.tooltip, b.stop, b.cancel)
 		return
 	}
 	ui.Button(c.Key(key), b.label).Shrink(0).Disabled(b.disabled).Tooltip(b.tooltip).OnClick(b.click)

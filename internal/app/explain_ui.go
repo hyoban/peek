@@ -55,8 +55,7 @@ func (a *app) explainTool(c *ui.Context) toolButton {
 	e := &a.explain
 	services := c.Services()
 	if e.running {
-		text, tooltip := e.activityText(c, "Explaining…", "Codex is explaining the changes")
-		return toolButton{label: text, tooltip: tooltip, busy: true, stop: "Stop Explaining", cancel: e.stop}
+		return e.activity(c, "Explaining…", "Codex is explaining the changes", "Stop Explaining")
 	}
 	cm, id, scope := a.explainable()
 	done := id != "" && e.hash == cm.Hash && (e.text != "" || e.err != "")

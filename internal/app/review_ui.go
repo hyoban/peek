@@ -70,8 +70,7 @@ func (a *app) reviewButton(c *ui.Context) { drawTool(c, "review", a.reviewTool(c
 func (a *app) reviewTool(c *ui.Context) toolButton {
 	services := c.Services()
 	if a.review.running {
-		text, tooltip := a.review.activityText(c, "Reviewing…", "Codex is reviewing the changes")
-		return toolButton{label: text, tooltip: tooltip, busy: true, stop: "Stop Review", cancel: a.review.stop}
+		return a.review.activity(c, "Reviewing…", "Codex is reviewing the changes", "Stop Review")
 	}
 	target, targetErr := a.reviewTarget()
 	// A review of other changes than those selected stays for them, and

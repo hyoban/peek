@@ -86,12 +86,17 @@ func (a *app) toolbarSpec(c *ui.Context) *mygo.Toolbar {
 }
 
 // toolItems are the items of a button of the toolbar: the button, or the
-// activity of its work under way with the button stopping it.
+// activity of its work under way, which stops it, as one button of the
+// same capsule. Its stage alone shows, for its width to stay as the
+// seconds pass, and the time it has taken in its tooltip.
 func toolItems(key string, b toolButton) []mygo.ToolbarItem {
+	tooltip := b.stop + "\n" + b.tooltip
+	if b.elapsed != "" {
+		tooltip += " (" + b.elapsed + ")"
+	}
 	return []mygo.ToolbarItem{
 		{ID: key, Title: b.label, Label: b.label, ToolTip: b.tooltip, Disabled: b.disabled, Hidden: b.busy, Click: b.click},
-		{ID: key + "-activity", Kind: mygo.ToolbarActivity, Title: b.label, Label: b.label, ToolTip: b.tooltip, Hidden: !b.busy},
-		{ID: key + "-stop", Symbol: "stop.fill", Label: b.stop, ToolTip: b.stop, Hidden: !b.busy, Click: b.cancel},
+		{ID: key + "-activity", Kind: mygo.ToolbarActivity, Title: b.label, Label: b.stop, ToolTip: tooltip, Hidden: !b.busy, Click: b.cancel},
 	}
 }
 
