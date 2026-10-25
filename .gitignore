@@ -2,3 +2,4 @@
 /.mygo/
 mygo_windows_*.syso
 /peek
+.DS_Store

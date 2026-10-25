@@ -625,8 +625,14 @@ func (a *app) commitItem(row ui.ListRow, i int) {
 		})
 	})
 	if cm.Hash != git.Worktree {
+		item.Tooltip(commitMessage(cm))
 		a.commitMenu(c, item, i, cm)
 	}
+}
+
+// commitMessage is a commit's whole message, its subject and body.
+func commitMessage(cm git.Commit) string {
+	return strings.TrimSpace(cm.Subject + "\n\n" + cm.Body)
 }
 
 // commitMenu is the context menu of a commit's row: copying its hash or
@@ -638,7 +644,7 @@ func (a *app) commitMenu(c *ui.Context, item ui.Element, i int, cm git.Commit) {
 			services.WriteClipboard(cm.Hash)
 		}
 		if m.Item("Copy Commit Message").Chosen() {
-			services.WriteClipboard(strings.TrimSpace(cm.Subject + "\n\n" + cm.Body))
+			services.WriteClipboard(commitMessage(cm))
 		}
 		if a.github != "" {
 			m.Separator()
