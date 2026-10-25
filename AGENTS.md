@@ -1,5 +1,12 @@
 # Agent guide
 
+## Layout
+
+`main.go` only starts `internal/app`, the window. Beside it, under
+`internal/`: `git` runs git and gh, `codex` runs the Codex CLI, `review`
+builds Codex reviews on both, `fileicons` draws file icons, and `testutil`
+holds the repositories and fake CLIs the tests share.
+
 ## After every change
 
 Once the tests pass, build the app again, put it in place of the installed

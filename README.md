@@ -121,13 +121,13 @@ CGO_ENABLED=0 go test ./...
 The screenshots above are drawn by `TestSnapshot` over this repository:
 
 ```bash
-PEEK_REPO=. PEEK_OUT=docs/changes PEEK_COMMIT=3 go test -run 'Snapshot$'
+PEEK_REPO=$PWD PEEK_OUT=$PWD/docs/changes PEEK_COMMIT=3 go test ./internal/app -run 'Snapshot$'
 ```
 
 ```bash
-PEEK_REPO=. PEEK_OUT=docs/files PEEK_MODE=files PEEK_COMMIT=1 PEEK_FILE=main.go go test -run 'Snapshot$'
+PEEK_REPO=$PWD PEEK_OUT=$PWD/docs/files PEEK_MODE=files PEEK_COMMIT=1 PEEK_FILE=internal/app/app.go go test ./internal/app -run 'Snapshot$'
 ```
 
 ## License
 
-[MIT](LICENSE). The icon fonts in [fileicons/fonts](fileicons/fonts) keep their own licenses, listed in its [NOTICE](fileicons/fonts/NOTICE).
+[MIT](LICENSE). The icon fonts in [internal/fileicons/fonts](internal/fileicons/fonts) keep their own licenses, listed in its [NOTICE](internal/fileicons/fonts/NOTICE).

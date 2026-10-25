@@ -1,0 +1,179 @@
+// Package testutil holds what the tests of several packages share: the
+// repositories they run over, and stand-ins for Codex and gh.
+package testutil
+
+import (
+	"bytes"
+	"image"
+	"image/png"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// Git runs git in the repository, failing the test where it fails, and
+// returns what it printed, trimmed.
+func Git(t *testing.T, repo string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "LC_ALL=C")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// Repo makes a repository of one commit, then changes one file,
+// deletes another and adds one git does not track.
+func Repo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	run := func(args ...string) {
+		Git(t, dir, append([]string{"-c", "user.name=Ada", "-c", "user.email=ada@example.com"}, args...)...)
+	}
+	write := func(name, text string) {
+		p := filepath.Join(dir, name)
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run("init", "-q", "-b", "main")
+	write("main.go", "package main\n")
+	write("old.txt", "gone soon\n")
+	run("add", ".")
+	run("commit", "-q", "-m", "Initial commit")
+	write("main.go", "package main\n\nfunc main() {}\n")
+	os.Remove(filepath.Join(dir, "old.txt"))
+	write("docs/new.md", "# New\n")
+	return dir
+}
+
+// RemoteRepo makes Repo's repository with a bare remote, origin, that
+// has its commit; it returns both.
+func RemoteRepo(t *testing.T) (string, string) {
+	t.Helper()
+	repo, remote := Repo(t), t.TempDir()
+	for key, value := range map[string]string{"user.name": "Ada", "user.email": "ada@example.com", "commit.gpgsign": "false", "core.hooksPath": filepath.Join(repo, ".git", "hooks")} {
+		Git(t, repo, "config", key, value)
+	}
+	Git(t, remote, "init", "--bare", "-b", "main")
+	Git(t, remote, "config", "core.hooksPath", filepath.Join(remote, "hooks"))
+	Git(t, repo, "remote", "add", "origin", remote)
+	Git(t, repo, "push", "-u", "origin", "main")
+	return repo, remote
+}
+
+func FakeCodex(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	script := `#!/bin/sh
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --output-last-message) shift; output="$1" ;;
+    --sandbox) shift; test "$1" = read-only || exit 2 ;;
+  esac
+  shift
+done
+cat >/dev/null
+printf '%s' '{"message":"Update the files"}' > "$output"
+`
+	if err := os.WriteFile(filepath.Join(dir, "codex"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// FakeGH puts a gh on the PATH that lists one pull request and checks
+// it out as a branch of its name, recording what it was asked; its default
+// repository is github's, the page of one.
+func FakeGH(t *testing.T, github string) string {
+	t.Helper()
+	dir := t.TempDir()
+	log := filepath.Join(dir, "log")
+	script := `#!/bin/sh
+echo "$@" >> "` + log + `"
+case "$1 $2" in
+  "repo view") echo "` + github + `" ;;
+  "pr list") printf '%s' '[{"number":7,"title":"Add the switcher","headRefName":"switcher","isDraft":false,"author":{"login":"ada"}}]' ;;
+  "pr checkout") git switch -q -c "pr-$3" ;;
+  *) exit 1 ;;
+esac
+`
+	if err := os.WriteFile(filepath.Join(dir, "gh"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return log
+}
+
+// RemoteWork pushes a commit to the remote from another clone, as a
+// teammate would.
+func RemoteWork(t *testing.T, remote, file string) {
+	t.Helper()
+	other := t.TempDir()
+	Git(t, other, "clone", "-q", remote, ".")
+	if err := os.WriteFile(filepath.Join(other, file), []byte(file+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	Git(t, other, "add", "--all")
+	Git(t, other, "-c", "user.name=Ada", "-c", "user.email=ada@example.com", "commit", "-q", "-m", "Remote work")
+	Git(t, other, "push", "-q", "origin", "main")
+}
+
+func PNG(t *testing.T) []byte {
+	t.Helper()
+	var data bytes.Buffer
+	if err := png.Encode(&data, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
+		t.Fatal(err)
+	}
+	return data.Bytes()
+}
+
+const PassingReview = `{"status":"complete","summary":"No actionable defects found.","findings":[]}`
+
+const FailingReview = `{"status":"complete","summary":"Empty inputs now crash.","findings":[{"priority":2,"title":"Handle empty inputs","body":"Restore the guard so an empty list does not divide by zero.","path":"calc.py","line":2}]}`
+
+func FakeReviewCodex(t *testing.T, response string) {
+	t.Helper()
+	dir := t.TempDir()
+	file := filepath.Join(dir, "response.json")
+	if err := os.WriteFile(file, []byte(response), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PEEK_TEST_REVIEW_RESPONSE", file)
+	script := `#!/bin/sh
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --output-last-message) shift; output="$1" ;;
+    --sandbox) shift; test "$1" = read-only || exit 2 ;;
+    --json) json=1 ;;
+    --cd) shift; if [ -n "$PEEK_TEST_CODEX_CWD" ]; then printf '%s' "$1" > "$PEEK_TEST_CODEX_CWD"; fi ;;
+  esac
+  shift
+done
+if [ -n "$PEEK_TEST_REVIEW_PROMPT" ]; then
+  cat > "$PEEK_TEST_REVIEW_PROMPT"
+else
+  cat >/dev/null
+fi
+if [ -n "$PEEK_TEST_CODEX_EVENTS" ]; then
+  test "$json" = 1 || exit 3
+  cat "$PEEK_TEST_CODEX_EVENTS"
+  attempts=0
+  while [ ! -f "$PEEK_TEST_CODEX_ACK" ] && [ "$attempts" -lt 100 ]; do
+    sleep 0.01
+    attempts=$((attempts + 1))
+  done
+  test -f "$PEEK_TEST_CODEX_ACK" || exit 4
+fi
+cp "$PEEK_TEST_REVIEW_RESPONSE" "$output"
+`
+	if err := os.WriteFile(filepath.Join(dir, "codex"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
