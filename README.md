@@ -25,13 +25,16 @@ All of the commit's files, to read any of them as it was then.
 ## Features
 
 - The uncommitted changes always at the top of the history
-- Syntax-highlighted diffs, with unmodified lines folded away
-- File icons from [file-icons](https://github.com/file-icons/atom)
-- Authors' avatars, and a link to the repository on GitHub
+- Changed files grouped into code, tests and docs, with their added and deleted lines, and each diff marked viewed once read
+- Syntax-highlighted diffs, with unmodified lines and imports folded away
+- Pictures shown as pictures, and Markdown files as a preview with the repository's images, with a toggle to the source
+- File and folder icons from the icon theme VS Code is set to, when it draws SVGs (as [Flow Icons](https://github.com/thang-nm/Flow-Icons) does), or else from [file-icons](https://github.com/file-icons/atom)
+- Authors' and co-authors' avatars, the commit's details and message on hover, and a link to the repository on GitHub
 - Switch between projects in one window
 - Switch branches, or check out a pull request by number or link with the [GitHub CLI](https://cli.github.com), from the branch in the toolbar
 - Fetches the branch's remote every few minutes, shows how many new commits it has beside the branch, and pulls them by fast-forward with a click
-- Commit all changes with a Codex-generated message and push from the toolbar
+- **Ship**: commit all changes with a Codex-written message and push, from the toolbar
+- **Review**: have Codex review the uncommitted changes or the unpushed commits
 - Follows the system's light and dark appearance
 
 ## Shortcuts
@@ -58,11 +61,16 @@ Without a path, Peek opens the repository you are in, or the last one it opened.
 
 Install the Codex CLI and sign in with `codex login`. Click **Ship** in the
 toolbar to stage all changes, including untracked files (Git ignores still
-apply). Peek supplies the repository, HEAD and fixed staged tree IDs. Codex
-reads the staged changes and recent commit subjects itself in a read-only sandbox,
-following the repository's commit style. This uses your configured Codex provider
-and existing settings; file contents are not embedded in the prompt. Before
-committing, Peek verifies that the branch, HEAD and staged tree are unchanged.
+apply). Peek embeds the staged diff and the recent commit subjects in the
+prompt, so Codex can write the message in one turn, following the
+repository's commit style. Diffs are grouped code first, then tests, docs,
+and last lockfiles and generated files; each file's diff is capped, and a
+change too large to embed whole comes with a summary of every file, leaving
+Codex to read more of the fixed staged tree in a read-only sandbox only if it
+must. The message is written by a small, fast model with low reasoning,
+apart from your Codex config, whose plugins and hooks suit coding sessions.
+Before committing, Peek verifies that the branch, HEAD and staged tree are
+unchanged.
 
 Peek fetches the remote, commits, then pushes the current branch. If the remote
 explicitly rejects it because the branch is protected, Peek creates and switches
@@ -75,7 +83,7 @@ The Ship button shows progress and the result; hover it for details. Click it
 while running to cancel, or after a failure to retry. Authentication, network and
 non-fast-forward failures stop the operation; Peek does not force-push or
 automatically merge. Failed attempts retain staged changes and any local commit
-for a retry. Commit message generation has no assembled-diff size limit.
+for a retry.
 
 ### Review with Codex
 
@@ -90,8 +98,8 @@ Stages follow live Codex events rather than an estimated percentage.
 When finished, it shows **Passed**, **Not passed**, or **Review error**.
 Peek judges the result by the findings' priorities: any P0–P2 finding fails
 the review, while minor P3 findings alone still pass and show with it.
-Click a completed result to read the summary and findings, or to review again.
-A failed review automatically copies its summary and findings to the clipboard.
+Click a completed result to read the summary and findings, copy them, or
+review again. A failed review automatically copies them to the clipboard.
 Click while running to cancel. Changing the reviewed code makes the result
 out of date. With no changes to review, the button is disabled.
 
