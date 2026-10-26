@@ -3,8 +3,11 @@ package app
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -118,13 +121,15 @@ func TestPerfUntracked(t *testing.T) {
 	}
 }
 
-// Every diff of a large change loaded, as scrolling through them all
-// loads them: how long that takes, and the memory held after.
+// A large change scrolled through to its end, about a view's height every
+// two frames, which shows every diff: how long that takes, and the memory
+// held after, Go's heap and all the process's. Run alone, the memory is
+// this test's, not the others' too.
 func TestPerfMemory(t *testing.T) {
 	a, tt := openPerf(t, "memory", perfRepo(t, "memory"))
 	start := time.Now()
-	for _, d := range a.diffs {
-		a.scrollToFile(d.change.Path)
+	for steps := 0; !a.diffList.AtEnd() && steps < 10_000; steps++ {
+		tt.Scroll(800, 400, 0, 700)
 		tt.Frame()
 		tt.Frame()
 	}
@@ -133,5 +138,16 @@ func TestPerfMemory(t *testing.T) {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
 	report("memory", "heap", float64(m.HeapAlloc>>20), "MB")
+	report("memory", "rss", rss(), "MB")
 	runtime.KeepAlive(a)
+}
+
+// rss is the memory the process holds, as ps tells it, in MB.
+func rss() float64 {
+	out, err := exec.Command("ps", "-o", "rss=", "-p", strconv.Itoa(os.Getpid())).Output()
+	if err != nil {
+		return 0
+	}
+	kb, _ := strconv.Atoi(strings.TrimSpace(string(out)))
+	return float64(kb) / 1024
 }

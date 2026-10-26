@@ -1,9 +1,11 @@
 # Performance
 
 How fast Peek opens a project, scrolls its diffs and follows its files,
-what slowed it, what was done about it, and how it compares with
-[Godiff](https://github.com/egoist/godiff), another Mac app for reviewing
-Git changes built on [MyGo](https://mygo.egoist.dev/).
+what slowed it, what was done about it, and how it compares with two
+other apps for reviewing Git changes: [Godiff](https://github.com/egoist/godiff),
+built on [MyGo](https://mygo.egoist.dev/) as Peek is, and
+[Codiff](https://github.com/nkzw-tech/codiff), which Godiff remakes, built
+on Electron.
 
 ## Measuring
 
@@ -38,8 +40,9 @@ And the measures:
 | scroll | a frame, scrolling down 120 points a frame, unified and side by side |
 | resize | a frame, the window widening 4 points a frame over the large diff |
 | refresh | reading the project again, as a change of its files asks, after the first time |
-| load-all | every diff loaded, as scrolling through them all loads them |
-| heap | the memory held once they are, after a collection |
+| load-all | scrolling through the change to its end, 700 points every two frames, which shows every diff |
+| heap | Go's heap once it has, after a collection |
+| rss | the memory the process holds then, as `ps` tells it; the memory scenario runs in a process of its own |
 
 A frame here is built, laid out and painted, its pixels drawn by the CPU:
 on the screen the GPU draws them, and frames take less. The measures are
@@ -62,8 +65,9 @@ Measured by the same tests at `4a58eb4`, before, and now:
 | large | resize, side by side | 46.3 | 6.0 | ms/frame |
 | untracked | open | 1,143 | 410 | ms |
 | untracked | refresh | 1,166 | 106 | ms |
-| memory | load-all | 9,220 | 6,133 | ms |
-| memory | heap | 311 | 136 | MB |
+| memory | load-all | 28,572 | 19,741 | ms |
+| memory | heap | 609 | 208 | MB |
+| memory | rss | 1,132 | 475 | MB |
 
 ### Diffs of long files
 
@@ -124,69 +128,87 @@ shown compared with those read again, off the main thread. Past a million
 lines loaded, the diffs farthest from the view let theirs go, and load
 again as they come back into view.
 
-## Peek and Godiff
+## Peek, Godiff and Codiff
 
 [`scripts/perf/compare.sh`](../scripts/perf/compare.sh) makes the
-scenarios' repositories, clones Godiff at `da91882` (October 15, 2026),
-copies [Godiff's side of the tests](../scripts/perf/godiff/perf_test.go)
-into it, times both apps over the same repositories, and prints this
-table:
+scenarios' repositories, clones Godiff at `da91882` (October 15, 2026) and
+Codiff at `ab0653c` (October 23, 2026, version 1.18.2), times the three
+over the same repositories, and prints this table:
 
-| Scenario | Measure | Peek | Godiff | |
-|---|---|--:|--:|---|
-| large | open | 156 | 121 | ms |
-| large | scroll, unified | 1.6 | 2.4 | ms/frame |
-| large | scroll, side by side | 1.6 | 2.5 | ms/frame |
-| large | resize, unified | 4.4 | 1.9 | ms/frame |
-| large | resize, side by side | 6.0 | 1.9 | ms/frame |
-| many | open | 233 | 1,424 | ms |
-| many | scroll, unified | 2.7 | 2.8 | ms/frame |
-| many | scroll, side by side | 2.0 | 2.9 | ms/frame |
-| untracked | open | 410 | 259 | ms |
-| untracked | refresh | 106 | 176 | ms |
-| memory | open | 576 | 46,954 | ms |
-| memory | load-all | 6,133 | 46,955 | ms |
-| memory | heap | 136 | 645 | MB |
+| Scenario | Measure | Peek | Godiff | Codiff | |
+|---|---|--:|--:|--:|---|
+| large | open | 150 | 121 | 170 | ms |
+| large | scroll, unified | 1.5 | 2.4 | 7.5 | ms/frame |
+| large | scroll, side by side | 1.4 | 2.5 | 4.4 | ms/frame |
+| large | resize, unified | 4.2 | 2.0 | 8.4 | ms/frame |
+| large | resize, side by side | 5.9 | 1.9 | 8.1 | ms/frame |
+| many | open | 210 | 1,399 | 268 | ms |
+| many | scroll, unified | 2.9 | 2.7 | 5.3 | ms/frame |
+| many | scroll, side by side | 1.9 | 2.8 | 4.4 | ms/frame |
+| untracked | open | 490 | 239 | 497 | ms |
+| untracked | refresh | 112 | 166 | – | ms |
+| memory | open | 603 | 46,755 | 1,042 | ms |
+| memory | load-all | 20,830 | 7,944 | 29,720 | ms |
+| memory | heap | 208 | 772 | – | MB |
+| memory | rss | 477 | 3,256 | 2,621 | MB |
 
-Opening the untracked scenario took a second, now and then, in either
-app, right after other work had filled the system's caches; the table
-has the time it took most often.
+All three wrap their lines here, as Peek always does; Godiff and Codiff
+do not by default, which costs them less. Opening the untracked scenario
+took Peek 410 ms in most runs, and a second, now and then, in any of the
+apps, right after other work had filled the system's caches.
 
-Godiff's lines wrap here, as Peek's always do; it does not wrap them by
-default, which costs it less. It is built on MyGo 0.4.9, an earlier
-version than Peek's fork, and its frames are drawn by its own rows of
-text, not MyGo's editor.
+### How each is measured
 
-The two load diffs differently. Godiff reads every file's contents as it
-opens, and colors them with [Chroma](https://github.com/alecthomas/chroma),
-two files at a time: once it has, scrolling never waits, but opening a
-change waits for all of it, a large change's for long, and holds all of
-it. Peek reads the diffs in view, and those that come into view as it
-scrolls, colored by MyGo's highlighter as they show; its list builds the
-rows just past the view too, so a diff starts loading before it comes
-into view, but a project's every diff is not ready at once. Godiff shows the
-whole text of files of 2 MB at most, and of larger ones the patch's
-lines; Peek of files of 8 MB at most.
+Godiff's side of the tests ([`godiff/perf_test.go`](../scripts/perf/godiff/perf_test.go))
+is Peek's, copied into its checkout: its frames are drawn without a
+window, as Peek's are. It is built on MyGo 0.4.9, an earlier version than
+Peek's fork, and draws its own rows of text, not MyGo's editor.
 
-Where Godiff is faster:
+Codiff is a page Chromium draws, which no test draws without a window.
+[`codiff/run.mjs`](../scripts/perf/codiff/run.mjs) opens its window over
+each repository, as Codiff's own startup benchmark does, its settings and
+home its own, and [`codiff/harness.cjs`](../scripts/perf/codiff/harness.cjs)
+takes the same measures in it: open from the window made to the diffs in
+view drawn, or folded; a frame as the time between two of Chromium's,
+which draws them as fast as it can rather than at the display's rate;
+resizing as the window is made wider; and rss as the memory all of
+Electron's processes hold. Its frames are drawn on the GPU, which makes
+its times not quite the others'. It has no measure of a refresh: it tells
+of files changed, and reads them again when asked.
 
-- **Resizing**, two to three times as fast. At each width Peek wraps the
-  lines it shows again, and lays out and draws them anew, a frame's work
-  that a resize cannot spare; a tenth of it is drawing the pixels on the
-  CPU, which the GPU does on the screen.
-- **Opening a project with many untracked files**, the first time, though
-  it does less: it lists 1,000 untracked files at most, the others as a
-  row telling how many more, where Peek lists all 20,000, reads each, and
-  asks git which an attribute applies to. Every refresh after reuses the
-  counts, and is faster than Godiff's.
-- **Opening a long file's diff**, a little: Peek diffs the two texts
-  itself, off the main thread, 35 ms of it, where Godiff takes git's
-  patch.
+### What they do differently
 
-Where Peek is faster: opening a change of many files, six times as fast;
-of many long files, 80 times; scrolling, its frames as long as Godiff's
-or shorter, down to two thirds of them; refreshing a project with many untracked files; and
-it holds a fifth of the memory once every diff is loaded.
+Godiff reads every file's contents as it opens, and colors them with
+[Chroma](https://github.com/alecthomas/chroma), two files at a time: once
+it has, scrolling never waits, but opening a change waits for all of it,
+a large change's for long, and holds all of it, more than 3 GB of the
+memory scenario's. Codiff reads the change as it opens too, and draws
+only the files in view, in a list as high as the whole change. Peek reads
+the diffs in view, and those its list builds just past it, as it
+scrolls, and lets the farthest go past a million lines: it holds less
+than a sixth of Godiff's memory and a fifth of Codiff's once every
+diff has shown, and opens a large change more than 70 times as fast as
+Godiff and nearly twice as fast as Codiff. Its load-all reads and diffs
+each file as it comes, which the app does off the main thread and the
+test in its frames; Godiff's did as it opened.
+
+Godiff and Codiff list 1,000 untracked files at most, the others as a row
+telling how many more, where Peek lists all 20,000. Godiff shows the
+whole text of files of 2 MB at most, and of larger ones the patch's lines;
+Peek of files of 8 MB at most.
+
+Where Godiff is faster: **resizing**, two to three times as fast, where
+Peek wraps the lines it shows again at each width, and lays them out and
+draws them anew; **opening a project with many untracked files** the
+first time, though it lists a twentieth of them; **opening a long file's
+diff**, a little, as Peek diffs the two texts itself, off the main thread,
+35 ms of it, where Godiff takes git's patch; and **scrolling through a
+change already loaded**, as its loading was done as it opened.
+
+Codiff is slower than Peek at every measure here, its frames from 1.4 to
+5 times as long, but opening the project of many untracked
+files, which took the two about as long, Codiff listing a twentieth of
+them.
 
 ## Measuring again
 

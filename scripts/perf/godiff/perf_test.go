@@ -13,8 +13,11 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -105,15 +108,30 @@ func TestPerfUntracked(t *testing.T) {
 	}
 }
 
-// Godiff reads every file's contents as it opens: loading them all is its
-// opening.
+// A large change scrolled through to its end, as Peek's test does. Godiff
+// reads every file's contents as it opens, before.
 func TestPerfMemory(t *testing.T) {
+	w, tt := openPerf(t, "memory", perfRepo(t, "memory"), "unified")
 	start := time.Now()
-	w, _ := openPerf(t, "memory", perfRepo(t, "memory"), "unified")
+	for steps := 0; !w.list.AtEnd() && steps < 10_000; steps++ {
+		tt.Scroll(800, 400, 0, 700)
+		tt.Frame()
+		tt.Frame()
+	}
 	report("memory", "load-all", ms(time.Since(start)), "ms")
 	runtime.GC()
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
 	report("memory", "heap", float64(m.HeapAlloc>>20), "MB")
+	report("memory", "rss", rss(), "MB")
 	runtime.KeepAlive(w)
+}
+
+func rss() float64 {
+	out, err := exec.Command("ps", "-o", "rss=", "-p", strconv.Itoa(os.Getpid())).Output()
+	if err != nil {
+		return 0
+	}
+	kb, _ := strconv.Atoi(strings.TrimSpace(string(out)))
+	return float64(kb) / 1024
 }
