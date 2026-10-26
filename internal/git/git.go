@@ -601,7 +601,7 @@ func FileTextAtMost(repo, hash, p string, limit int) (string, error) {
 		}
 		return FileText(repo, hash, p)
 	}
-	return Bounded(repo, limit, "show", Tip(hash)+":"+p)
+	return showFile(repo, Tip(hash)+":"+p, limit)
 }
 
 // FileText returns the file's text in the commit, or on disk.
@@ -610,7 +610,7 @@ func FileText(repo, hash, p string) (string, error) {
 		b, err := os.ReadFile(filepath.Join(repo, p))
 		return string(b), err
 	}
-	return git(repo, "show", Tip(hash)+":"+p)
+	return showFile(repo, Tip(hash)+":"+p, 0)
 }
 
 // Patch returns git's patch of the change the commit makes to a file, or

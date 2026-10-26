@@ -58,16 +58,18 @@ Measured by the same tests at `4a58eb4`, before, and now:
 
 | Scenario | Measure | Before | Now | |
 |---|---|--:|--:|---|
-| large | open | 222 | 156 | ms |
+| large | open | 222 | 145 | ms |
 | large | scroll, unified | 5.8 | 1.6 | ms/frame |
 | large | scroll, side by side | 5.8 | 1.6 | ms/frame |
 | large | resize, unified | 31.7 | 4.4 | ms/frame |
 | large | resize, side by side | 46.3 | 6.0 | ms/frame |
-| untracked | open | 1,143 | 410 | ms |
-| untracked | refresh | 1,166 | 106 | ms |
-| memory | load-all | 28,572 | 19,741 | ms |
+| many | open | 213 | 90 | ms |
+| untracked | open | 1,143 | 400 | ms |
+| untracked | refresh | 1,166 | 96 | ms |
+| memory | open | 612 | 519 | ms |
+| memory | load-all | 28,572 | 15,365 | ms |
 | memory | heap | 609 | 208 | MB |
-| memory | rss | 1,132 | 475 | MB |
+| memory | rss | 1,132 | 473 | MB |
 
 ### Diffs of long files
 
@@ -123,7 +125,10 @@ each file took several times as long.
 ### Large files and many diffs
 
 A file too large to show, over 8 MB, is no longer read whole only to be
-left. A file's two sides read at once. Buffers are made, and the texts
+left. A file's two sides read at once, and those of commits through a few
+`git cat-file` processes kept running, rather than a `git show` each: the
+processes they took were most of the time a diff took to come, and
+opening a change of many files takes less than half as long. Buffers are made, and the texts
 shown compared with those read again, off the main thread. Past a million
 lines loaded, the diffs farthest from the view let theirs go, and load
 again as they come back into view.
@@ -137,25 +142,26 @@ over the same repositories, and prints this table:
 
 | Scenario | Measure | Peek | Godiff | Codiff | |
 |---|---|--:|--:|--:|---|
-| large | open | 150 | 121 | 170 | ms |
-| large | scroll, unified | 1.5 | 2.4 | 7.5 | ms/frame |
-| large | scroll, side by side | 1.4 | 2.5 | 4.4 | ms/frame |
-| large | resize, unified | 4.2 | 2.0 | 8.4 | ms/frame |
-| large | resize, side by side | 5.9 | 1.9 | 8.1 | ms/frame |
-| many | open | 210 | 1,399 | 268 | ms |
-| many | scroll, unified | 2.9 | 2.7 | 5.3 | ms/frame |
+| large | open | 145 | 121 | 170 | ms |
+| large | scroll, unified | 1.7 | 2.4 | 7.5 | ms/frame |
+| large | scroll, side by side | 1.5 | 2.5 | 4.4 | ms/frame |
+| large | resize, unified | 4.3 | 2.0 | 8.4 | ms/frame |
+| large | resize, side by side | 5.6 | 1.9 | 8.1 | ms/frame |
+| many | open | 90 | 1,399 | 268 | ms |
+| many | scroll, unified | 1.9 | 2.7 | 5.3 | ms/frame |
 | many | scroll, side by side | 1.9 | 2.8 | 4.4 | ms/frame |
-| untracked | open | 490 | 239 | 497 | ms |
-| untracked | refresh | 112 | 166 | – | ms |
-| memory | open | 603 | 46,755 | 1,042 | ms |
-| memory | load-all | 20,830 | 7,944 | 29,720 | ms |
+| untracked | open | 400 | 239 | 497 | ms |
+| untracked | refresh | 96 | 166 | – | ms |
+| memory | open | 519 | 46,755 | 1,042 | ms |
+| memory | load-all | 15,365 | 7,944 | 29,720 | ms |
 | memory | heap | 208 | 772 | – | MB |
-| memory | rss | 477 | 3,256 | 2,621 | MB |
+| memory | rss | 473 | 3,256 | 2,621 | MB |
 
 All three wrap their lines here, as Peek always does; Godiff and Codiff
 do not by default, which costs them less. Opening the untracked scenario
-took Peek 410 ms in most runs, and a second, now and then, in any of the
-apps, right after other work had filled the system's caches.
+took a second, now and then, in any of the apps, right after other work
+had filled the system's caches; the table has the time it took most
+often.
 
 ### How each is measured
 
@@ -187,8 +193,9 @@ only the files in view, in a list as high as the whole change. Peek reads
 the diffs in view, and those its list builds just past it, as it
 scrolls, and lets the farthest go past a million lines: it holds less
 than a sixth of Godiff's memory and a fifth of Codiff's once every
-diff has shown, and opens a large change more than 70 times as fast as
-Godiff and nearly twice as fast as Codiff. Its load-all reads and diffs
+diff has shown, and opens a large change 90 times as fast as Godiff and
+twice as fast as Codiff, and a change of many files 15 times and 3 times
+as fast. Its load-all reads and diffs
 each file as it comes, which the app does off the main thread and the
 test in its frames; Godiff's did as it opened.
 
@@ -206,9 +213,8 @@ diff**, a little, as Peek diffs the two texts itself, off the main thread,
 change already loaded**, as its loading was done as it opened.
 
 Codiff is slower than Peek at every measure here, its frames from 1.4 to
-5 times as long, but opening the project of many untracked
-files, which took the two about as long, Codiff listing a twentieth of
-them.
+4.4 times as long, opening the project of many untracked files too,
+though it lists a twentieth of them.
 
 ## Measuring again
 
