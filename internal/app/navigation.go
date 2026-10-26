@@ -308,6 +308,7 @@ func (a *app) navigationTools(c *ui.Context) {
 	if !a.worktreeFiles() {
 		return
 	}
+	t := c.Theme()
 	for _, b := range []struct {
 		name        string
 		svg         *ui.SVG
@@ -316,9 +317,11 @@ func (a *app) navigationTools(c *ui.Context) {
 		{"Go Back", backIcon, -1, len(a.navigation.back)},
 		{"Go Forward", forwardIcon, 1, len(a.navigation.forward)},
 	} {
-		ui.Button(c.Key(b.name), "").Label(b.name).Tooltip(b.name).Width(24).Height(22).
-			Disabled(b.count == 0 || !a.readableSource() || a.navigation.busy).
-			Children(func() { ui.Icon(c, b.svg).Size(14, 14) }).OnClick(func() { a.goBack(b.step) })
+		button := ui.ButtonBase(c.Key(b.name)).Size(24, 22).Shrink(0).Center().Radius(5).
+			Label(b.name).Tooltip(b.name).TextColor(t.TextMuted).
+			Disabled(b.count == 0 || !a.readableSource() || a.navigation.busy)
+		flat(button, t, false)
+		button.Children(func() { ui.Icon(c, b.svg).Size(14, 14) }).OnClick(func() { a.goBack(b.step) })
 	}
 	a.definitionStatus(c)
 }
