@@ -29,16 +29,35 @@ type history struct {
 }
 
 func readHistory(repo string) history {
-	// The review's fingerprint reads every file changed, as counting
-	// their lines does: the two go at once.
+	// Each part runs git apart from the others, all at once, as gitSlots
+	// allows: one after another, their processes added up to most of the
+	// wait for a project to show.
 	var (
+		wg          sync.WaitGroup
+		commits     []git.Commit
+		err         error
+		changes     []git.Change
 		snapshot    review.Snapshot
 		snapshotErr error
-		wg          sync.WaitGroup
+		r           git.BranchRange
+		hasBranch   bool
+		branch      string
+		github      string
+		branchURL   string
+		unpushed    bool
+		behind      int
+		upstream    string
 	)
+	wg.Go(func() { commits, err = git.LoadCommits(repo, 500) })
+	wg.Go(func() { changes, _ = git.LoadWorktreeChanges(repo) })
 	wg.Go(func() { snapshot, snapshotErr = review.ReadSnapshot(repo) })
-	commits, err := git.LoadCommits(repo, 500)
-	changes, _ := git.LoadWorktreeChanges(repo)
+	wg.Go(func() { r, hasBranch = git.BranchBase(repo) })
+	wg.Go(func() { branch = git.CurrentBranch(repo) })
+	wg.Go(func() { github = git.GitHubURL(repo) })
+	wg.Go(func() { branchURL = git.BranchGitHubURL(repo) })
+	wg.Go(func() { unpushed = git.HasUnpushedCommits(repo) })
+	wg.Go(func() { behind, upstream = git.BehindUpstream(repo) })
+	wg.Wait()
 	// The work tree's entry always shows, for its files to read as they
 	// are on disk, with changes or none.
 	summary := "No changes"
@@ -50,21 +69,19 @@ func readHistory(repo string) history {
 	var branchReview review.Snapshot
 	// The branch's changes since it left the branch it is to merge into,
 	// as its pull request's diff has them, where it has commits of its own.
-	if r, ok := git.BranchBase(repo); ok {
+	if hasBranch {
 		entries = append(entries, git.Commit{Hash: git.Range(r.Base, r.Head), Subject: "Branch Changes",
 			Summary: count(r.Commits, "commit") + " since " + r.Onto,
 			Body:    "The changes of the branch since it left " + r.Onto + ", at " + r.Base[:7]})
-		branchReview = review.BranchSnapshot(git.CurrentBranch(repo), r)
+		branchReview = review.BranchSnapshot(branch, r)
 	}
 	commits = append(entries, commits...)
-	wg.Wait()
-	behind, upstream := git.BehindUpstream(repo)
 	var reviewNote string
 	if snapshotErr != nil {
 		reviewNote = snapshotErr.Error()
 	}
-	return history{commits: commits, changes: changes, branch: git.CurrentBranch(repo), github: git.GitHubURL(repo), branchURL: git.BranchGitHubURL(repo),
-		canPush: len(changes) > 0 || git.HasUnpushedCommits(repo), behind: behind, upstream: upstream, review: snapshot, reviewErr: reviewNote, branchReview: branchReview, err: err}
+	return history{commits: commits, changes: changes, branch: branch, github: github, branchURL: branchURL,
+		canPush: len(changes) > 0 || unpushed, behind: behind, upstream: upstream, review: snapshot, reviewErr: reviewNote, branchReview: branchReview, err: err}
 }
 
 // refresh reads the history and the work tree again, as the watch asks
