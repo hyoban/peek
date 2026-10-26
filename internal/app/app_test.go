@@ -181,7 +181,7 @@ func TestCompactFolders(t *testing.T) {
 	}
 	tree.show(deep + "/ui/Screen.kt")
 	if !tree.state.Open.Has("apps/android") || !tree.state.Open.Has(deep) || !tree.state.Open.Has(deep+"/ui") {
-		t.Errorf("show opened %v, want every folder above the file", tree.opened)
+		t.Errorf("show opened %v, want every folder above the file", slices.Collect(tree.state.Open.All()))
 	}
 }
 

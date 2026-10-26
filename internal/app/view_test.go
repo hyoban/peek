@@ -140,7 +140,9 @@ func TestStackedDiffs(t *testing.T) {
 	}
 }
 
-func TestClickFolderTogglesIt(t *testing.T) {
+// A click on a folder chooses it and leaves it as it is, as AppKit's
+// outline views keep choosing and opening apart.
+func TestClickFolderChoosesIt(t *testing.T) {
 	a, tt := testApp(t, testutil.Repo(t), func(a *app) { a.mode = modeFiles })
 	a.allTree.state.Open.Clear() // as a commit's files first show
 	tt.Frame()
@@ -151,15 +153,8 @@ func TestClickFolderTogglesIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !a.allTree.state.Open.Has("docs") || a.allTree.chosen() != "docs" || a.allTree.state.Rows() != 3 {
+	if a.allTree.state.Open.Has("docs") || a.allTree.chosen() != "docs" || a.allTree.state.Rows() != 2 {
 		t.Errorf("after a click on docs: open %v, chosen %q", a.allTree.state.Open.Has("docs"), a.allTree.chosen())
-	}
-	if err := tt.Click("docs"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Frame()
-	if a.allTree.state.Open.Has("docs") || a.allTree.chosen() != "docs" {
-		t.Errorf("after a second click on docs: open %v, chosen %q", a.allTree.state.Open.Has("docs"), a.allTree.chosen())
 	}
 	if err := tt.Click("main.go"); err != nil {
 		t.Fatal(err)
@@ -170,14 +165,14 @@ func TestClickFolderTogglesIt(t *testing.T) {
 	}
 }
 
-// A click on a folder's arrow does what a click on its row does.
-func TestArrowClickActsAsRowClick(t *testing.T) {
+// A click on a folder's arrow opens and closes it, and leaves the choice
+// as it is.
+func TestArrowOpensWithoutChoosing(t *testing.T) {
 	a, tt := testApp(t, testutil.Repo(t), func(a *app) { a.mode = modeFiles })
 	if err := tt.Click("main.go"); err != nil { // the choice elsewhere
 		t.Fatal(err)
 	}
 	a.allTree.state.Open.Clear()
-	a.allTree.remember()
 	tt.Frame()
 	label, ok := tt.Find("docs")
 	if !ok {
@@ -186,16 +181,16 @@ func TestArrowClickActsAsRowClick(t *testing.T) {
 	arrowX := label.X - 6 - 16 - 8 // past the gap, the icon, to the arrow's middle
 	tt.ClickAt(arrowX, label.Y+label.H/2)
 	tt.Frame()
-	if !a.allTree.state.Open.Has("docs") || a.allTree.chosen() != "docs" {
+	if !a.allTree.state.Open.Has("docs") || a.allTree.chosen() != "main.go" {
 		t.Errorf("after a click on docs' arrow: open %v, chosen %q", a.allTree.state.Open.Has("docs"), a.allTree.chosen())
 	}
 	tt.ClickAt(arrowX, label.Y+label.H/2)
 	tt.Frame()
-	if a.allTree.state.Open.Has("docs") || a.allTree.chosen() != "docs" {
+	if a.allTree.state.Open.Has("docs") || a.allTree.chosen() != "main.go" {
 		t.Errorf("after a second click on the arrow: open %v, chosen %q", a.allTree.state.Open.Has("docs"), a.allTree.chosen())
 	}
 	if a.openFile != "main.go" {
-		t.Errorf("choosing a folder closed the file shown, %q", a.openFile)
+		t.Errorf("opening a folder closed the file shown, %q", a.openFile)
 	}
 }
 

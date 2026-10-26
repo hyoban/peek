@@ -21,10 +21,6 @@ type pathTree struct {
 	state   ui.OutlineState[string]
 	row     int
 	reveal  string // the path to choose once its row shows
-	// opened is what the app last opened: an item opened or closed
-	// otherwise was so by the outline's arrow or keys, or a click on a
-	// folder's row.
-	opened map[string]bool
 	filterState
 }
 
@@ -176,7 +172,6 @@ func (t *pathTree) set(f folded) {
 	t.state.Open.Clear()
 	t.row, t.reveal = -1, ""
 	t.gen++
-	t.remember()
 }
 
 // replace replaces the tree with another of mostly the same paths, as
@@ -199,7 +194,6 @@ func (t *pathTree) replace(f folded) {
 	if saved {
 		t.savedGen = t.gen // the folders to open again as the filter clears
 	}
-	t.remember()
 	if _, ok := t.labels[chosen]; ok {
 		t.choose(chosen)
 	}
@@ -257,7 +251,6 @@ func (t *pathTree) applyFilter() {
 		if chosen != "" {
 			t.show(chosen)
 		}
-		t.remember()
 		return
 	}
 	if t.keep == nil || t.savedGen != t.gen {
@@ -283,7 +276,6 @@ func (t *pathTree) applyFilter() {
 		return kept
 	}
 	walk("")
-	t.remember()
 	t.choose(chosen)
 }
 
@@ -325,38 +317,6 @@ func (t *pathTree) filterCount() (kept, all int) {
 	return kept, all
 }
 
-func (t *pathTree) remember() {
-	t.opened = map[string]bool{}
-	for dir := range t.state.Open.All() {
-		t.opened[dir] = true
-	}
-}
-
-// arrowed returns the item last opened or closed other than by the app,
-// the outermost where several were, as Option-click opens all inside, and
-// remembers what is open now; "" for none.
-func (t *pathTree) arrowed() string {
-	var changed []string
-	for dir := range t.state.Open.All() {
-		if !t.opened[dir] {
-			changed = append(changed, dir)
-		}
-	}
-	if len(changed) == 0 && t.state.Open.Len() == len(t.opened) {
-		return ""
-	}
-	for dir := range t.opened {
-		if !t.state.Open.Has(dir) {
-			changed = append(changed, dir)
-		}
-	}
-	t.remember()
-	if len(changed) == 0 {
-		return ""
-	}
-	return slices.MinFunc(changed, func(a, b string) int { return len(a) - len(b) })
-}
-
 func (t *pathTree) isDir(p string) bool { return t.dirs[p] != nil }
 
 // has reports whether the tree lists the file.
@@ -371,7 +331,6 @@ func (t *pathTree) openAll() {
 			t.state.Open.Add(dir)
 		}
 	}
-	t.remember()
 }
 
 // files returns the tree's files in the order its rows list them, every
@@ -398,18 +357,7 @@ func (t *pathTree) show(p string) {
 	for dir, ok := t.parents[p]; ok && dir != ""; dir, ok = t.parents[dir] {
 		t.state.Open.Add(dir)
 	}
-	t.remember()
 	t.choose(p)
-}
-
-// flip opens the directory or closes it, as its arrow does: arrowed then
-// chooses it.
-func (t *pathTree) flip(dir string) {
-	if t.state.Open.Has(dir) {
-		t.state.Open.Remove(dir)
-	} else {
-		t.state.Open.Add(dir)
-	}
 }
 
 // rowOf returns the row of the item as the outline last built its rows,

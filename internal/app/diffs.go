@@ -75,7 +75,6 @@ func (a *app) openChanges(known map[string][]string) {
 			t.state.Open.Add(dir)
 		}
 	}
-	t.remember()
 	if t.reveal != "" {
 		t.choose(t.reveal) // whose row the folders opened move
 	}

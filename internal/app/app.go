@@ -994,9 +994,8 @@ func (a *app) treeItem(c *ui.Context, tree *pathTree) func(p string) ui.SourceLi
 			return it
 		}
 		if !isFile {
-			// A click on a folder opens or closes it as its arrow does, which
-			// sync makes choose it too, as Finder's and Xcode's rows do.
-			it.OnClick = func() { tree.flip(p) }
+			// A click on a folder chooses it, and its arrow alone opens and
+			// closes it, as AppKit's outline views keep the two apart.
 			if icon := fileicons.FolderPicture(p, tree.state.Open.Has(p), 16, dark); icon != nil {
 				it.Image = icon
 			} else {
@@ -1105,17 +1104,6 @@ func (a *app) sync(c *ui.Context) {
 	a.applyShot(c)
 	if a.changeTree.sync() || a.allTree.sync() {
 		c.Services().Invalidate()
-	}
-	// A folder opened or closed by a click, on its arrow or its row,
-	// is chosen too, and the tree takes the keys.
-	for _, tree := range []*pathTree{&a.changeTree, &a.allTree} {
-		if dir := tree.arrowed(); dir != "" {
-			if i := tree.rowOf(dir); i >= 0 {
-				tree.row = i
-			}
-			tree.state.List.Handle.Focus(c)
-			c.Services().Invalidate()
-		}
 	}
 	if a.commitRow >= 0 && a.commitRow < len(a.commits) && a.commitRow != a.loadedRow {
 		if a.loadedRow >= 0 {
