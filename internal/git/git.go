@@ -5,13 +5,16 @@ package git
 
 import (
 	"bytes"
+	"cmp"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -259,10 +262,35 @@ func CountChanges(repo string) (int, error) {
 // big files' threshold all as they are: in an index of their own, made
 // for this and thrown away, they are only to be added, which leaves the
 // repository's index and its objects as they are, and git diffs them.
+// The files go in batches, at once, as git matches each file it adds
+// against every path it is given, which slows with thousands of them.
 func untrackedCounts(repo string, paths []string) (map[string][2]int, error) {
-	if len(paths) == 0 {
-		return nil, nil
+	const batch = 1000
+	var (
+		mu       sync.Mutex
+		wg       sync.WaitGroup
+		firstErr error
+	)
+	counts := map[string][2]int{}
+	for chunk := range slices.Chunk(paths, batch) {
+		wg.Go(func() {
+			n, err := untrackedBatch(repo, chunk)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				firstErr = cmp.Or(firstErr, err)
+				return
+			}
+			maps.Copy(counts, n)
+		})
 	}
+	wg.Wait()
+	return counts, firstErr
+}
+
+// untrackedBatch counts the lines of a batch of untracked files, as
+// untrackedCounts does.
+func untrackedBatch(repo string, paths []string) (map[string][2]int, error) {
 	dir, err := os.MkdirTemp("", "peek-index")
 	if err != nil {
 		return nil, err

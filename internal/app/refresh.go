@@ -4,6 +4,7 @@ import (
 	"context"
 	"peek/internal/git"
 	"peek/internal/review"
+	"sync"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -28,6 +29,14 @@ type history struct {
 }
 
 func readHistory(repo string) history {
+	// The review's fingerprint reads every file changed, as counting
+	// their lines does: the two go at once.
+	var (
+		snapshot    review.Snapshot
+		snapshotErr error
+		wg          sync.WaitGroup
+	)
+	wg.Go(func() { snapshot, snapshotErr = review.ReadSnapshot(repo) })
 	commits, err := git.LoadCommits(repo, 500)
 	changes, _ := git.LoadWorktreeChanges(repo)
 	// The work tree's entry always shows, for its files to read as they
@@ -48,14 +57,14 @@ func readHistory(repo string) history {
 		branchReview = review.BranchSnapshot(git.CurrentBranch(repo), r)
 	}
 	commits = append(entries, commits...)
-	review, reviewErr := review.ReadSnapshot(repo)
+	wg.Wait()
 	behind, upstream := git.BehindUpstream(repo)
 	var reviewNote string
-	if reviewErr != nil {
-		reviewNote = reviewErr.Error()
+	if snapshotErr != nil {
+		reviewNote = snapshotErr.Error()
 	}
 	return history{commits: commits, changes: changes, branch: git.CurrentBranch(repo), github: git.GitHubURL(repo), branchURL: git.BranchGitHubURL(repo),
-		canPush: len(changes) > 0 || git.HasUnpushedCommits(repo), behind: behind, upstream: upstream, review: review, reviewErr: reviewNote, branchReview: branchReview, err: err}
+		canPush: len(changes) > 0 || git.HasUnpushedCommits(repo), behind: behind, upstream: upstream, review: snapshot, reviewErr: reviewNote, branchReview: branchReview, err: err}
 }
 
 // refresh reads the history and the work tree again, as the watch asks

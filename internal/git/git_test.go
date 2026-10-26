@@ -1,11 +1,13 @@
 package git
 
 import (
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
 	"peek/internal/testutil"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -107,6 +109,33 @@ func TestLineCountsIsolated(t *testing.T) {
 	}
 	if after, _ := filepath.Glob(filepath.Join(repo, ".git", "sharedindex.*")); len(after) != len(before) {
 		t.Errorf("shared index files %v, were %v", after, before)
+	}
+}
+
+// Untracked files more than a batch of them count all, each its own.
+func TestLineCountsBatched(t *testing.T) {
+	repo := testutil.Repo(t)
+	const n = 2500
+	for i := range n {
+		os.WriteFile(filepath.Join(repo, fmt.Sprintf("f%d.txt", i)), []byte(strings.Repeat("x\n", i%5+1)), 0o644)
+	}
+	changes, err := LoadWorktreeChanges(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := 0
+	for _, ch := range changes {
+		var i int
+		if _, err := fmt.Sscanf(ch.Path, "f%d.txt", &i); err != nil {
+			continue
+		}
+		seen++
+		if ch.Added != i%5+1 {
+			t.Errorf("%s added %d, want %d", ch.Path, ch.Added, i%5+1)
+		}
+	}
+	if seen != n {
+		t.Errorf("%d files listed, want %d", seen, n)
 	}
 }
 
