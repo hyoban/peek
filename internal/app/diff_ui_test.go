@@ -201,3 +201,36 @@ func TestLargeFileShowsPatch(t *testing.T) {
 		t.Errorf("patch counts +%d −%d", added, deleted)
 	}
 }
+
+// Past heldLines, the diffs farthest from the view let theirs go, and
+// load again as they come back into view.
+func TestFarDiffsReleased(t *testing.T) {
+	defer func(n int) { heldLines = n }(heldLines)
+	heldLines = 500
+	a, tt := testApp(t, changesRepo(t, 20), nil)
+	settle(tt)
+	for _, d := range a.diffs {
+		d.read = false
+	}
+	for _, d := range a.diffs {
+		a.scrollToFile(d.change.Path)
+		settle(tt)
+	}
+	held := 0
+	for _, d := range a.diffs {
+		if d.state != nil {
+			held += d.state.Old.LineCount() + d.state.New.LineCount()
+		}
+	}
+	if first := a.diffs[0]; first.state != nil || held > heldLines+8*122 {
+		t.Fatalf("%d lines held, the first diff's loaded %v", held, first.state != nil)
+	}
+	if last := a.diffs[len(a.diffs)-1]; last.state == nil {
+		t.Fatal("the diff in view let go")
+	}
+	a.scrollToFile(a.diffs[0].change.Path)
+	settle(tt)
+	if a.diffs[0].state == nil {
+		t.Error("the first diff did not load again in view")
+	}
+}

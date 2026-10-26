@@ -9,6 +9,7 @@ import (
 	"peek/internal/testutil"
 	"testing"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -231,5 +232,38 @@ func TestRefreshKeepsChangeTree(t *testing.T) {
 	}
 	if !a.changeTree.state.Open.Has(code+"/z") || a.changeTree.state.Open.Has(tests) || !a.changeTree.has("z/util_test.go") {
 		t.Errorf("new folders: z open %v, tests open %v", a.changeTree.state.Open.Has(code+"/z"), a.changeTree.state.Open.Has(tests))
+	}
+}
+
+// Changes only in folders git ignores, as a build's output, leave the
+// history as it is; any other, or one git's own folder tells of, reads it.
+func TestIgnoredOnly(t *testing.T) {
+	repo := testutil.Repo(t)
+	os.WriteFile(filepath.Join(repo, ".gitignore"), []byte("/build/\n*.log\n"), 0o644)
+	os.MkdirAll(filepath.Join(repo, "build", "out"), 0o755)
+	hints := func(paths ...string) []mygo.FileEvent {
+		var evs []mygo.FileEvent
+		for _, p := range paths {
+			evs = append(evs, mygo.FileEvent{Op: mygo.FileHint, Path: p, IsDir: true})
+		}
+		return evs
+	}
+	for _, tc := range []struct {
+		paths []string
+		want  bool
+	}{
+		{[]string{"build"}, true},
+		{[]string{"build", "build/out"}, true},
+		{[]string{"build", "docs"}, false},
+		{[]string{"."}, false},
+		{[]string{".git"}, false},
+		{[]string{".git/refs/heads"}, false},
+	} {
+		if got := ignoredOnly(repo, hints(tc.paths...)); got != tc.want {
+			t.Errorf("ignoredOnly(%q) = %v, want %v", tc.paths, got, tc.want)
+		}
+	}
+	if ignoredOnly(repo, []mygo.FileEvent{{Op: mygo.FileRemove, Path: "."}}) {
+		t.Error("the project gone counts as ignored")
 	}
 }

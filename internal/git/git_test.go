@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestGitHubPage(t *testing.T) {
@@ -222,5 +223,38 @@ func TestWithoutCoAuthors(t *testing.T) {
 		if got := withoutCoAuthors(tc.body, []string{"bob@example.com"}); got != tc.want {
 			t.Errorf("withoutCoAuthors(%q) = %q, want %q", tc.body, got, tc.want)
 		}
+	}
+}
+
+// Untracked files keep the lines counted while they stay as they were,
+// and are counted again once written, to the same size even.
+func TestUntrackedCountsKept(t *testing.T) {
+	repo := testutil.Repo(t)
+	p := filepath.Join(repo, "docs", "new.md")
+	added := func() int {
+		changes, err := LoadWorktreeChanges(repo)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, ch := range changes {
+			if ch.Path == "docs/new.md" {
+				return ch.Added
+			}
+		}
+		t.Fatal("docs/new.md not listed")
+		return 0
+	}
+	os.WriteFile(p, []byte("a\nb\n"), 0o644)
+	old := time.Now().Add(-time.Hour)
+	os.Chtimes(p, old, old)
+	if n := added(); n != 2 {
+		t.Fatalf("%d lines added, want 2", n)
+	}
+	if n := added(); n != 2 {
+		t.Fatalf("%d lines added counted again, want 2", n)
+	}
+	os.WriteFile(p, []byte("abc\n"), 0o644) // as large, a line
+	if n := added(); n != 1 {
+		t.Errorf("%d lines added once rewritten, want 1", n)
 	}
 }

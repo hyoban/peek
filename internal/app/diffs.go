@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"slices"
 	"strings"
 
 	"peek/internal/fileicons"
@@ -213,6 +214,46 @@ func (a *app) diffIndex(p string) int {
 	return -1
 }
 
+// heldLines is how many lines the diffs keep loaded at most, both sides
+// counted: past it, those farthest from the view let theirs go, to load
+// again as they come back into view, as a change of thousands of long
+// files would else keep them all once scrolled through.
+var heldLines = 1_000_000
+
+// releaseFarDiffs lets the diffs farthest from the view go, past
+// heldLines, but those near it or with what a reload would lose: lines
+// selected, a comment being written, or the change gone to.
+func (a *app) releaseFarDiffs() {
+	lines := func(d *fileDiff) int { return d.state.Old.LineCount() + d.state.New.LineCount() }
+	total := 0
+	var loaded []int
+	for i, d := range a.diffs {
+		if d.state != nil {
+			total += lines(d)
+			loaded = append(loaded, i)
+		}
+	}
+	if total <= heldLines {
+		return
+	}
+	first, last := a.diffList.Visible()
+	lo, hi := diffFile(first)-2, diffFile(last)+2
+	distance := func(i int) int { return max(lo-i, i-hi, 0) }
+	slices.SortFunc(loaded, func(i, j int) int { return distance(j) - distance(i) })
+	for _, i := range loaded {
+		d := a.diffs[i]
+		if total <= heldLines || distance(i) == 0 {
+			return
+		}
+		if _, selected := d.state.SelectedLines(); selected || d.loading || a.change.file == d.change.Path ||
+			slices.ContainsFunc(a.commentsOf(d), func(cm *comment) bool { return cm.editing }) {
+			continue
+		}
+		total -= lines(d)
+		d.state, d.stale = nil, false
+	}
+}
+
 // scrollToFile shows the file's diff at the top of the column, as a click
 // on it in the tree asks.
 func (a *app) scrollToFile(p string) {
@@ -406,8 +447,8 @@ func (a *app) loadDiff(d *fileDiff) {
 	d.loading, d.stale = true, false
 	cm, _ := a.current()
 	gen := a.diffGen
-	shown := d.state != nil // which a reload updates where it is
-	ch := d.change          // a refresh may change its counts meanwhile
+	shown := d.state // which a reload updates where it is
+	ch := d.change   // a refresh may change its counts meanwhile
 	a.background(func() func() {
 		// A text too large to show is not read whole: its patch shows.
 		limit := maxTextSize
@@ -436,8 +477,14 @@ func (a *app) loadDiff(d *fileDiff) {
 		if note == tooLarge {
 			patch = filePatch(a.repo, cm.Hash, ch)
 		}
+		// The texts shown are compared here, a long file's being long to
+		// read back.
+		oldSame, newSame := false, false
+		if shown != nil && note == "" && patch == nil {
+			oldSame, newSame = shown.Old.String() == before, shown.New.String() == after
+		}
 		var state *editor.DiffState
-		if patch != nil || note == "" && !shown {
+		if patch != nil || note == "" && shown == nil {
 			if patch != nil {
 				before, after, note = "", "", ""
 			}
@@ -472,8 +519,15 @@ func (a *app) loadDiff(d *fileDiff) {
 			if note == "" && d.state != nil {
 				// The diff shown follows its texts, keeping its place
 				// and the lines expanded.
-				resetText(d.state.Old, before)
-				resetText(d.state.New, after)
+				if d.state != shown {
+					oldSame, newSame = false, false
+				}
+				if !oldSame {
+					resetText(d.state.Old, before)
+				}
+				if !newSame {
+					resetText(d.state.New, after)
+				}
 				d.note = ""
 				return
 			}
@@ -558,8 +612,12 @@ func codeBuffer(p, text string) *editor.Buffer {
 
 // newCode shows a file's text, its imports folded away, as they are
 // seldom what a file is read for.
-func newCode(p, text string) *editor.State {
-	st := &editor.State{Buffer: codeBuffer(p, text), ReadOnly: true, SoftWrap: true, Font: codeFont, Theme: codeTheme}
+func newCode(p, text string) *editor.State { return codeOf(codeBuffer(p, text)) }
+
+// codeOf shows the text of a buffer made off the UI thread, as a long
+// file's takes a while to.
+func codeOf(buf *editor.Buffer) *editor.State {
+	st := &editor.State{Buffer: buf, ReadOnly: true, SoftWrap: true, Font: codeFont, Theme: codeTheme}
 	st.FoldImports()
 	return st
 }

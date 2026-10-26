@@ -8,7 +8,6 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
-	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -275,7 +274,29 @@ func untrackedCounts(repo string, paths []string) (map[string][2]int, error) {
 		firstErr error
 	)
 	counts := map[string][2]int{}
-	for chunk := range slices.Chunk(paths, batch) {
+	// Files counted before and not changed since keep their counts: each
+	// refresh would else add them all to an index again.
+	attrs := attributesStamp(repo)
+	counted.Lock()
+	known := counted.repos[repo]
+	counted.Unlock()
+	if known.attrs != attrs {
+		known.files = nil
+	}
+	infos := make(map[string]os.FileInfo, len(paths))
+	var todo []string
+	for _, p := range paths {
+		info, err := os.Lstat(filepath.Join(repo, p))
+		if err == nil {
+			infos[p] = info
+		}
+		if c, ok := known.files[p]; ok && err == nil && unchangedSince(c.info, info) {
+			counts[p] = c.counts
+			continue
+		}
+		todo = append(todo, p)
+	}
+	for chunk := range slices.Chunk(todo, batch) {
 		wg.Go(func() {
 			n, err := untrackedBatch(repo, chunk)
 			mu.Lock()
@@ -284,11 +305,61 @@ func untrackedCounts(repo string, paths []string) (map[string][2]int, error) {
 				firstErr = cmp.Or(firstErr, err)
 				return
 			}
-			maps.Copy(counts, n)
+			for _, p := range chunk {
+				counts[p] = n[p]
+			}
 		})
 	}
 	wg.Wait()
+	kept := countedFiles{attrs: attrs, files: make(map[string]countedFile, len(counts))}
+	for p, c := range counts {
+		if info := infos[p]; info != nil {
+			kept.files[p] = countedFile{info, c}
+		}
+	}
+	counted.Lock()
+	counted.repos[repo] = kept
+	counted.Unlock()
 	return counts, firstErr
+}
+
+// counted are the line counts of each repository's untracked files as
+// they were last counted, with its attributes then, which tell how git
+// counts.
+var counted = struct {
+	sync.Mutex
+	repos map[string]countedFiles
+}{repos: map[string]countedFiles{}}
+
+type countedFiles struct {
+	attrs string
+	files map[string]countedFile
+}
+
+type countedFile struct {
+	info   os.FileInfo
+	counts [2]int
+}
+
+// attributesStamp tells the attributes files of the repository as they
+// are, to tell when they changed.
+func attributesStamp(repo string) string {
+	var b strings.Builder
+	for _, p := range []string{".gitattributes", ".git/info/attributes"} {
+		if info, err := os.Stat(filepath.Join(repo, p)); err == nil {
+			fmt.Fprintf(&b, "%d %d;", info.Size(), info.ModTime().UnixNano())
+		}
+		b.WriteString("|")
+	}
+	return b.String()
+}
+
+// unchangedSince reports whether a file is still as it was: the same
+// file, size, time and mode, that time not so recent that a write within
+// it could leave them all as they were, as git takes its racy entries.
+func unchangedSince(was, is os.FileInfo) bool {
+	return was != nil && os.SameFile(was, is) && was.Size() == is.Size() && was.ModTime().Equal(is.ModTime()) &&
+		was.Mode() == is.Mode() && time.Since(is.ModTime()) > time.Second
 }
 
 // untrackedBatch counts the lines of a batch of untracked files, as
@@ -448,6 +519,30 @@ func Patch(repo, hash string, ch Change, limit int) (string, error) {
 	// a/ and b/ whatever the user's diff.noprefix or diff.mnemonicPrefix.
 	args = append(args, "--no-ext-diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/", "--")
 	return Bounded(repo, limit, append(args, paths...)...)
+}
+
+// AllIgnored reports whether git ignores every one of these paths of the
+// work tree, as the folders a build writes into; false where it cannot
+// tell.
+func AllIgnored(repo string, paths []string) bool {
+	if len(paths) == 0 {
+		return false
+	}
+	// check-ignore fails, as it exits 1, where it ignores none.
+	out, err := gitWith(repo, nil, strings.Join(paths, "\x00")+"\x00", "check-ignore", "-z", "--stdin")
+	if err != nil {
+		return false
+	}
+	ignored := map[string]bool{}
+	for _, p := range nulSeparated(out) {
+		ignored[p] = true
+	}
+	for _, p := range paths {
+		if !ignored[p] {
+			return false
+		}
+	}
+	return true
 }
 
 // ListFiles returns every file of the commit, a Range's head's, or of the

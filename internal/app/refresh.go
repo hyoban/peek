@@ -4,10 +4,12 @@ import (
 	"context"
 	"peek/internal/git"
 	"peek/internal/review"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui/editor"
 )
 
 // history is what the history column lists, read together.
@@ -271,7 +273,7 @@ func (a *app) updateChanges(changes []git.Change) {
 // reloadFiles lists the work tree's files again for the files mode,
 // keeping the folders open and the file shown, its text where it is.
 func (a *app) reloadFiles() {
-	open, md := a.openFile, a.preview
+	open, md, code := a.openFile, a.preview, a.code
 	a.background(func() func() {
 		files, err := git.ListFiles(a.repo, git.Worktree)
 		tree := fold(files)
@@ -281,6 +283,13 @@ func (a *app) reloadFiles() {
 			text, textErr = git.FileText(a.repo, git.Worktree, open)
 		}
 		picture, note := fileView(open, text, textErr)
+		// The text shown is compared here, and a new one's buffer made, a
+		// long file's being long to read back and to make.
+		same := code != nil && code.Buffer.String() == text
+		var buf *editor.Buffer
+		if note == "" && picture == nil && code == nil {
+			buf = codeBuffer(open, text)
+		}
 		// The preview shows anew where the text or its pictures changed.
 		stale := md != nil && md.stale(text)
 		return func() {
@@ -300,12 +309,17 @@ func (a *app) reloadFiles() {
 			case note != "" || picture != nil:
 				a.code, a.picture, a.codeNote, a.preview = nil, picture, note, nil
 			case a.code != nil:
-				resetText(a.code.Buffer, text)
+				if a.code != code || !same {
+					resetText(a.code.Buffer, text)
+				}
 				if stale && a.preview == md {
 					a.preview = a.newPreview(git.Worktree, open, text)
 				}
 			default:
-				a.code = newCode(open, text)
+				if buf == nil {
+					buf = codeBuffer(open, text)
+				}
+				a.code = codeOf(buf)
 				a.picture, a.codeNote, a.preview = nil, "", nil
 				if isMarkdown(open) {
 					a.preview = a.newPreview(git.Worktree, open, text)
@@ -349,12 +363,30 @@ func (a *app) watch() {
 		}
 		defer w.Close()
 		for {
-			if _, err := w.Next(ctx); err != nil {
+			events, err := w.Next(ctx)
+			if err != nil {
 				return
+			}
+			if ignoredOnly(a.repo, events) {
+				continue
 			}
 			win.Update(a.refresh)
 		}
 	}()
+}
+
+// ignoredOnly reports whether the changes are all in folders git ignores,
+// as a build's output, which change nothing the window shows: a build
+// writing to them would else read the history again every while.
+func ignoredOnly(repo string, events []mygo.FileEvent) bool {
+	var dirs []string
+	for _, ev := range events {
+		if ev.Op != mygo.FileHint || ev.Path == "." || ev.Path == ".git" || strings.HasPrefix(ev.Path, ".git/") {
+			return false
+		}
+		dirs = append(dirs, ev.Path)
+	}
+	return git.AllIgnored(repo, dirs)
 }
 
 // churn is what changes often without changing what the window shows:

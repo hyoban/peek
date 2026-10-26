@@ -1203,6 +1203,7 @@ func (a *app) sync(c *ui.Context) {
 		} else {
 			a.followScroll(c)
 		}
+		a.releaseFarDiffs()
 	case modeFiles:
 		if a.filesFor != a.loadedRow {
 			a.filesFor = a.loadedRow
@@ -1357,14 +1358,18 @@ func (a *app) loadText(hash, p string) {
 		}
 		text, err := git.FileTextAtMost(a.repo, hash, p, limit)
 		picture, note := fileView(p, text, err)
+		var buf *editor.Buffer
+		if note == "" && picture == nil {
+			buf = codeBuffer(p, text)
+		}
 		return func() {
 			if p == a.openFile {
 				var (
 					code    *editor.State
 					preview *mdPreview
 				)
-				if note == "" && picture == nil {
-					code = newCode(p, text)
+				if buf != nil {
+					code = codeOf(buf)
 					if isMarkdown(p) {
 						preview = a.newPreview(hash, p, text)
 					}

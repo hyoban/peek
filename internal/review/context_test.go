@@ -8,6 +8,7 @@ import (
 	"peek/internal/testutil"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 )
 
@@ -167,5 +168,24 @@ func TestReviewFingerprintFileDirectoryReplacement(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// A file's hash kept from the last snapshot holds only while the file is
+// as it was: one written since to the same size, within the second that
+// can leave its time as it was, is read again.
+func TestReviewFingerprintKeptHashes(t *testing.T) {
+	repo := testutil.Repo(t)
+	p := filepath.Join(repo, "main.go")
+	old := time.Now().Add(-time.Hour)
+	os.WriteFile(p, []byte("package main // one\n"), 0o644)
+	os.Chtimes(p, old, old)
+	first := reviewTestSnapshot(t, repo)
+	if again := reviewTestSnapshot(t, repo); again.ID != first.ID {
+		t.Fatal("a snapshot of the same files differs")
+	}
+	os.WriteFile(p, []byte("package main // six\n"), 0o644)
+	if reviewTestSnapshot(t, repo).ID == first.ID {
+		t.Fatal("a file just written to the same size was not read again")
 	}
 }
