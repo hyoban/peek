@@ -446,7 +446,7 @@ func (t *pathTree) sync() bool {
 	return true
 }
 
-func (t *pathTree) view(c *ui.Context, label string, item func(p string, selected bool)) ui.Element {
+func (t *pathTree) view(c *ui.Context, label string, item func(p string) ui.SourceListItem) ui.Element {
 	t.state.List.Selected = &t.row
 	t.state.Indent = 12
 	if t.toList {
@@ -461,8 +461,5 @@ func (t *pathTree) view(c *ui.Context, label string, item func(p string, selecte
 		}
 		t.state.List.Handle.Focus(c)
 	}
-	chosen := t.chosen()
-	return ui.Outline(c, &t.state, t.entries(""), t.entries, func(p string) {
-		item(p, p == chosen)
-	}).Label(label)
+	return ui.SourceList(c, &t.state, t.entries(""), t.entries, item).Label(label)
 }

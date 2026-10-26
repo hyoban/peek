@@ -948,74 +948,70 @@ func (a *app) filterFiles() {
 }
 
 func (a *app) treeView(c *ui.Context, tree *pathTree, label string) {
-	focused := tree.state.List.FocusWithin(c)
-	a.withFocus(c, focused, func() {
-		sideList(c, tree.view(c, label, func(p string, selected bool) {
-			a.treeItem(c, tree, p, selected, focused)
-		}))
-	})
+	sideList(c, tree.view(c, label, a.treeItem(c, tree)))
 }
 
-func (a *app) treeItem(c *ui.Context, tree *pathTree, p string, selected, focused bool) {
-	t := c.Theme()
-	in := rowInk(t, selected, focused)
-	text, muted := in.text, in.muted
-	isFile := !tree.isDir(p)
-	ch, changed := a.changes[p]
-	if isFile && tree == &a.changeTree && a.readFile(p) && !selected {
-		text = muted // read, as the diffs fold it away
+// treeItem returns what describes the rows of the tree, as the sidebar's
+// list asks for them, between frames too: it answers from what the frame
+// knew, the theme's colors and the services.
+func (a *app) treeItem(c *ui.Context, tree *pathTree) func(p string) ui.SourceListItem {
+	dark := c.Theme().Dark
+	colors := map[string]ui.Color{}
+	for _, s := range []string{"A", "D", "M", "R", "C"} {
+		colors[s] = statusColor(c, s)
 	}
-	row := ui.Row(c).FillWidth().Gap(t.Space(1.5)).PaddingY(1).AlignItems(ui.Center)
-	if !isFile {
-		// A click on a folder opens or closes it as its arrow does, which
-		// sync makes choose it too, as Finder's and Xcode's rows do. It
-		// acts once the outline is built, as it changes the outline's rows.
-		row.KeepFocus().OnClick(func() { tree.flip(p) })
+	status := func(s string) ui.Color {
+		if col, ok := colors[s]; ok {
+			return col
+		}
+		return colors["M"]
 	}
 	services := c.Services()
-	row.ContextMenu(func(m *ui.Menu) {
-		if tree == &a.changeTree {
-			a.readMenu(m, p)
-			if isGroup(p) {
-				return
+	return func(p string) ui.SourceListItem {
+		isFile := !tree.isDir(p)
+		it := ui.SourceListItem{Title: tree.labels[p], Tooltip: itemPath(p)}
+		it.Menu = func(m *ui.Menu) {
+			if tree == &a.changeTree {
+				a.readMenu(m, p)
+				if isGroup(p) {
+					return
+				}
+				m.Separator()
 			}
-			m.Separator()
+			a.fileMenu(services, m, itemPath(p), !isFile)
 		}
-		a.fileMenu(services, m, itemPath(p), !isFile)
-	})
-	if isGroup(p) {
-		row.Children(func() {
-			ui.Text(c, tree.labels[p]).FontSize(smallSize).FontWeight(600).TextColor(muted).SingleLine().Grow(1)
+		if isGroup(p) {
 			// The lines its files add and delete, and how many of them are
 			// read, as their diffs fold.
 			diffs := a.diffsUnder(p)
 			added, deleted := sumLines(diffs)
-			lineCounts(c, added, deleted, in.onAccent)
-			ui.Textf(c, "%d/%d", countRead(diffs), len(diffs)).FontSize(smallSize).TextColor(muted).Shrink(0).Padding(0, t.Space(1))
-		})
-		return
+			it.Group, it.Tooltip = true, ""
+			it.Badges = []ui.SourceListBadge{
+				{Text: fmt.Sprintf("+%d", added), Color: status("A"), Digits: true},
+				{Text: fmt.Sprintf("−%d", deleted), Color: status("D"), Digits: true},
+				{Text: fmt.Sprintf("%d/%d", countRead(diffs), len(diffs)), Digits: true},
+			}
+			return it
+		}
+		if !isFile {
+			// A click on a folder opens or closes it as its arrow does, which
+			// sync makes choose it too, as Finder's and Xcode's rows do.
+			it.OnClick = func() { tree.flip(p) }
+			if icon := fileicons.FolderPicture(p, tree.state.Open.Has(p), 16, dark); icon != nil {
+				it.Image = icon
+			} else {
+				it.Symbol = "folder" // in the accent, as Finder's sidebar
+			}
+			return it
+		}
+		it.Image, it.Template = fileicons.Picture(p, 16, dark)
+		// Read, as the diffs fold it away.
+		it.Dimmed = tree == &a.changeTree && a.readFile(p)
+		if ch, changed := a.changes[p]; changed {
+			it.Badges = []ui.SourceListBadge{{Text: ch.Status, Color: status(ch.Status), Bold: true}}
+		}
+		return it
 	}
-	row.Children(func() {
-		if isFile {
-			var tint ui.Color
-			if in.onAccent {
-				tint = t.AccentText
-			}
-			fileicons.View(c, p, 16, muted, tint)
-		} else if icon := fileicons.Folder(p, tree.state.Open.Has(p), t.Dark); icon != nil {
-			ui.Image(c, icon).Size(16, 16).Shrink(0)
-		} else {
-			color := a.theme.Accent // folders in the accent, as Finder's sidebar
-			if in.onAccent {
-				color = muted
-			}
-			ui.Icon(c, folderIcon).Size(15, 15).Shrink(0).TextColor(color)
-		}
-		ui.Text(c, tree.labels[p]).TextColor(text).SingleLine().Ellipsis("…").Grow(1).MinWidth(0).Tooltip(itemPath(p))
-		if isFile && changed {
-			statusMark(c, ch.Status, in.onAccent)
-		}
-	})
 }
 
 // fileMenu is the part of a file's or a folder's context menu about where

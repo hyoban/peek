@@ -110,7 +110,9 @@ func TestFold(t *testing.T) {
 func TestReplaceTree(t *testing.T) {
 	tree := newPathTree()
 	tree.set(fold([]string{"a/one.go", "b/two.go", "main.go"}))
-	tt := ui.NewTester(func(c *ui.Context) { tree.view(c, "Files", func(string, bool) {}) }, 400, 400)
+	tt := ui.NewTester(func(c *ui.Context) {
+		tree.view(c, "Files", func(string) ui.SourceListItem { return ui.SourceListItem{} })
+	}, 400, 400)
 	tree.state.Open.Add("a")
 	tree.show("b/two.go")
 	tt.Frame()
@@ -132,7 +134,7 @@ func TestShowChoosesAtOnce(t *testing.T) {
 	tree.set(fold([]string{"a/one.go", "b/two.go", "main.go"}))
 	tt := ui.NewTester(func(c *ui.Context) {
 		tree.applyFilter()
-		tree.view(c, "Files", func(string, bool) {})
+		tree.view(c, "Files", func(string) ui.SourceListItem { return ui.SourceListItem{} })
 	}, 400, 400)
 	tt.Frame()
 	tree.show("b/two.go")
