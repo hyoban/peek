@@ -48,14 +48,16 @@ func readHistory(repo string) history {
 		behind      int
 		upstream    string
 	)
+	// The review's snapshot asks too, not to wait on a read of its own.
+	hasUnpushed := sync.OnceValue(func() bool { return git.HasUnpushedCommits(repo) })
 	wg.Go(func() { commits, err = git.LoadCommits(repo, 500) })
 	wg.Go(func() { changes, _ = git.LoadWorktreeChanges(repo) })
-	wg.Go(func() { snapshot, snapshotErr = review.ReadSnapshot(repo) })
+	wg.Go(func() { snapshot, snapshotErr = review.ReadSnapshotWith(repo, hasUnpushed) })
 	wg.Go(func() { r, hasBranch = git.BranchBase(repo) })
 	wg.Go(func() { branch = git.CurrentBranch(repo) })
 	wg.Go(func() { github = git.GitHubURL(repo) })
 	wg.Go(func() { branchURL = git.BranchGitHubURL(repo) })
-	wg.Go(func() { unpushed = git.HasUnpushedCommits(repo) })
+	wg.Go(func() { unpushed = hasUnpushed() })
 	wg.Go(func() { behind, upstream = git.BehindUpstream(repo) })
 	wg.Wait()
 	// The work tree's entry always shows, for its files to read as they

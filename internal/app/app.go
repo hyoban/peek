@@ -1351,7 +1351,11 @@ func (a *app) loadFiles(hash string) {
 
 func (a *app) loadText(hash, p string) {
 	a.background(func() func() {
-		text, err := git.FileText(a.repo, hash, p)
+		limit := maxTextSize // a text too large to show is not read whole
+		if isPicture(p) {
+			limit = 0
+		}
+		text, err := git.FileTextAtMost(a.repo, hash, p, limit)
 		picture, note := fileView(p, text, err)
 		return func() {
 			if p == a.openFile {
@@ -1408,8 +1412,13 @@ func Run(args []string) {
 		log.Fatal(err)
 	}
 	p := newProjects()
-	fileicons.FollowVSCode()
-	fileicons.Warm()
+	// The icons load while the app starts, ready by its first window.
+	icons := make(chan struct{})
+	go func() {
+		fileicons.FollowVSCode()
+		fileicons.Warm()
+		close(icons)
+	}()
 	// Folders opened from Finder, the Dock or File ▸ Open Recent.
 	mygo.App.OnOpenFile(func(path string) {
 		go p.openFolder(path, nil)
@@ -1429,6 +1438,7 @@ func Run(args []string) {
 		useDock(false) // from the start, its icon never showing
 	}
 	mygo.App.WhenReady(func() {
+		<-icons
 		p.setMenu()
 		p.setDockMenu()
 		p.showMenuBar(p.menuBarOn)

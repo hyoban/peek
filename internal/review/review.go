@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"peek/internal/git"
 	"strings"
+	"sync"
 )
 
 // Git metadata is bounded; file contents are hashed as streams, never sent
@@ -22,16 +23,32 @@ type Snapshot struct {
 }
 
 func ReadSnapshot(repo string) (Snapshot, error) {
+	return ReadSnapshotWith(repo, func() bool { return git.HasUnpushedCommits(repo) })
+}
+
+// ReadSnapshotWith is ReadSnapshot, asking unpushed whether the branch has
+// commits it has not pushed, as one read of it for others too answers.
+func ReadSnapshotWith(repo string, unpushed func() bool) (Snapshot, error) {
 	g := func(args ...string) (string, error) { return git.Bounded(repo, maxMetadata, args...) }
-	status, err := g("status", "--porcelain=v2", "-z", "--untracked-files=all", "--ignore-submodules=none")
+	// Read at once: one after another, the processes added up.
+	var (
+		wg           sync.WaitGroup
+		status, head string
+		branch       string
+		err          error
+	)
+	wg.Go(func() {
+		status, err = g("status", "--porcelain=v2", "-z", "--untracked-files=all", "--ignore-submodules=none")
+	})
+	wg.Go(func() { head, _ = g("rev-parse", "--verify", "HEAD") })
+	wg.Go(func() { branch, _ = g("symbolic-ref", "--quiet", "HEAD") })
+	wg.Wait()
 	if err != nil {
 		return Snapshot{}, err
 	}
 	if err := rejectDirtySubmodules(status); err != nil {
 		return Snapshot{}, err
 	}
-	head, _ := g("rev-parse", "--verify", "HEAD")
-	branch, _ := g("symbolic-ref", "--quiet", "HEAD")
 	snapshot := Snapshot{Scope: "Uncommitted changes", Head: strings.TrimSpace(head)}
 	fingerprint := sha256.New()
 	fmt.Fprintf(fingerprint, "%s\x00%s\x00%s\x00", head, branch, status)
@@ -40,7 +57,7 @@ func ReadSnapshot(repo string) (Snapshot, error) {
 			return Snapshot{}, err
 		}
 	} else {
-		if snapshot.Head == "" || !git.HasUnpushedCommits(repo) {
+		if snapshot.Head == "" || !unpushed() {
 			return Snapshot{}, nil
 		}
 		trimGit := func(args ...string) (string, error) {

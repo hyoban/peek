@@ -6,6 +6,7 @@ package git
 import (
 	"bytes"
 	"cmp"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -374,6 +375,13 @@ func parseNameStatus(out string) []Change {
 // the commit, the work tree's on disk for the uncommitted changes, and at
 // the base and the head of a Range.
 func FileTexts(repo, hash string, ch Change) (before, after string) {
+	before, after, _ = FileTextsAtMost(repo, hash, ch, 0)
+	return before, after
+}
+
+// FileTextsAtMost is FileTexts, both read at once, or ErrTooLarge where
+// either is longer than limit bytes; 0 for no limit.
+func FileTextsAtMost(repo, hash string, ch Change, limit int) (before, after string, err error) {
 	parent := hash + "^"
 	if hash == Worktree {
 		parent = "HEAD"
@@ -381,13 +389,36 @@ func FileTexts(repo, hash string, ch Change) (before, after string) {
 	if base, head, ok := SplitRange(hash); ok {
 		parent, hash = base, head
 	}
+	var (
+		wg                  sync.WaitGroup
+		errBefore, errAfter error
+	)
 	if ch.Status != "A" {
-		before, _ = FileText(repo, parent, ch.Old)
+		wg.Go(func() { before, errBefore = FileTextAtMost(repo, parent, ch.Old, limit) })
 	}
 	if ch.Status != "D" {
-		after, _ = FileText(repo, hash, ch.Path)
+		wg.Go(func() { after, errAfter = FileTextAtMost(repo, hash, ch.Path, limit) })
 	}
-	return before, after
+	wg.Wait()
+	if errors.Is(errBefore, ErrTooLarge) || errors.Is(errAfter, ErrTooLarge) {
+		return "", "", ErrTooLarge
+	}
+	return before, after, nil
+}
+
+// FileTextAtMost is FileText, or ErrTooLarge where the text is longer than
+// limit bytes, not read whole only to be left; 0 for no limit.
+func FileTextAtMost(repo, hash, p string, limit int) (string, error) {
+	if limit <= 0 {
+		return FileText(repo, hash, p)
+	}
+	if hash == Worktree {
+		if fi, err := os.Stat(filepath.Join(repo, p)); err == nil && fi.Size() > int64(limit) {
+			return "", ErrTooLarge
+		}
+		return FileText(repo, hash, p)
+	}
+	return Bounded(repo, limit, "show", Tip(hash)+":"+p)
 }
 
 // FileText returns the file's text in the commit, or on disk.

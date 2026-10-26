@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"path"
 	"strings"
@@ -31,6 +32,12 @@ type fileDiff struct {
 
 // folded reports whether the diff folds away under its header.
 func (d *fileDiff) folded() bool { return d.read && !d.opened }
+
+// diffRowKey keys a file's row of the stacked diffs.
+type diffRowKey struct {
+	header bool
+	path   string
+}
 
 // The stacked diffs list the commit's message first, then two rows a
 // file: its header, pinned at the top while its diff scrolls under it,
@@ -270,7 +277,7 @@ func (a *app) diffPane(c *ui.Context) {
 			if row == 0 {
 				return "message"
 			}
-			return fmt.Sprintf("%v:%s", isHeader(row), a.diffs[diffFile(row)].change.Path)
+			return diffRowKey{isHeader(row), a.diffs[diffFile(row)].change.Path}
 		}
 		ui.List(c.Key("diffs"), &a.diffList, len(a.diffs)*2+1, func(row int) {
 			if row == 0 {
@@ -402,7 +409,12 @@ func (a *app) loadDiff(d *fileDiff) {
 	shown := d.state != nil // which a reload updates where it is
 	ch := d.change          // a refresh may change its counts meanwhile
 	a.background(func() func() {
-		before, after := git.FileTexts(a.repo, cm.Hash, ch)
+		// A text too large to show is not read whole: its patch shows.
+		limit := maxTextSize
+		if isBitmap(ch.Path) {
+			limit = 0
+		}
+		before, after, err := git.FileTextsAtMost(a.repo, cm.Hash, ch, limit)
 		if isBitmap(ch.Path) && before != after {
 			picture, note := decodePictures(ch.Path, before, after)
 			return func() {
@@ -413,6 +425,9 @@ func (a *app) loadDiff(d *fileDiff) {
 			}
 		}
 		note := textNote(before, after)
+		if errors.Is(err, git.ErrTooLarge) {
+			note = tooLarge
+		}
 		if note == "" && before == after {
 			note = "Only the file's mode changed"
 		}

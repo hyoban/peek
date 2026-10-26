@@ -1,10 +1,13 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"path"
 	"slices"
 	"strings"
+
+	"peek/internal/git"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -49,6 +52,8 @@ func decodePicture(p, data string) (ui.ImageSource, string) {
 // why the file does not show; neither where its text shows.
 func fileView(p, text string, err error) (ui.ImageSource, string) {
 	switch {
+	case errors.Is(err, git.ErrTooLarge):
+		return nil, tooLarge
 	case err != nil:
 		return nil, "Could not read this file"
 	case isPicture(p):

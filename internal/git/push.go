@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -25,16 +26,27 @@ func HasUnpushedCommits(repo string) bool {
 		out, err := git(repo, args...)
 		return strings.TrimSpace(out), err
 	}
-	if _, err := g("rev-parse", "--verify", "HEAD"); err != nil {
+	// What does not depend on another reads at once, its processes else
+	// adding up.
+	var (
+		wg      sync.WaitGroup
+		headErr error
+		branch  string
+	)
+	wg.Go(func() { _, headErr = g("rev-parse", "--verify", "HEAD") })
+	wg.Go(func() { branch, _ = g("symbolic-ref", "--quiet", "--short", "HEAD") })
+	wg.Wait()
+	if headErr != nil {
 		return false
 	}
-	branch, _ := g("symbolic-ref", "--quiet", "--short", "HEAD")
 	remote, target, err := PushDestination(g, branch)
 	if err != nil {
 		return false
 	}
-	fetchURL, _ := g("remote", "get-url", remote)
-	pushURL, _ := g("remote", "get-url", "--push", remote)
+	var fetchURL, pushURL string
+	wg.Go(func() { fetchURL, _ = g("remote", "get-url", remote) })
+	wg.Go(func() { pushURL, _ = g("remote", "get-url", "--push", remote) })
+	wg.Wait()
 	if fetchURL != pushURL {
 		return true // fetched refs cannot prove a different push destination is up to date
 	}
@@ -42,11 +54,8 @@ func HasUnpushedCommits(repo string) bool {
 	if branch == "" {
 		args = append(args, "--remotes="+remote)
 	} else {
-		ref := "refs/remotes/" + remote + "/" + target
-		if _, err := g("rev-parse", "--verify", ref); err != nil {
-			return true // a branch that has not been published yet
-		}
-		args = append(args, ref)
+		// A branch not published yet has no ref, which fails the list.
+		args = append(args, "refs/remotes/"+remote+"/"+target)
 	}
 	out, err := g(args...)
 	return err != nil || out != ""
@@ -183,7 +192,7 @@ func samePushHead(g func(...string) (string, error), branch, head string) error 
 // Honor Git's push-remote settings, including triangular fork workflows.
 // With no configured destination, origin or a sole remote is unambiguous.
 func PushDestination(g func(...string) (string, error), branch string) (remote, target string, err error) {
-	config := func(key string) string { value, _ := g("config", "--get", key); return value }
+	config := configOf(g)
 	if branch != "" {
 		remote = config("branch." + branch + ".pushRemote")
 	}
@@ -230,6 +239,50 @@ func PushDestination(g func(...string) (string, error), branch string) (remote, 
 		}
 	}
 	return remote, target, nil
+}
+
+// configOf returns what git config --get prints of a key, read from the
+// whole config at once: a process a key added up to most of the wait.
+func configOf(g func(...string) (string, error)) func(key string) string {
+	var values map[string]string
+	listed := false
+	return func(key string) string {
+		if !listed {
+			listed = true
+			if out, err := g("config", "--list", "-z"); err == nil {
+				values = parseConfig(out)
+			}
+		}
+		if values == nil {
+			value, _ := g("config", "--get", key)
+			return value
+		}
+		return values[configKey(key)]
+	}
+}
+
+// parseConfig reads git config --list -z's entries, the last of a key's
+// values winning, as --get's does.
+func parseConfig(out string) map[string]string {
+	values := map[string]string{}
+	for _, entry := range strings.Split(out, "\x00") {
+		if entry == "" {
+			continue
+		}
+		key, value, _ := strings.Cut(entry, "\n")
+		values[configKey(key)] = strings.TrimSpace(value)
+	}
+	return values
+}
+
+// configKey is a key as git compares them: its section and its name in any
+// case, a subsection, as a branch's name, in its own.
+func configKey(key string) string {
+	first, last := strings.Index(key, "."), strings.LastIndex(key, ".")
+	if first < 0 {
+		return strings.ToLower(key)
+	}
+	return strings.ToLower(key[:first]) + key[first:last] + strings.ToLower(key[last:])
 }
 
 func protectedBranch(message string) bool {
