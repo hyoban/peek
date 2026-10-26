@@ -18,8 +18,6 @@ var (
 	pullArrow    = icon(`<path d="M8 2.5v10M4 8.5l4 4 4-4" stroke-width="1.6"/>`)
 	stopIcon     = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><rect x="3.5" y="3.5" width="9" height="9" rx="1.5"/></svg>`))
 	repoIcon     = icon(`<path d="M3 2.5h8.5a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4.5A1.5 1.5 0 0 1 3 12V2.5z"/><path d="M3 11.5a1.5 1.5 0 0 1 1.5-1.5h8"/><path d="M6 13.5v2l1-.7 1 .7v-2"/>`)
-	searchIcon   = icon(`<circle cx="7" cy="7" r="4.5" stroke-width="1.5"/><path d="M10.5 10.5l3.5 3.5" stroke-width="1.5"/>`)
-	clearIcon    = icon(`<path d="M3 3l10 10M13 3L3 13" stroke-width="2.4"/>`)
 	previewIcon  = icon(`<path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/>`)
 	splitIcon    = icon(`<rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M8 2.5v11M3.5 6h2.5M10 6h2.5M3.5 9h2.5M10 9h2.5"/>`)
 	unifiedIcon  = icon(`<rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M4 5.5h8M4 8h8M4 10.5h5"/>`)

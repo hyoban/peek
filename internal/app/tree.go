@@ -29,11 +29,11 @@ type pathTree struct {
 // folders they are in, open, the folders open before coming back as it
 // clears.
 type filterState struct {
-	filter string    // the query of the field
-	field  ui.Handle // the field, which the menu bar's Filter Files focuses
-	focus  bool      // the field is to take the keys
-	toList bool      // the tree is to take the keys, as Down in the field asks
-	gen    int       // counts the trees set, whose open folders differ
+	filter string              // the query of the field
+	field  ui.SearchFieldState // the field, which the menu bar's Filter Files focuses
+	focus  bool                // the field is to take the keys
+	toList bool                // the tree is to take the keys, as Down in the field asks
+	gen    int                 // counts the trees set, whose open folders differ
 	// filtered is the query keep holds the items of, for the tree of
 	// filteredGen; keep is nil without a query.
 	filtered    string

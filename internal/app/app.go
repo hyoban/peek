@@ -934,14 +934,19 @@ func (a *app) filterBar(c *ui.Context, key string, f *filterState) {
 		ui.Divider(c)
 	}
 	ui.Row(c).Shrink(0).FillWidth().Padding(t.Space(2)).Children(func() {
-		field := searchField(c, "filter:"+key, &f.filter, "Filter", "Filter Files", &f.field, &f.focus,
-			func() { f.toList = true }).FillWidth()
-		if a.nativeBar {
-			// A capsule over the sidebar's color, as Xcode's filter.
-			field.Radius(t.Space(4)).Background(t.Background.Alpha(0.7)).Border(1, t.Border.Alpha(0.6))
-			if f.field.FocusWithin(c) {
-				field.Border(1, t.Accent)
+		// The system's search field, as Xcode's navigator filters with.
+		f.field.Placeholder, f.field.Label = "Filter", "Filter Files"
+		f.field.OnKey = func(k ui.Key) bool {
+			if k != ui.KeyDown {
+				return false
 			}
+			f.toList = true
+			return true
+		}
+		ui.NativeSearchField(c.Key("filter:"+key), &f.field, &f.filter).FillWidth()
+		if f.focus {
+			f.focus = false
+			f.field.Focus(c)
 		}
 	})
 }
