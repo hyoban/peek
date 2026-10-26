@@ -222,6 +222,8 @@ func (p *projects) showWindow() {
 // close stops what the project does in the background, as its window
 // closes.
 func (a *app) close() {
+	a.closed = true
+	a.invalidateDefinitions()
 	if a.push.cancel != nil {
 		a.push.cancel()
 	}
@@ -376,6 +378,7 @@ type menuItems struct {
 	changes, files, sidebar, history, viewed  *menuItem
 	layout, nextChange, previousChange        *menuItem
 	find                                      *menuItem
+	definition, back, forward                 *menuItem
 	refresh, pull, ship, ask, review, explain *menuItem
 	branch                                    *menuItem
 	github, finder                            *menuItem
@@ -451,8 +454,15 @@ func (p *projects) setMenu() {
 		nextChange:     item("Next Change", "Ctrl+Cmd+Down", func(a *app) { a.goChange(1) }),
 		previousChange: item("Previous Change", "Ctrl+Cmd+Up", func(a *app) { a.goChange(-1) }),
 		find:           item("Find…", "Cmd+F", func(a *app) { a.find(editor.Find) }),
-		refresh:        item("Refresh", "Cmd+R", func(a *app) { a.refresh() }),
-		pull:           item("Pull", "Shift+Cmd+P", func(a *app) { a.startPull() }),
+		definition: item("Go to Definition", "F12", func(a *app) {
+			if a.canDefine() {
+				a.goDefinition(a.code.Cursor())
+			}
+		}),
+		back:    item("Go Back", "Ctrl+Cmd+Left", func(a *app) { a.goBack(-1) }),
+		forward: item("Go Forward", "Ctrl+Cmd+Right", func(a *app) { a.goBack(1) }),
+		refresh: item("Refresh", "Cmd+R", func(a *app) { a.refresh() }),
+		pull:    item("Pull", "Shift+Cmd+P", func(a *app) { a.startPull() }),
 		ship: item("Ship", "Cmd+P", func(a *app) {
 			if a.push.running {
 				a.push.cancel()
@@ -545,6 +555,9 @@ func (p *projects) setMenu() {
 			mygo.Separator(),
 			m.github.MenuItem, m.finder.MenuItem,
 		}},
+		{Label: "Navigate", Submenu: []*mygo.MenuItem{
+			m.definition.MenuItem, mygo.Separator(), m.back.MenuItem, m.forward.MenuItem,
+		}},
 		{Role: mygo.RoleWindowMenu},
 		{Role: mygo.RoleHelp},
 	}))
@@ -562,7 +575,7 @@ func (p *projects) syncMenu() {
 	m.hideInactive.show("Hide When Inactive", true, p.hideInactive)
 	if a == nil {
 		for _, item := range []*menuItem{m.changes, m.files, m.sidebar, m.history, m.viewed, m.find, m.layout, m.nextChange, m.previousChange,
-			m.refresh, m.pull, m.ship, m.ask, m.review, m.explain, m.branch, m.github, m.finder} {
+			m.refresh, m.pull, m.ship, m.ask, m.review, m.explain, m.branch, m.github, m.finder, m.definition, m.back, m.forward} {
 			item.show(item.shownLabel, false, item.shownChecked)
 		}
 		return
@@ -587,6 +600,9 @@ func (p *projects) syncMenu() {
 	m.nextChange.show("Next Change", diffs, false)
 	m.previousChange.show("Previous Change", diffs, false)
 	m.find.show("Find…", a.findable(), false)
+	m.definition.show("Go to Definition", a.canDefine(), false)
+	m.back.show("Go Back", a.readableSource() && !a.navigation.busy && len(a.navigation.back) > 0, false)
+	m.forward.show("Go Forward", a.readableSource() && !a.navigation.busy && len(a.navigation.forward) > 0, false)
 	m.refresh.show("Refresh", true, false)
 	m.pull.show("Pull", a.behind > 0 && !busy, false)
 	ship := "Ship"

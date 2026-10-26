@@ -149,13 +149,17 @@ type app struct {
 	frames                     int                   // counts the frames, for what waits for the next
 
 	// Files mode.
-	allTree  pathTree
-	filesFor int    // the row of the commit whose files are listed, or load; -1 for none
-	openFile string // the file whose text shows, or loads
-	code     *editor.State
-	picture  ui.ImageSource // the file's picture, in place of code
-	codeNote string         // why the text does not show
-	preview  *mdPreview     // a Markdown file's, beside its code
+	allTree            pathTree
+	filesFor           int    // the row of the commit whose files are listed, or load; -1 for none
+	openFile           string // the file whose text shows, or loads
+	code               *editor.State
+	codePath, codeHash string // the source actually displayed, while another may load
+	textGen            int    // rejects older file loads, including the same path in another commit
+	closed             bool
+	navigation         navigationState
+	picture            ui.ImageSource // the file's picture, in place of code
+	codeNote           string         // why the text does not show
+	preview            *mdPreview     // a Markdown file's, beside its code
 	// previewed is the Markdown files shown as their previews, their
 	// sources showing by default.
 	previewed map[string]bool
@@ -1144,11 +1148,13 @@ func emptyNote(c *ui.Context, note string) {
 }
 
 func (a *app) codePane(c *ui.Context) {
+	a.configureNavigation()
 	detail := ""
 	if a.picture != nil {
 		detail = pictureSize(a.picture)
 	}
 	jumpBar(c, a.openFile, "", func() {
+		a.navigationTools(c)
 		if detail != "" {
 			ui.Text(c, detail).FontSize(smallSize).TextColor(c.Theme().TextMuted).SingleLine().Shrink(0)
 		}
@@ -1156,6 +1162,7 @@ func (a *app) codePane(c *ui.Context) {
 			a.previewButton(c)
 		}
 	}, func() {
+		a.definitionChoices(c)
 		switch {
 		case a.codeNote != "":
 			emptyNote(c, a.codeNote)
@@ -1168,7 +1175,11 @@ func (a *app) codePane(c *ui.Context) {
 		case a.previewing():
 			previewView(c, a.preview)
 		default:
-			editor.View(c.Key("code:"+a.openFile), a.code).Grow(1).FillWidth()
+			editor.View(c.Key("code:"+a.openFile), a.code).Grow(1).FillWidth().Bind(&a.navigation.editor)
+			if a.navigation.focus {
+				a.navigation.focus = false
+				a.navigation.editor.Focus(c)
+			}
 		}
 	})
 }
@@ -1176,6 +1187,7 @@ func (a *app) codePane(c *ui.Context) {
 // sync starts loading what the choices in the history, the trees and the
 // mode ask for, once for each new choice.
 func (a *app) sync(c *ui.Context) {
+	a.checkNavigation()
 	a.applyShot(c)
 	if a.changeTree.sync() || a.allTree.sync() {
 		c.Services().Invalidate()
@@ -1229,6 +1241,7 @@ func (a *app) setMode(mode int) {
 	if mode == a.mode {
 		return
 	}
+	a.cancelNavigation()
 	a.mode, a.modeChoice = mode, mode
 	cm, ok := a.current()
 	if !ok {
@@ -1248,10 +1261,10 @@ func (a *app) setMode(mode int) {
 
 // openInFiles shows the file in the files mode where the commit has it.
 func (a *app) openInFiles(hash, p string) bool {
-	if p == "" || !a.allTree.has(p) {
+	if p == "" || (!a.allTree.has(p) && !(hash == git.Worktree && filepath.IsAbs(p))) {
 		return false
 	}
-	a.allTree.show(p)
+	a.showFileInTree(p)
 	a.openFile = p
 	a.loadText(hash, p)
 	return true
@@ -1351,19 +1364,23 @@ func (a *app) loadFiles(hash string) {
 }
 
 func (a *app) loadText(hash, p string) {
+	a.cancelNavigation()
+	a.textGen++
+	gen, repo := a.textGen, a.repo
 	a.background(func() func() {
 		limit := maxTextSize // a text too large to show is not read whole
 		if isPicture(p) {
 			limit = 0
 		}
-		text, err := git.FileTextAtMost(a.repo, hash, p, limit)
+		text, err := sourceText(repo, hash, p, limit)
 		picture, note := fileView(p, text, err)
 		var buf *editor.Buffer
 		if note == "" && picture == nil {
 			buf = codeBuffer(p, text)
 		}
 		return func() {
-			if p == a.openFile {
+			cm, ok := a.current()
+			if !a.closed && gen == a.textGen && p == a.openFile && ok && cm.Hash == hash {
 				var (
 					code    *editor.State
 					preview *mdPreview
@@ -1375,6 +1392,7 @@ func (a *app) loadText(hash, p string) {
 					}
 				}
 				a.code, a.picture, a.codeNote, a.preview = code, picture, note, preview
+				a.codePath, a.codeHash = p, hash
 			}
 		}
 	})
@@ -1394,7 +1412,7 @@ func extendPath() {
 	home, _ := os.UserHomeDir()
 	have := filepath.SplitList(os.Getenv("PATH"))
 	dirs := have
-	for _, d := range []string{"/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin", filepath.Join(home, ".local", "bin")} {
+	for _, d := range []string{"/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin", filepath.Join(home, ".local", "bin"), filepath.Join(home, "go", "bin"), filepath.Join(home, ".vite-plus", "bin"), filepath.Join(home, ".volta", "bin")} {
 		if !slices.Contains(have, d) && exists(d) {
 			dirs = append(dirs, d)
 		}

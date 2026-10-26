@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"path/filepath"
 	"peek/internal/git"
 	"peek/internal/review"
 	"strings"
@@ -91,6 +92,7 @@ func readHistory(repo string) history {
 // refresh reads the history and the work tree again, as the watch asks
 // once files change, keeping what shows where it still is.
 func (a *app) refresh() {
+	a.invalidateDefinitions()
 	if a.refreshing {
 		a.refreshAgain = true
 		return
@@ -274,13 +276,14 @@ func (a *app) updateChanges(changes []git.Change) {
 // keeping the folders open and the file shown, its text where it is.
 func (a *app) reloadFiles() {
 	open, md, code := a.openFile, a.preview, a.code
+	gen := a.textGen
 	a.background(func() func() {
 		files, err := git.ListFiles(a.repo, git.Worktree)
 		tree := fold(files)
 		var text string
 		var textErr error
 		if open != "" {
-			text, textErr = git.FileText(a.repo, git.Worktree, open)
+			text, textErr = sourceText(a.repo, git.Worktree, open, maxTextSize)
 		}
 		picture, note := fileView(open, text, textErr)
 		// The text shown is compared here, and a new one's buffer made, a
@@ -293,18 +296,18 @@ func (a *app) reloadFiles() {
 		// The preview shows anew where the text or its pictures changed.
 		stale := md != nil && md.stale(text)
 		return func() {
-			if cm, ok := a.current(); err != nil || !ok || cm.Hash != git.Worktree || a.filesFor != a.loadedRow {
+			if cm, ok := a.current(); a.closed || err != nil || !ok || cm.Hash != git.Worktree || a.filesFor != a.loadedRow {
 				return
 			}
 			a.allTree.replace(tree)
-			if open == "" || a.openFile != open {
+			if open == "" || a.openFile != open || gen != a.textGen {
 				return
 			}
-			if !a.allTree.has(open) {
+			if !a.allTree.has(open) && !filepath.IsAbs(open) {
 				a.openFile, a.code, a.picture, a.codeNote, a.preview = "", nil, nil, "", nil // deleted
 				return
 			}
-			a.allTree.show(open)
+			a.showFileInTree(open)
 			switch {
 			case note != "" || picture != nil:
 				a.code, a.picture, a.codeNote, a.preview = nil, picture, note, nil
@@ -312,6 +315,7 @@ func (a *app) reloadFiles() {
 				if a.code != code || !same {
 					resetText(a.code.Buffer, text)
 				}
+				a.codePath, a.codeHash = open, git.Worktree
 				if stale && a.preview == md {
 					a.preview = a.newPreview(git.Worktree, open, text)
 				}
@@ -320,6 +324,7 @@ func (a *app) reloadFiles() {
 					buf = codeBuffer(open, text)
 				}
 				a.code = codeOf(buf)
+				a.codePath, a.codeHash = open, git.Worktree
 				a.picture, a.codeNote, a.preview = nil, "", nil
 				if isMarkdown(open) {
 					a.preview = a.newPreview(git.Worktree, open, text)
