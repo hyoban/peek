@@ -91,6 +91,8 @@ Without a path, Peek opens the repository you are in, or else the ones open when
 
 In **Files**, choose **Uncommitted Changes** in the history, then ⌘-click a
 function, type or variable, or use **Navigate → Go to Definition** (F12).
+Hold ⌘ over an identifier to underline it and show a pointing hand before
+clicking. This offers a lookup; the language server resolves its definition.
 Go and TypeScript (`.ts`, `.tsx`, `.mts`, `.cts`) use local language servers:
 
 ```bash

@@ -43,6 +43,55 @@ func navigationApp(t *testing.T) (*app, *ui.Tester, string) {
 	return a, tt, text
 }
 
+func TestDefinitionPointerFeedback(t *testing.T) {
+	a, _, _ := navigationApp(t)
+	a.code = codeOf(codeBuffer("main.go", "target()"))
+	a.navigation.client = &fakeDefinitions{lookup: func(string, string, int) ([]definition.Location, error) {
+		t.Fatal("hover should not query the language server")
+		return nil, nil
+	}}
+	probe := ui.NewTester(func(c *ui.Context) {
+		a.configureNavigation()
+		editor.View(c, a.code).Fill()
+	}, 600, 300)
+	probe.Move(80, 8)
+	probe.HoldModifiers(ui.Cmd)
+	if probe.Cursor() != ui.CursorPointer {
+		t.Fatal("working-tree identifier did not offer definition lookup")
+	}
+	probe.HoldModifiers(0)
+	if probe.Cursor() != ui.CursorText {
+		t.Fatal("releasing Cmd kept the pointing hand")
+	}
+	probe.HoldModifiers(ui.Cmd)
+	a.commits[a.loadedRow].Hash = "historical"
+	probe.Frame()
+	if probe.Cursor() == ui.CursorPointer {
+		t.Fatal("historical file offered definition lookup")
+	}
+}
+
+func TestDefinitionStatusKeepsEditorPosition(t *testing.T) {
+	a, tt, _ := navigationApp(t)
+	before, ok := tt.Find("Code editor")
+	if !ok {
+		t.Fatal("no editor")
+	}
+	for _, note := range []string{"Finding definition…", "Opening definition…", "No definition found", "Choose a definition", ""} {
+		a.navigation.note = note
+		a.navigation.busy = strings.HasSuffix(note, "…")
+		a.navigation.targets = nil
+		if note == "Choose a definition" {
+			a.navigation.targets = []definition.Location{{Path: filepath.Join(a.repo, "main.go")}}
+		}
+		settle(tt)
+		after, ok := tt.Find("Code editor")
+		if !ok || after != before {
+			t.Fatalf("%q moved editor from %+v to %+v", note, before, after)
+		}
+	}
+}
+
 func TestDefinitionNavigation(t *testing.T) {
 	a, tt, text := navigationApp(t)
 	// A dependency outside the tree remains open across frames and refreshes.

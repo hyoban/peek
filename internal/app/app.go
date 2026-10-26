@@ -1162,25 +1162,27 @@ func (a *app) codePane(c *ui.Context) {
 			a.previewButton(c)
 		}
 	}, func() {
-		a.definitionChoices(c)
-		switch {
-		case a.codeNote != "":
-			emptyNote(c, a.codeNote)
-		case a.picture != nil:
-			ui.Column(c).Grow(1).FillWidth().Center().Padding(c.Theme().Space(4)).Children(func() {
-				ui.Image(c, a.picture).Fit(ui.ScaleDown).MaxWidthPercent(100).MaxHeightPercent(100)
-			})
-		case a.code == nil:
-			emptyNote(c, "No file selected")
-		case a.previewing():
-			previewView(c, a.preview)
-		default:
-			editor.View(c.Key("code:"+a.openFile), a.code).Grow(1).FillWidth().Bind(&a.navigation.editor)
-			if a.navigation.focus {
-				a.navigation.focus = false
-				a.navigation.editor.Focus(c)
+		ui.Column(c.Key("code-body")).Grow(1).FillWidth().Children(func() {
+			switch {
+			case a.codeNote != "":
+				emptyNote(c, a.codeNote)
+			case a.picture != nil:
+				ui.Column(c).Grow(1).FillWidth().Center().Padding(c.Theme().Space(4)).Children(func() {
+					ui.Image(c, a.picture).Fit(ui.ScaleDown).MaxWidthPercent(100).MaxHeightPercent(100)
+				})
+			case a.code == nil:
+				emptyNote(c, "No file selected")
+			case a.previewing():
+				previewView(c, a.preview)
+			default:
+				editor.View(c.Key("code:"+a.openFile), a.code).Grow(1).FillWidth().Bind(&a.navigation.editor)
+				if a.navigation.focus {
+					a.navigation.focus = false
+					a.navigation.editor.Focus(c)
+				}
 			}
-		}
+			a.definitionChoices(c)
+		})
 	})
 }
 

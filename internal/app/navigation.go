@@ -315,31 +315,44 @@ func (a *app) navigationTools(c *ui.Context) {
 			Disabled(b.count == 0 || !a.readableSource() || a.navigation.busy).
 			Children(func() { ui.Icon(c, b.svg).Size(14, 14) }).OnClick(func() { a.goBack(b.step) })
 	}
+	a.definitionStatus(c)
 }
 
-func (a *app) definitionChoices(c *ui.Context) {
+// Keep lookup status in the existing file bar so starting or finishing a
+// request never moves the symbol under the pointer.
+func (a *app) definitionStatus(c *ui.Context) {
 	n := &a.navigation
 	if !a.worktreeFiles() || n.note == "" {
 		return
 	}
-	ui.Row(c.Key("definition-status")).FillWidth().Shrink(0).Padding(6, 10).Gap(6).AlignItems(ui.Center).Children(func() {
+	ui.Row(c.Key("definition-status")).Width(260).Height(22).Shrink(0).Gap(6).AlignItems(ui.Center).Children(func() {
 		if n.busy {
 			ui.Spinner(c).Size(12, 12)
 		}
 		ui.Text(c, n.note).FontSize(smallSize).TextColor(c.Theme().TextMuted).SingleLine().Ellipsis("…").Tooltip(n.note).Grow(1).MinWidth(0)
-		ui.Button(c.Key("dismiss"), "Dismiss").OnClick(a.cancelNavigation)
+		ui.Button(c.Key("dismiss"), "Dismiss").Height(22).OnClick(a.cancelNavigation)
 	})
-	if len(n.targets) == 0 {
+}
+
+func (a *app) definitionChoices(c *ui.Context) {
+	n := &a.navigation
+	if !a.worktreeFiles() || len(n.targets) == 0 {
 		return
 	}
-	ui.Scroll(c.Key("definitions")).FillWidth().MaxHeight(180).Children(func() {
-		for i, loc := range n.targets {
-			name := loc.Path
-			if rel, err := filepath.Rel(a.repo, name); err == nil && !strings.HasPrefix(rel, "..") {
-				name = rel
+	// A choice overlays the editor, rather than changing its viewport.
+	t := c.Theme()
+	ui.Column(c.Key("definition-choices")).Absolute().Top(6).Right(8).WidthPercent(95).MaxWidth(480).
+		Background(t.Surface).Border(1, t.Border).Radius(6).Padding(6).
+		Shadow(0, 3, 10, 0, ui.RGBA(0, 0, 0, 0.12)).Children(func() {
+		ui.Scroll(c.Key("definitions")).FillWidth().MaxHeight(180).Children(func() {
+			for i, loc := range n.targets {
+				name := loc.Path
+				if rel, err := filepath.Rel(a.repo, name); err == nil && !strings.HasPrefix(rel, "..") {
+					name = rel
+				}
+				label := fmt.Sprintf("%s:%d:%d", name, loc.Range.Start.Line+1, loc.Range.Start.Character+1)
+				ui.Button(c.Key(fmt.Sprint(i)), label).FillWidth().OnClick(func() { a.openDefinition(loc) })
 			}
-			label := fmt.Sprintf("%s:%d:%d", name, loc.Range.Start.Line+1, loc.Range.Start.Character+1)
-			ui.Button(c.Key(fmt.Sprint(i)), label).FillWidth().OnClick(func() { a.openDefinition(loc) })
-		}
+		})
 	})
 }
