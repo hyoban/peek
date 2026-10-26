@@ -133,7 +133,10 @@ type app struct {
 	file       string // the file at the top of the diffs
 	diffs      []*fileDiff
 	diffOf     map[string]*fileDiff // the diffs by path
-	diffGen    int                  // counts the lists of diffs, to drop stale loads
+	// groupDiffs are the diffs of each group of the change tree, which its
+	// row's badges count each time the sidebar asks for it.
+	groupDiffs map[string][]*fileDiff
+	diffGen    int // counts the lists of diffs, to drop stale loads
 	diffList   ui.ListState
 	read       map[string]bool // diffs marked read or not, by commit and path
 	// scrollTarget is the file the diffs scroll to for the tree, -1 once

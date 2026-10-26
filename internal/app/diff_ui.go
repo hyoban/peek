@@ -300,9 +300,24 @@ func (a *app) deleteComment(d *fileDiff, cm *comment) {
 	a.comments[key] = slices.DeleteFunc(a.comments[key], func(o *comment) bool { return o == cm })
 }
 
+// hasComments reports whether the commit shown has comments written.
+func (a *app) hasComments() bool {
+	cm, _ := a.current()
+	prefix := a.entryKey(cm.Hash) + "\x00"
+	for key, cms := range a.comments {
+		if strings.HasPrefix(key, prefix) && slices.ContainsFunc(cms, func(c *comment) bool { return c.text != "" }) {
+			return true
+		}
+	}
+	return false
+}
+
 // shownComments lists the comments on the diffs shown, in their order and
 // their lines', those still drafted left out.
 func (a *app) shownComments() (diffs []*fileDiff, comments []*comment) {
+	if !a.hasComments() {
+		return nil, nil // each frame asks, which a walk of every diff would slow
+	}
 	for _, d := range a.diffs {
 		cms := slices.Clone(a.commentsOf(d))
 		slices.SortStableFunc(cms, func(x, y *comment) int { return x.lines.Start - y.lines.Start })
