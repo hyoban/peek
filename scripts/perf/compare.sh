@@ -22,7 +22,8 @@ echo "Making the scenarios' repositories…" >&2
 echo "Cloning Godiff…" >&2
 git clone -q https://github.com/egoist/godiff "$work/godiff"
 git -C "$work/godiff" checkout -q "$godiff_commit"
-cp "$root/scripts/perf/godiff/perf_test.go" "$work/godiff/peekperf_test.go"
+# Without the constraint that keeps it out of Peek's module.
+grep -v '^//go:build ignore$' "$root/scripts/perf/godiff/perf_test.go" >"$work/godiff/peekperf_test.go"
 
 echo "Timing Peek…" >&2
 (cd "$root" && PEEK_PERF=1 PEEK_PERF_REPOS="$work/repos" GOWORK=off \
@@ -30,7 +31,7 @@ echo "Timing Peek…" >&2
 
 echo "Timing Godiff…" >&2
 (cd "$work/godiff" && GODIFF_PERF_REPOS="$work/repos" GOWORK=off \
-	go test -tags godiffperf -run '^TestPerf' -v -count=1 -timeout 30m .) | grep '^PERF' >"$work/godiff.txt"
+	go test -run '^TestPerf' -v -count=1 -timeout 30m .) | grep '^PERF' >"$work/godiff.txt"
 
 # A measure taken twice, as refresh, keeps the second: the one every
 # refresh after the first takes.

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // Branches are what the branch switcher lists: the local Branches, the
@@ -114,18 +115,26 @@ func BranchBase(repo string) (r BranchRange, ok bool) {
 		out, err := git(repo, args...)
 		return strings.TrimSpace(out), err
 	}
-	branch, err := g("symbolic-ref", "--quiet", "--short", "HEAD")
-	if err != nil {
-		return r, false
-	}
-	if r.Head, err = g("rev-parse", "--verify", "HEAD"); err != nil {
+	// What the base is chosen from, read at once: one read after another,
+	// the processes added up to most of the wait for a project to show.
+	var (
+		wg                sync.WaitGroup
+		branch            string
+		branchErr, endErr error
+		st                refState
+	)
+	wg.Go(func() { branch, branchErr = g("symbolic-ref", "--quiet", "--short", "HEAD") })
+	wg.Go(func() { r.Head, endErr = g("rev-parse", "--verify", "HEAD") })
+	wg.Go(func() { st = readRefState(repo) })
+	wg.Wait()
+	if branchErr != nil || endErr != nil {
 		return r, false
 	}
 	var refs []string
-	for _, remote := range baseRemotes(repo) {
-		onto := pullBase(repo, branch, remote)
+	for _, remote := range st.baseRemotes() {
+		onto := st.pullBase(branch, remote)
 		if onto == "" {
-			onto = remoteDefaultBranch(repo, remote)
+			onto = st.defaultBranch(remote)
 		}
 		if onto != "" {
 			r.Onto, refs = onto, []string{"refs/remotes/" + remote + "/" + onto, "refs/heads/" + onto}
@@ -134,7 +143,7 @@ func BranchBase(repo string) (r BranchRange, ok bool) {
 	}
 	if r.Onto == "" {
 		for _, name := range []string{"main", "master"} {
-			if _, err := g("rev-parse", "--verify", "--quiet", "refs/heads/"+name); err == nil {
+			if st.refs["refs/heads/"+name] {
 				r.Onto, refs = name, []string{"refs/heads/" + name}
 				break
 			}
@@ -143,38 +152,95 @@ func BranchBase(repo string) (r BranchRange, ok bool) {
 	if r.Onto == "" || r.Onto == branch {
 		return r, false
 	}
-	for _, ref := range refs {
-		base, err := g("merge-base", ref, r.Head)
-		if err != nil {
-			continue // no such branch, or no history shared with it
-		}
-		out, err := g("rev-list", "--count", base+".."+r.Head)
-		n, _ := strconv.Atoi(out)
-		if err == nil && (r.Base == "" || n < r.Commits) {
-			r.Base, r.Commits = base, n
+	bases := make([]string, len(refs))
+	counts := make([]int, len(refs))
+	found := make([]bool, len(refs))
+	for i, ref := range refs {
+		wg.Go(func() {
+			base, err := g("merge-base", ref, r.Head)
+			if err != nil {
+				return // no such branch, or no history shared with it
+			}
+			out, err := g("rev-list", "--count", base+".."+r.Head)
+			counts[i], _ = strconv.Atoi(out)
+			bases[i], found[i] = base, err == nil
+		})
+	}
+	wg.Wait()
+	for i := range refs {
+		if found[i] && (r.Base == "" || counts[i] < r.Commits) {
+			r.Base, r.Commits = bases[i], counts[i]
 		}
 	}
 	return r, r.Base != "" && r.Commits > 0
 }
 
+// refState is what BranchBase chooses the base from: the repository's
+// configuration, its entries in order, and its refs, the symbolic ones'
+// targets with them.
+type refState struct {
+	config  []configEntry
+	values  map[string]string // the last value of each key, as --get reads it
+	refs    map[string]bool
+	symrefs map[string]string
+}
+
+type configEntry struct{ key, value string }
+
+func readRefState(repo string) refState {
+	st := refState{values: map[string]string{}, refs: map[string]bool{}, symrefs: map[string]string{}}
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		out, err := git(repo, "config", "--list", "-z")
+		if err != nil {
+			return
+		}
+		for entry := range strings.SplitSeq(out, "\x00") {
+			if entry == "" {
+				continue
+			}
+			key, value, _ := strings.Cut(entry, "\n")
+			e := configEntry{configKey(key), strings.TrimSpace(value)}
+			st.config = append(st.config, e)
+			st.values[e.key] = e.value
+		}
+	})
+	wg.Go(func() {
+		out, err := git(repo, "for-each-ref", "--format=%(refname)%00%(symref)", "refs/heads", "refs/remotes")
+		if err != nil {
+			return
+		}
+		for line := range strings.Lines(out) {
+			name, target, _ := strings.Cut(strings.TrimSuffix(line, "\n"), "\x00")
+			st.refs[name] = true
+			if target != "" {
+				st.symrefs[name] = target
+			}
+		}
+	})
+	wg.Wait()
+	return st
+}
+
+func (st refState) get(key string) (string, bool) {
+	v, ok := st.values[configKey(key)]
+	return v, ok
+}
+
 // baseRemotes are the remotes whose branches pull requests merge into, in
 // order: the one gh repo set-default chose, a fork's upstream, origin. The
 // branch's own remote is not, a fork's as gh pr checkout adds it.
-func baseRemotes(repo string) []string {
+func (st refState) baseRemotes() []string {
 	var remotes []string
-	if out, err := git(repo, "config", "--get-regexp", `^remote\..*\.gh-resolved$`); err == nil {
-		for line := range strings.Lines(out) {
-			key, value, _ := strings.Cut(strings.TrimSpace(line), " ")
-			if value == "base" {
-				remotes = append(remotes, strings.TrimSuffix(strings.TrimPrefix(key, "remote."), ".gh-resolved"))
-			}
+	for _, e := range st.config {
+		name, ok := strings.CutPrefix(e.key, "remote.")
+		if name, ok = strings.CutSuffix(name, ".gh-resolved"); ok && e.value == "base" && !slices.Contains(remotes, name) {
+			remotes = append(remotes, name)
 		}
 	}
 	for _, name := range []string{"upstream", "origin"} {
-		if !slices.Contains(remotes, name) {
-			if _, err := git(repo, "config", "--get", "remote."+name+".url"); err == nil {
-				remotes = append(remotes, name)
-			}
+		if _, ok := st.get("remote." + name + ".url"); ok && !slices.Contains(remotes, name) {
+			remotes = append(remotes, name)
 		}
 	}
 	return remotes
@@ -183,24 +249,35 @@ func baseRemotes(repo string) []string {
 // pullBase is the branch of the remote the branch's pull request is to
 // merge into, fetched, as gh and GitHub's VS Code extension note it, ""
 // where neither does.
-func pullBase(repo, branch, remote string) string {
+func (st refState) pullBase(branch, remote string) string {
 	var onto string
-	if out, err := git(repo, "config", "--get", "branch."+branch+".github-pr-base-branch"); err == nil {
+	if out, ok := st.get("branch." + branch + ".github-pr-base-branch"); ok {
 		// owner#name#branch, of the repository of the remote's URL.
-		owner, rest, _ := strings.Cut(strings.TrimSpace(out), "#")
+		owner, rest, _ := strings.Cut(out, "#")
 		name, base, _ := strings.Cut(rest, "#")
-		url, _ := git(repo, "config", "--get", "remote."+remote+".url")
-		if strings.EqualFold(githubPage(strings.TrimSpace(url)), "https://github.com/"+owner+"/"+name) {
+		url, _ := st.get("remote." + remote + ".url")
+		if strings.EqualFold(githubPage(url), "https://github.com/"+owner+"/"+name) {
 			onto = base
 		}
-	} else if out, err := git(repo, "config", "--get", "branch."+branch+".gh-merge-base"); err == nil {
-		onto = strings.TrimSpace(out)
+	} else if out, ok := st.get("branch." + branch + ".gh-merge-base"); ok {
+		onto = out
 	}
-	if onto == "" || onto == branch {
-		return ""
-	}
-	if _, err := git(repo, "rev-parse", "--verify", "--quiet", "refs/remotes/"+remote+"/"+onto); err != nil {
+	if onto == "" || onto == branch || !st.refs["refs/remotes/"+remote+"/"+onto] {
 		return ""
 	}
 	return onto
+}
+
+// defaultBranch is remoteDefaultBranch, of the refs read.
+func (st refState) defaultBranch(remote string) string {
+	prefix := "refs/remotes/" + remote + "/"
+	if target, ok := st.symrefs[prefix+"HEAD"]; ok && strings.HasPrefix(target, prefix) {
+		return strings.TrimPrefix(target, prefix)
+	}
+	for _, name := range []string{"main", "master"} {
+		if st.refs[prefix+name] {
+			return name
+		}
+	}
+	return ""
 }

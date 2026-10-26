@@ -258,3 +258,50 @@ func TestUntrackedCountsKept(t *testing.T) {
 		t.Errorf("%d lines added once rewritten, want 1", n)
 	}
 }
+
+// Untracked files counted here count as git counts them: lines with and
+// without a last newline, empty and binary files, links, files git takes
+// for big, and those attributes apply to, which git counts.
+func TestCountDirectAsGit(t *testing.T) {
+	repo := testutil.Repo(t)
+	files := map[string]string{
+		"lines.txt":    "a\nb\nc\n",
+		"no-end.txt":   "a\nb",
+		"empty.txt":    "",
+		"crlf.txt":     "a\r\nb\r\n",
+		"cr.txt":       "a\rb\r",
+		"binary.dat":   "a\x00b\n",
+		"late-nul.dat": strings.Repeat("x\n", 4050) + "\x00", // text: past 8000 bytes
+		"big.txt":      strings.Repeat("line\n", 2000),       // over the threshold
+		"unicode.txt":  "héllo\n世界\n",
+		"attr.bin":     "a\nb\n",
+	}
+	for p, text := range files {
+		os.WriteFile(filepath.Join(repo, p), []byte(text), 0o644)
+	}
+	os.Symlink("lines.txt", filepath.Join(repo, "link"))
+	os.WriteFile(filepath.Join(repo, ".gitattributes"), []byte("*.bin binary\n"), 0o644)
+	testutil.Git(t, repo, "config", "core.bigFileThreshold", "9000")
+	paths := []string{"link"}
+	for p := range files {
+		paths = append(paths, p)
+	}
+	slices.Sort(paths)
+	want, err := untrackedBatch(repo, paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string][2]int{}
+	rest := countDirect(repo, paths, got)
+	if !slices.Equal(rest, []string{"attr.bin"}) {
+		t.Errorf("left for git %q, want attr.bin alone", rest)
+	}
+	for _, p := range paths {
+		if _, ok := got[p]; ok && got[p] != want[p] {
+			t.Errorf("%s: counted %v, git counts %v", p, got[p], want[p])
+		}
+	}
+	if want["late-nul.dat"] != [2]int{4051, 0} || want["big.txt"] != [2]int{} {
+		t.Errorf("git counts %v and %v: the cases are not what they test", want["late-nul.dat"], want["big.txt"])
+	}
+}

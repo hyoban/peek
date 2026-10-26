@@ -1,10 +1,11 @@
-//go:build godiffperf
+//go:build ignore
 
 // Godiff's side of the comparison scripts/perf/compare.sh makes: the
 // measures of Peek's performance tests (internal/app/perf_test.go), over
 // the same repositories, taken of a checkout of Godiff this file is
-// copied into, its lines wrapped as Peek's are. It prints one line a
-// measure:
+// copied into, its build constraint left out, its lines wrapped as
+// Peek's are. Ignored here, it is no part of Peek's module, whose
+// dependencies would else take Godiff in. It prints one line a measure:
 //
 //	PERF godiff <scenario> <measure> <value> <unit>
 package main

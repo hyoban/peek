@@ -55,13 +55,15 @@ Measured by the same tests at `4a58eb4`, before, and now:
 
 | Scenario | Measure | Before | Now | |
 |---|---|--:|--:|---|
+| large | open | 222 | 156 | ms |
 | large | scroll, unified | 5.8 | 1.6 | ms/frame |
-| large | scroll, side by side | 5.8 | 1.5 | ms/frame |
-| large | resize, unified | 31.7 | 9.8 | ms/frame |
-| large | resize, side by side | 46.3 | 11.2 | ms/frame |
-| untracked | refresh | 1,166 | 114 | ms |
-| memory | load-all | 9,220 | 6,289 | ms |
-| memory | heap | 311 | 126 | MB |
+| large | scroll, side by side | 5.8 | 1.6 | ms/frame |
+| large | resize, unified | 31.7 | 4.4 | ms/frame |
+| large | resize, side by side | 46.3 | 6.0 | ms/frame |
+| untracked | open | 1,143 | 410 | ms |
+| untracked | refresh | 1,166 | 106 | ms |
+| memory | load-all | 9,220 | 6,133 | ms |
+| memory | heap | 311 | 136 | MB |
 
 ### Diffs of long files
 
@@ -78,7 +80,10 @@ They now build at the width they were laid out at.
 
 At each width the window is resized through, a diff measured the wraps of
 all its lines, those folded away too. It measures those it shows, and the
-others once they show.
+others once they show. And to align its sides it laid out every changed
+line with the system's text layout, most of them out of view: it counts
+their rows as the layout would, with the same widths of characters, and
+lays out only the lines it draws.
 
 These were in MyGo's editor, in the fork Peek builds with
 (`github.com/hyoban/mygo`, branch `native-source-list`).
@@ -86,13 +91,14 @@ These were in MyGo's editor, in the fork Peek builds with
 ### Opening a project
 
 On a clone of [Dify](https://github.com/langgenius/dify), reading the
-history, the changes and the review's snapshot took 300 ms, and takes 175.
-Asking whether the branch has commits not pushed ran a git process for
-each key of its configuration, one after another: it reads the
-configuration once, and what does not depend on another runs at once. The
-review's snapshot asked again, after `git status`, and now shares the
-answer. The file icons, 75 ms, load while the app starts rather than
-before.
+history, the changes and the review's snapshot took 300 ms, and takes 170.
+Asking whether the branch has commits not pushed, and finding the branch
+it is to merge into, ran a git process for each key of the configuration
+and each ref asked about, one after another: they read the configuration
+and the refs once, and what does not depend on another runs at once,
+which took finding the branch from 60 ms to 10. The review's snapshot
+asked again, after `git status`, and now shares the answer. The file
+icons, 75 ms, load while the app starts rather than before.
 
 ### Following the files
 
@@ -102,6 +108,13 @@ read every file changed again, to fingerprint the changes for the review,
 and added every untracked file to an index, to count its lines: a file
 that has not changed since keeps its hash and its counts, unless it
 changed within the last second, as git takes its own index's entries.
+
+The first time, the lines of untracked files no attribute applies to are
+counted here, as git counts a new file's, rather than by adding the files
+to an index; those an attribute may filter or convert, and what is not a
+file, still go to git. And the counts and the review's fingerprint read
+each file once between them, a few at once: opened by many at once,
+each file took several times as long.
 
 ### Large files and many diffs
 
@@ -121,19 +134,23 @@ table:
 
 | Scenario | Measure | Peek | Godiff | |
 |---|---|--:|--:|---|
-| large | open | 172 | 111 | ms |
-| large | scroll, unified | 1.6 | 2.7 | ms/frame |
-| large | scroll, side by side | 1.5 | 2.7 | ms/frame |
-| large | resize, unified | 9.8 | 2.0 | ms/frame |
-| large | resize, side by side | 11.2 | 2.1 | ms/frame |
-| many | open | 228 | 1,506 | ms |
-| many | scroll, unified | 2.6 | 3.0 | ms/frame |
-| many | scroll, side by side | 1.9 | 3.0 | ms/frame |
-| untracked | open | 1,311 | 247 | ms |
-| untracked | refresh | 114 | 174 | ms |
-| memory | open | 550 | 47,509 | ms |
-| memory | load-all | 6,289 | 47,509 | ms |
-| memory | heap | 126 | 645 | MB |
+| large | open | 156 | 121 | ms |
+| large | scroll, unified | 1.6 | 2.4 | ms/frame |
+| large | scroll, side by side | 1.6 | 2.5 | ms/frame |
+| large | resize, unified | 4.4 | 1.9 | ms/frame |
+| large | resize, side by side | 6.0 | 1.9 | ms/frame |
+| many | open | 233 | 1,424 | ms |
+| many | scroll, unified | 2.7 | 2.8 | ms/frame |
+| many | scroll, side by side | 2.0 | 2.9 | ms/frame |
+| untracked | open | 410 | 259 | ms |
+| untracked | refresh | 106 | 176 | ms |
+| memory | open | 576 | 46,954 | ms |
+| memory | load-all | 6,133 | 46,955 | ms |
+| memory | heap | 136 | 645 | MB |
+
+Opening the untracked scenario took a second, now and then, in either
+app, right after other work had filled the system's caches; the table
+has the time it took most often.
 
 Godiff's lines wrap here, as Peek's always do; it does not wrap them by
 default, which costs it less. It is built on MyGo 0.4.9, an earlier
@@ -145,28 +162,31 @@ opens, and colors them with [Chroma](https://github.com/alecthomas/chroma),
 two files at a time: once it has, scrolling never waits, but opening a
 change waits for all of it, a large change's for long, and holds all of
 it. Peek reads the diffs in view, and those that come into view as it
-scrolls, colored by MyGo's highlighter as they show. Godiff shows the
+scrolls, colored by MyGo's highlighter as they show; its list builds the
+rows just past the view too, so a diff starts loading before it comes
+into view, but a project's every diff is not ready at once. Godiff shows the
 whole text of files of 2 MB at most, and of larger ones the patch's
 lines; Peek of files of 8 MB at most.
 
 Where Godiff is faster:
 
-- **Resizing**, five times as fast. At each width, Peek's diff lays out
-  the changed lines of every hunk with the system's text layout, to align
-  the sides (`DiffState.prepare`), a fifth of the time, besides measuring
-  the wraps of the lines shown again.
+- **Resizing**, two to three times as fast. At each width Peek wraps the
+  lines it shows again, and lays out and draws them anew, a frame's work
+  that a resize cannot spare; a tenth of it is drawing the pixels on the
+  CPU, which the GPU does on the screen.
 - **Opening a project with many untracked files**, the first time, though
   it does less: it lists 1,000 untracked files at most, the others as a
-  row telling how many more, and reads them itself, where Peek lists all
-  20,000 and counts their lines as git would, adding them to an index of
-  its own. Every refresh after reuses the counts, and is faster than
-  Godiff's.
-- **Opening a long file's diff**, a little.
+  row telling how many more, where Peek lists all 20,000, reads each, and
+  asks git which an attribute applies to. Every refresh after reuses the
+  counts, and is faster than Godiff's.
+- **Opening a long file's diff**, a little: Peek diffs the two texts
+  itself, off the main thread, 35 ms of it, where Godiff takes git's
+  patch.
 
 Where Peek is faster: opening a change of many files, six times as fast;
-of many long files, 86 times; scrolling, its frames taking from 0.6 to
-0.9 of Godiff's; and it holds a fifth of the memory once every diff is
-loaded.
+of many long files, 80 times; scrolling, its frames as long as Godiff's
+or shorter, down to two thirds of them; refreshing a project with many untracked files; and
+it holds a fifth of the memory once every diff is loaded.
 
 ## Measuring again
 

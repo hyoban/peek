@@ -296,6 +296,7 @@ func untrackedCounts(repo string, paths []string) (map[string][2]int, error) {
 		}
 		todo = append(todo, p)
 	}
+	todo = countDirect(repo, todo, counts)
 	for chunk := range slices.Chunk(todo, batch) {
 		wg.Go(func() {
 			n, err := untrackedBatch(repo, chunk)
@@ -321,6 +322,125 @@ func untrackedCounts(repo string, paths []string) (map[string][2]int, error) {
 	counted.repos[repo] = kept
 	counted.Unlock()
 	return counts, firstErr
+}
+
+// countDirect counts here the lines of the files no attribute applies to,
+// as git counts those of a file it is to add, into counts, and returns
+// the others, for git to count: what an attribute may filter, convert or
+// diff otherwise, what is not a file, and what is larger than git's big
+// files' threshold, which it takes for binary. Adding thousands of files
+// to an index took a second, the first time a project opened.
+func countDirect(repo string, paths []string, counts map[string][2]int) []string {
+	if len(paths) == 0 {
+		return nil
+	}
+	var (
+		wg        sync.WaitGroup
+		attrs     map[string]bool
+		attrsErr  error
+		threshold = int64(512 << 20) // git's default
+	)
+	wg.Go(func() { attrs, attrsErr = withAttributes(repo, paths) })
+	wg.Go(func() {
+		if out, err := git(repo, "config", "--type=int", "--get", "core.bigFileThreshold"); err == nil {
+			if n, err := strconv.ParseInt(strings.TrimSpace(out), 10, 64); err == nil {
+				threshold = n
+			}
+		}
+	})
+	wg.Wait()
+	if attrsErr != nil {
+		return paths
+	}
+	var direct, rest []string
+	for _, p := range paths {
+		if attrs[p] {
+			rest = append(rest, p)
+		} else {
+			direct = append(direct, p)
+		}
+	}
+	results := make([][2]int, len(direct))
+	ok := make([]bool, len(direct))
+	next := make(chan int)
+	for range min(8, len(direct)) {
+		wg.Go(func() {
+			for i := range next {
+				results[i], ok[i] = countNewLines(filepath.Join(repo, direct[i]), threshold)
+			}
+		})
+	}
+	for i := range direct {
+		next <- i
+	}
+	close(next)
+	wg.Wait()
+	for i, p := range direct {
+		if ok[i] {
+			counts[p] = results[i]
+		} else {
+			rest = append(rest, p)
+		}
+	}
+	return rest
+}
+
+// withAttributes reports which of the paths an attribute applies to.
+func withAttributes(repo string, paths []string) (map[string]bool, error) {
+	out, err := gitWith(repo, nil, strings.Join(paths, "\x00")+"\x00", "check-attr", "-z", "--stdin", "--all")
+	if err != nil {
+		return nil, err
+	}
+	// Each attribute set is three fields: the path, the attribute and its
+	// value.
+	fields := strings.Split(out, "\x00")
+	attrs := map[string]bool{}
+	for i := 0; i+2 < len(fields); i += 3 {
+		attrs[fields[i]] = true
+	}
+	return attrs, nil
+}
+
+// countNewLines counts the lines of a new file as git's numstat does: the
+// lines, the last one without a newline too, or none for a binary file,
+// with a NUL in its first 8000 bytes or larger than threshold; a link's
+// target is its text. It reports false for what it cannot count so. A
+// file's reading is the review's snapshot's too (ReadFileFacts).
+func countNewLines(p string, threshold int64) ([2]int, bool) {
+	info, err := os.Lstat(p)
+	if err != nil {
+		return [2]int{}, false
+	}
+	var data []byte
+	switch {
+	case info.Mode()&os.ModeSymlink != 0:
+		target, err := os.Readlink(p)
+		if err != nil {
+			return [2]int{}, false
+		}
+		data = []byte(target)
+	case !info.Mode().IsRegular():
+		return [2]int{}, false
+	case info.Size() > threshold:
+		return [2]int{}, true
+	default:
+		ff, err := ReadFileFacts(p, info)
+		switch {
+		case err != nil:
+			return [2]int{}, false
+		case ff.Binary:
+			return [2]int{}, true
+		}
+		return [2]int{ff.Lines, 0}, true
+	}
+	if bytes.IndexByte(data[:min(len(data), 8000)], 0) >= 0 {
+		return [2]int{}, true
+	}
+	n := bytes.Count(data, []byte{'\n'})
+	if len(data) > 0 && data[len(data)-1] != '\n' {
+		n++
+	}
+	return [2]int{n, 0}, true
 }
 
 // counted are the line counts of each repository's untracked files as
@@ -352,14 +472,6 @@ func attributesStamp(repo string) string {
 		b.WriteString("|")
 	}
 	return b.String()
-}
-
-// unchangedSince reports whether a file is still as it was: the same
-// file, size, time and mode, that time not so recent that a write within
-// it could leave them all as they were, as git takes its racy entries.
-func unchangedSince(was, is os.FileInfo) bool {
-	return was != nil && os.SameFile(was, is) && was.Size() == is.Size() && was.ModTime().Equal(is.ModTime()) &&
-		was.Mode() == is.Mode() && time.Since(is.ModTime()) > time.Second
 }
 
 // untrackedBatch counts the lines of a batch of untracked files, as

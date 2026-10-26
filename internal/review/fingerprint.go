@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"hash"
-	"io"
 	"os"
 	"path/filepath"
 	"peek/internal/git"
@@ -74,9 +73,8 @@ func hashFiles(repo, status string, fingerprint hash.Hash) error {
 	var wg sync.WaitGroup
 	for range min(8, len(files)) {
 		wg.Go(func() {
-			buffer := make([]byte, 32*1024)
 			for i := range next {
-				parts[i] = hashFile(repo, files[i], known[files[i].path], buffer)
+				parts[i] = hashFile(repo, files[i], known[files[i].path])
 			}
 		})
 	}
@@ -133,7 +131,7 @@ type filePart struct {
 }
 
 // hashFile is the part of the fingerprint of a file of the status.
-func hashFile(repo string, entry file, known fileSum, buffer []byte) filePart {
+func hashFile(repo string, entry file, known fileSum) filePart {
 	var part filePart
 	write := func(format string, args ...any) { part.data = fmt.Appendf(part.data, format, args...) }
 	write("%q\x00", entry.path)
@@ -179,15 +177,17 @@ func hashFile(repo string, entry file, known fileSum, buffer []byte) filePart {
 		}
 		content.Write([]byte(link))
 	case info.Mode().IsRegular():
-		file, err := os.Open(p)
+		// Read once with the lines the untracked files' counts read.
+		ff, err := git.ReadFileFacts(p, info)
+		if errors.Is(err, git.ErrFileChanged) {
+			return filePart{err: ErrChanged}
+		}
 		if err != nil {
 			return filePart{err: err}
 		}
-		_, err = io.CopyBuffer(content, file, buffer)
-		file.Close()
-		if err != nil {
-			return filePart{err: err}
-		}
+		part.data = append(part.data, ff.Sum[:]...)
+		part.sum = fileSum{info: info, sum: ff.Sum[:]}
+		return part
 	default:
 		return filePart{err: fmt.Errorf("cannot fingerprint %q", entry.path)}
 	}
