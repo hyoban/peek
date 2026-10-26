@@ -9,6 +9,8 @@ package fileicons
 
 import (
 	"embed"
+	"image"
+	stddraw "image/draw"
 	"path"
 	"regexp"
 	"strings"
@@ -173,4 +175,93 @@ func View(c *ui.Context, p string, size float32, muted, tint ui.Color) ui.Elemen
 		ui.Text(c, icon.Char).Font(icon.Font).FontSize(size * icon.Scale).TextColor(color).SingleLine()
 	})
 	return box
+}
+
+// pictures are the icons drawn as pictures, by name, size and theme.
+var pictures = map[pictureKey]*image.RGBA{}
+
+type pictureKey struct {
+	name       string
+	size       int
+	dark, open bool
+}
+
+// Picture returns the icon of the file at p drawn as a picture size
+// points square, at twice that in pixels, for a list of the system's to
+// show: in its colours, or black where it has none, which mask tells the
+// list to colour as it colours text. It draws each icon once.
+func Picture(p string, size int, dark bool) (img image.Image, mask bool) {
+	icon := For(p, dark)
+	mask = icon.SVG == nil && icon.Color == (ui.Color{})
+	k := pictureKey{name: icon.Name, size: size, dark: dark}
+	if pic, ok := pictures[k]; ok {
+		return pic, mask
+	}
+	pic := draw(size, func(c *ui.Context) {
+		if icon.SVG != nil {
+			ui.Image(c, icon.SVG).Size(float32(size), float32(size)).Shrink(0)
+			return
+		}
+		color := icon.Color
+		if mask {
+			color = ui.Hex("#000000")
+		}
+		// A glyph wider than the square overflows it on both sides, as
+		// the rows of the drawn tree show it.
+		ui.Text(c, icon.Char).Font(icon.Font).FontSize(float32(size) * icon.Scale).TextColor(color).SingleLine().Shrink(0)
+	})
+	pictures[k] = pic
+	return pic, mask
+}
+
+// FolderPicture returns the icon of the folder at p, open or closed, in
+// VS Code's icon theme, as Picture does a file's: nil where Peek follows
+// none.
+func FolderPicture(p string, open bool, size int, dark bool) image.Image {
+	t := vscode.Load()
+	if t == nil {
+		return nil
+	}
+	name := t.folder(p, open, dark)
+	svg := t.svg(name)
+	if svg == nil {
+		return nil
+	}
+	k := pictureKey{name: "folder:" + name, size: size, dark: dark, open: open}
+	if pic, ok := pictures[k]; ok {
+		return pic
+	}
+	pic := draw(size, func(c *ui.Context) {
+		ui.Image(c, svg).Size(float32(size), float32(size))
+	})
+	pictures[k] = pic
+	return pic
+}
+
+// draw draws view in a square of size points, at twice that, over
+// nothing: in the middle of a larger one, then cut to what it drew, so
+// that a glyph wider than the square shows whole.
+func draw(size int, view func(c *ui.Context)) *image.RGBA {
+	room := size * 2
+	pic := ui.Render(func(c *ui.Context) {
+		c.Root().Background(ui.Transparent)
+		ui.Row(c).Size(float32(room), float32(room)).Center().Children(func() { view(c) })
+	}, room, room, 2)
+	drawn := image.Rectangle{}
+	for y := pic.Rect.Min.Y; y < pic.Rect.Max.Y; y++ {
+		for x := pic.Rect.Min.X; x < pic.Rect.Max.X; x++ {
+			if pic.RGBAAt(x, y).A != 0 {
+				drawn = drawn.Union(image.Rect(x, y, x+1, y+1))
+			}
+		}
+	}
+	side := max(size*2, drawn.Dx(), drawn.Dy())
+	mid := pic.Rect.Size().Div(2)
+	if !drawn.Empty() {
+		mid = drawn.Min.Add(drawn.Size().Div(2))
+	}
+	square := image.Rect(0, 0, side, side).Add(mid.Sub(image.Pt(side/2, side/2)))
+	out := image.NewRGBA(image.Rect(0, 0, side, side))
+	stddraw.Draw(out, out.Rect, pic, square.Min, stddraw.Src)
+	return out
 }
