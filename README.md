@@ -170,6 +170,13 @@ scripts/screenshots.sh path/to/dify
 
 It needs Screen Recording for the app it runs in, and switches the appearance through System Events; Peek's saved projects and window, and the appearance, are put back after.
 
+The performance tests time opening a project, scrolling its diffs, resizing the window and following its files, over repositories made for them, and `scripts/perf/compare.sh` times [Godiff](https://github.com/egoist/godiff) over the same ones; [docs/performance.md](docs/performance.md) tells what they found:
+
+```bash
+PEEK_PERF=1 go test ./internal/app -run '^TestPerf' -v
+scripts/perf/compare.sh
+```
+
 ## License
 
 [MIT](LICENSE). The icon fonts in [internal/fileicons/fonts](internal/fileicons/fonts) keep their own licenses, listed in its [NOTICE](internal/fileicons/fonts/NOTICE).
