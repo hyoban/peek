@@ -234,8 +234,19 @@ func (a *app) view(c *ui.Context) {
 	a.treeShown = a.reveal(c, "tree", a.showTree)
 	a.historyShown = a.reveal(c, "history", a.showHistory)
 	a.nativeBar = a.nativeToolbar(c)
+	// Under AppKit's toolbar, the columns are its split view's, which the
+	// user drags and which slides them in and out: they show at its
+	// widths.
+	split := a.columnWidths()
+	if split != nil {
+		a.treeShown, a.historyShown = shown(split[0], a.treeWidth), shown(split[2], a.historyWidth)
+	}
 	tree, history := a.treeShown > 0, a.historyShown > 0
 	treeWidth, historyWidth := sliding(&a.treeWidth, a.treeShown), sliding(&a.historyWidth, a.historyShown)
+	if split != nil {
+		tw, hw := float32(split[0]), float32(split[2])
+		treeWidth, historyWidth = &tw, &hw
+	}
 	a.diffWidth, _ = c.Size()
 	if tree {
 		a.diffWidth -= *treeWidth
@@ -258,6 +269,19 @@ func (a *app) view(c *ui.Context) {
 			}
 		})
 	}
+	if split != nil {
+		ui.Row(c).Fill().Children(func() {
+			if tree {
+				ui.Column(c).Width(*treeWidth).Shrink(0).FillHeight().Clip().
+					Children(slide(c, a.treeWidth, a.themedPane(c, func() { a.treePane(c) })))
+			}
+			ui.Column(c).Grow(1).MinWidth(0).FillHeight().Children(a.themedPane(c, content))
+			if history {
+				ui.Column(c).Width(*historyWidth).Shrink(0).FillHeight().Clip().
+					Children(slideStart(c, a.historyWidth, a.themedPane(c, func() { a.history(c) })))
+			}
+		})
+	}
 	rest := func() {
 		if tree {
 			a.lineless(c, func() {
@@ -267,11 +291,13 @@ func (a *app) view(c *ui.Context) {
 			content()
 		}
 	}
-	if history {
+	switch {
+	case split != nil:
+	case history:
 		a.lineless(c, func() {
 			endSplit(c, historyWidth, a.historyWidth, a.themedPane(c, func() { a.history(c) }), a.themedPane(c, rest)).Fill()
 		})
-	} else {
+	default:
 		rest()
 	}
 	a.askPopover(c)
@@ -355,6 +381,35 @@ func sliding(width *float32, shown float32) *float32 {
 	}
 	w := *width * shown
 	return &w
+}
+
+// columnWidths returns the widths the columns of AppKit's split view
+// show at, the sidebar's, the text's and the history's: nil without it.
+func (a *app) columnWidths() []float64 {
+	if !a.nativeBar {
+		return nil
+	}
+	widths := a.win.ToolbarColumnWidths()
+	if len(widths) != 3 {
+		return nil
+	}
+	return widths
+}
+
+// shown is how far a column of the split view shows, of its width.
+func shown(at float64, width float32) float32 {
+	if width <= 0 {
+		return 0
+	}
+	return min(float32(at)/width, 1)
+}
+
+// slideStart is slide for a column at the end, its pane against the
+// divider at its start.
+func slideStart(c *ui.Context, width float32, build func()) func() {
+	return func() {
+		ui.Column(c).Absolute().Top(0).Bottom(0).Start(0).Width(width).Children(build)
+	}
 }
 
 // slide builds a column's pane at its full width, against the divider,

@@ -21,6 +21,10 @@ func (a *app) nativeToolbar(c *ui.Context) bool {
 	return a.win.SetToolbar(a.toolbarSpec(c))
 }
 
+// minSidebar and maxSidebar bound the widths the user drags the sidebar
+// and the history to.
+const minSidebar, maxSidebar = 220, 560
+
 // toolbarSpec is the toolbar as the state has it now. Its items stay the
 // same, hidden where they do not apply, for the arrangement the user
 // chooses to keep.
@@ -31,7 +35,7 @@ func (a *app) toolbarSpec(c *ui.Context) *mygo.Toolbar {
 	// They slide as the view's do (reveal), and keep their part of the
 	// toolbar while they hide, its items staying where they stop, as
 	// Xcode's: collapsed, the items would jump to the next column's.
-	tree, history := float64(a.treeWidth*a.treeShown)+1, float64(a.historyWidth*a.historyShown)+1
+	tree, history := float64(a.treeWidth), float64(a.historyWidth)
 	text := float64(w) - tree - history
 	services := c.Services()
 	page := a.githubPage()
@@ -79,9 +83,23 @@ func (a *app) toolbarSpec(c *ui.Context) *mygo.Toolbar {
 		Columns: []mygo.ToolbarColumn{
 			// The sidebar and the history over the window's color, as
 			// Xcode's navigator and inspector, around the text.
-			{Width: tree, Sidebar: a.treeShown > 0},
+			// The user drags their dividers, and AppKit slides them in and
+			// out, as Xcode's.
+			{Width: tree, Collapsed: !a.showTree, Sidebar: true, Resizable: true, MinWidth: minSidebar, MaxWidth: maxSidebar},
 			{Width: text},
-			{Width: history, Sidebar: a.historyShown > 0},
+			{Width: history, Collapsed: !a.showHistory, Sidebar: true, Resizable: true, MinWidth: minSidebar, MaxWidth: maxSidebar},
+		},
+		ColumnsChanged: func(widths []float64, user bool) {
+			// The widths the user drags the columns to, which they keep.
+			if !user || len(widths) != 3 {
+				return
+			}
+			if widths[0] > 0 {
+				a.treeWidth = float32(widths[0])
+			}
+			if widths[2] > 0 {
+				a.historyWidth = float32(widths[2])
+			}
 		},
 		Customizable: true,
 		AutosaveName: "peek.toolbar",
