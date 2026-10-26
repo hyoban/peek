@@ -732,11 +732,11 @@ func splitRefs(text string) []string {
 	return parts
 }
 
-// sideList insets a list of a side column, the history or a tree, so
-// that its rows' highlights clear the divider and the column's edges.
+// sideList gives a list of the sidebar the column's width, to its edges:
+// AppKit's source list insets its rows and their highlights itself, and
+// its headings line up with the column's title then, as a sidebar's.
 func sideList(c *ui.Context, list ui.Element) ui.Element {
-	t := c.Theme()
-	return list.Grow(1).FillWidth().Padding(t.Space(1.5), t.Space(2))
+	return list.Grow(1).FillWidth()
 }
 
 // ink is the colors of a row of a side list: the accent's text where it
