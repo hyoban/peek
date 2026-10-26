@@ -27,7 +27,7 @@ All of the commit's files, to read any of them as it was then.
 - The uncommitted changes always at the top of the history
 - Changed files grouped into code, tests, docs and lockfiles or generated files, with their added and deleted lines, and each diff marked viewed once read; tests, docs and generated files start folded as viewed, and a viewed diff opens again when chosen in the sidebar
 - Filter the sidebar's files by path
-- Jump to definitions in Go and TypeScript files in the working tree, including dependency sources, with Back and Forward navigation
+- Jump to definitions in Go, TypeScript and Kotlin files in the working tree, with Back and Forward navigation
 - Syntax-highlighted diffs, with unmodified lines and imports folded away, unified or side by side
 - Step through the changes of all the files with Next and Previous Change
 - Select lines by their numbers to copy a reference to them, or their link on GitHub
@@ -64,7 +64,7 @@ All of the commit's files, to read any of them as it was then.
 | <kbd>⌃</kbd> <kbd>⌘</kbd> <kbd>D</kbd> | Show the diffs side by side or unified |
 | <kbd>⌃</kbd> <kbd>⌘</kbd> <kbd>↓</kbd> / <kbd>⌃</kbd> <kbd>⌘</kbd> <kbd>↑</kbd> | Next / previous change |
 | <kbd>⌘</kbd> <kbd>F</kbd> | Find in the file |
-| <kbd>⌘</kbd> click / <kbd>F12</kbd> | Go to definition (working tree, Go and TypeScript) |
+| <kbd>⌘</kbd> click / <kbd>F12</kbd> | Go to definition (working tree, Go, TypeScript and Kotlin) |
 | <kbd>⌃</kbd> <kbd>⌘</kbd> <kbd>←</kbd> / <kbd>⌃</kbd> <kbd>⌘</kbd> <kbd>→</kbd> | Go back / forward |
 | <kbd>⌘</kbd> <kbd>G</kbd> / <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>G</kbd> | Find next / previous |
 | <kbd>⌘</kbd> <kbd>E</kbd> | Use the selection for Find |
@@ -93,11 +93,13 @@ In **Files**, choose **Uncommitted Changes** in the history, then ⌘-click a
 function, type or variable, or use **Navigate → Go to Definition** (F12).
 Hold ⌘ over an identifier to underline it and show a pointing hand before
 clicking. This offers a lookup; the language server resolves its definition.
-Go and TypeScript (`.ts`, `.tsx`, `.mts`, `.cts`) use local language servers:
+Go, TypeScript (`.ts`, `.tsx`, `.mts`, `.cts`) and Kotlin (`.kt`, `.kts`)
+use local language servers:
 
 ```bash
 go install golang.org/x/tools/gopls@latest
 npm install -g typescript-language-server typescript@6
+brew install JetBrains/utils/kotlin-lsp
 ```
 
 The TypeScript language server currently uses TypeScript 6's `tsserver`;
@@ -106,6 +108,15 @@ the repository's `node_modules/.bin`, then searches `PATH`. It also looks in
 `~/.local/bin` and `~/go/bin`. Node.js and Go must be available to the servers.
 Missing servers are reported when a definition is requested; Peek does not
 download them automatically.
+
+Kotlin uses [JetBrains' Kotlin Language Server](https://github.com/Kotlin/kotlin-lsp)
+over stdio. Peek finds the enclosing Gradle or Maven project, including
+builds in repository subdirectories. The first lookup waits for the server
+to import and index it. The project's JDK and Gradle/Maven wrapper (or
+installed build tool) must be available. Kotlin targets must be files on disk;
+virtual or JAR source locations are not supported.
+The server's Android support is experimental and Kotlin Multiplatform
+support is still under development.
 
 A single definition opens directly; multiple definitions offer a choice.
 Standard libraries and dependency files open read-only, even outside the
@@ -195,6 +206,9 @@ CGO_ENABLED=0 go test ./...
 
 With both language servers installed, `PEEK_LSP_TEST=1 go test ./internal/definition`
 also checks real cross-file, TypeScript path-alias and standard-library definitions.
+With `kotlin-lsp`, Maven and a JDK installed,
+`PEEK_KOTLIN_LSP_TEST=1 go test ./internal/definition` checks real Kotlin
+cross-file function and type definitions, including UTF-16 and CRLF positions.
 
 The screenshots above are of the installed Peek's window, over a clone of [Dify](https://github.com/langgenius/dify) with `main` at commit `9dc53da` ([#44561](https://github.com/langgenius/dify/pull/44561)), whose `origin` is the GitHub repository and `origin/main` 58 commits on: that commit in Changes, and `dify-agent-runtime/internal/agentcli/config.go` in Files, in the light and the dark appearance, the window as the screen shows it, its sidebars' glass over the desktop's wallpaper, with its shadow. Take them again, into `docs/`, from a clone of Dify of your own:
 

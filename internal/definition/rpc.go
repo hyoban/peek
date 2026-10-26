@@ -33,15 +33,18 @@ func (e *rpcError) Error() string { return e.Message }
 // rpc drains notifications even between requests, so server output never
 // holds up a later definition. Only the reader delivers replies.
 type rpc struct {
-	in      io.WriteCloser
-	writes  sync.Mutex
-	mu      sync.Mutex
-	next    int
-	pending map[int]chan message
-	done    chan struct{}
-	err     error
-	stop    context.CancelFunc
-	root    string
+	in         io.WriteCloser
+	writes     sync.Mutex
+	mu         sync.Mutex
+	next       int
+	pending    map[int]chan message
+	done       chan struct{}
+	err        error
+	stop       context.CancelFunc
+	root       string
+	importDone chan struct{}
+	importOnce sync.Once
+	importErr  error
 }
 
 func startRPC(ctx context.Context, root, program string, args ...string) (*rpc, error) {
@@ -69,7 +72,7 @@ func startRPC(ctx context.Context, root, program string, args ...string) (*rpc, 
 		out.Close()
 		return nil, err
 	}
-	r := &rpc{in: in, pending: map[int]chan message{}, done: make(chan struct{}), stop: cancel, root: root}
+	r := &rpc{in: in, pending: map[int]chan message{}, done: make(chan struct{}), stop: cancel, root: root, importDone: make(chan struct{})}
 	go func() {
 		err := r.read(bufio.NewReader(out))
 		cancel()
@@ -173,7 +176,10 @@ func (r *rpc) read(in *bufio.Reader) error {
 			return err
 		}
 		if m.Method != "" {
-			if len(m.ID) > 0 {
+			if m.Method == "intellij/workspaceImportState" {
+				r.workspaceImported(m.Params)
+			}
+			if len(m.ID) > 0 && string(m.ID) != "null" {
 				if err := r.answer(m); err != nil {
 					return err
 				}
@@ -192,6 +198,46 @@ func (r *rpc) read(in *bufio.Reader) error {
 			}
 		}
 		r.mu.Unlock()
+	}
+}
+
+// Kotlin can answer definitions with an empty list before its initial project
+// import finishes. Wait for its completion notification, including failures.
+func (r *rpc) workspaceImported(raw json.RawMessage) {
+	var state struct {
+		Phase   string `json:"phase"`
+		Folders []struct {
+			Status  string `json:"status"`
+			Message string `json:"message"`
+		} `json:"folders"`
+	}
+	if json.Unmarshal(raw, &state) != nil || state.Phase == "" || state.Phase == "IN_PROGRESS" {
+		return
+	}
+	r.importOnce.Do(func() {
+		if state.Phase != "FINISHED" {
+			r.importErr = fmt.Errorf("Kotlin project import: %s", state.Phase)
+		}
+		for _, folder := range state.Folders {
+			if folder.Status == "FAILED" || folder.Status == "CANCELLED" {
+				r.importErr = fmt.Errorf("Kotlin project import %s: %s. Check the project's Gradle/Maven setup and JDK", folder.Status, folder.Message)
+				break
+			}
+		}
+		close(r.importDone)
+	})
+}
+
+func (r *rpc) waitImport(ctx context.Context) error {
+	select {
+	case <-r.importDone:
+		return r.importErr
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-r.done:
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		return r.err
 	}
 }
 

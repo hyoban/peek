@@ -45,33 +45,41 @@ func (c *Client) Definition(ctx context.Context, path, text string, offset int) 
 	}
 	language := Language(path)
 	if language == "" {
-		return nil, errors.New("definition lookup supports Go and TypeScript files")
+		return nil, errors.New("definition lookup supports Go, TypeScript and Kotlin files")
 	}
 	key := language
 	if key == "typescriptreact" {
 		key = "typescript"
 	}
-	r := c.servers[key]
+	root, serverKey := c.root, key
+	if key == "kotlin" {
+		root = kotlinRoot(c.root, path)
+		serverKey += "\x00" + root
+	}
+	r := c.servers[serverKey]
 	if r != nil {
 		select {
 		case <-r.done:
-			delete(c.servers, key)
+			delete(c.servers, serverKey)
 			r = nil
 		default:
 		}
 	}
 	if r == nil {
-		program, args, err := serverCommand(c.root, key)
+		program, args, err := serverCommand(root, key)
 		if err != nil {
 			return nil, err
 		}
-		r, err = startRPC(c.ctx, c.root, program, args...)
+		r, err = startRPC(c.ctx, root, program, args...)
 		if err != nil {
 			return nil, err
 		}
 		var initialized struct {
 			Capabilities struct {
 				PositionEncoding string `json:"positionEncoding"`
+				Experimental     struct {
+					WorkspaceImport bool `json:"workspaceImport"`
+				} `json:"experimental"`
 			} `json:"capabilities"`
 		}
 		var options any
@@ -82,9 +90,9 @@ func (c *Client) Definition(ctx context.Context, path, text string, offset int) 
 		}
 		err = r.call(ctx, "initialize", map[string]any{
 			"initializationOptions": options,
-			"processId":             os.Getpid(), "rootUri": fileURI(c.root),
+			"processId":             os.Getpid(), "rootUri": fileURI(root),
 			"clientInfo":       map[string]any{"name": "Peek"},
-			"workspaceFolders": []any{map[string]any{"uri": fileURI(c.root), "name": filepath.Base(c.root)}},
+			"workspaceFolders": []any{map[string]any{"uri": fileURI(root), "name": filepath.Base(root)}},
 			"capabilities": map[string]any{
 				"general":      map[string]any{"positionEncodings": []string{"utf-16"}},
 				"textDocument": map[string]any{"definition": map[string]any{"linkSupport": true}},
@@ -97,11 +105,14 @@ func (c *Client) Definition(ctx context.Context, path, text string, offset int) 
 		if err == nil {
 			err = r.notify("initialized", struct{}{})
 		}
+		if err == nil && key == "kotlin" && initialized.Capabilities.Experimental.WorkspaceImport {
+			err = r.waitImport(ctx)
+		}
 		if err != nil {
 			r.stop()
 			return nil, err
 		}
-		c.servers[key] = r
+		c.servers[serverKey] = r
 	}
 	// didOpen sends exactly the visible source. Closing after the query lets
 	// the server read later disk changes instead of retaining a stale overlay.
@@ -112,7 +123,7 @@ func (c *Client) Definition(ctx context.Context, path, text string, offset int) 
 		"uri": uri, "languageId": language, "version": 1, "text": text,
 	}}); err != nil {
 		r.stop()
-		delete(c.servers, key)
+		delete(c.servers, serverKey)
 		return nil, err
 	}
 	var raw json.RawMessage
@@ -121,26 +132,34 @@ func (c *Client) Definition(ctx context.Context, path, text string, offset int) 
 	}, &raw)
 	if err != nil {
 		r.stop()
-		delete(c.servers, key)
+		delete(c.servers, serverKey)
 		return nil, err
 	}
 	if err := r.notify("textDocument/didClose", map[string]any{"textDocument": map[string]any{"uri": uri}}); err != nil {
 		r.stop()
-		delete(c.servers, key)
+		delete(c.servers, serverKey)
 		return nil, err
 	}
 	return locations(raw)
 }
 
 func serverCommand(root, language string) (string, []string, error) {
-	name, install := "gopls", "go install golang.org/x/tools/gopls@latest"
+	var name, install string
 	var args []string
-	if language == "typescript" {
+	switch language {
+	case "go":
+		name, install = "gopls", "go install golang.org/x/tools/gopls@latest"
+	case "typescript":
 		name, install = "typescript-language-server", "npm install -g typescript-language-server typescript@6"
 		args = []string{"--stdio"}
 		if p := filepath.Join(root, "node_modules", ".bin", name); executable(p) {
 			return p, args, nil
 		}
+	case "kotlin":
+		name, install = "kotlin-lsp", "brew install JetBrains/utils/kotlin-lsp"
+		args = []string{"--stdio"}
+	default:
+		return "", nil, fmt.Errorf("unsupported language: %s", language)
 	}
 	if p, err := exec.LookPath(name); err == nil {
 		return p, args, nil

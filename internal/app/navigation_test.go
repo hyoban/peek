@@ -71,6 +71,43 @@ func TestDefinitionPointerFeedback(t *testing.T) {
 	}
 }
 
+func TestKotlinDefinitionNavigation(t *testing.T) {
+	for _, name := range []string{"Main.kt", "script.kts"} {
+		t.Run(name, func(t *testing.T) {
+			a, tt, _ := navigationApp(t)
+			text := "fun target() {}\nfun main() { target() }\n"
+			if err := os.WriteFile(filepath.Join(a.repo, name), []byte(text), 0600); err != nil {
+				t.Fatal(err)
+			}
+			a.reloadFiles()
+			settle(tt)
+			a.openInFiles(git.Worktree, name)
+			settle(tt)
+			calls := 0
+			a.navigation.client = &fakeDefinitions{lookup: func(path, source string, at int) ([]definition.Location, error) {
+				calls++
+				if path != filepath.Join(a.repo, name) || source != text || at != strings.LastIndex(text, "target") {
+					t.Fatalf("lookup %s:%d: %q", path, at, source)
+				}
+				return []definition.Location{{Path: path, Range: definition.Range{Start: definition.Position{Character: 4}, End: definition.Position{Character: 10}}}}, nil
+			}}
+			a.code.Select(strings.LastIndex(text, "target"), strings.LastIndex(text, "target"))
+			a.navigation.focus = true
+			tt.Frame()
+			tt.Key(0, ui.KeyF12)
+			settle(tt)
+			if calls != 1 || a.code.SelectedText() != "target" || a.code.Cursor() > 10 {
+				t.Fatalf("definition: %d calls, cursor %d, selection %q", calls, a.code.Cursor(), a.code.SelectedText())
+			}
+			a.commits[a.loadedRow].Hash = "historical"
+			a.configureNavigation()
+			if a.code.OnDefinition != nil || a.canDefine() {
+				t.Fatal("Kotlin definition enabled in history")
+			}
+		})
+	}
+}
+
 func TestDefinitionStatusKeepsEditorPosition(t *testing.T) {
 	a, tt, _ := navigationApp(t)
 	before, ok := tt.Find("Code editor")

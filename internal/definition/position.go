@@ -101,6 +101,8 @@ func Language(path string) string {
 		return "typescript"
 	case ".tsx":
 		return "typescriptreact"
+	case ".kt", ".kts":
+		return "kotlin"
 	}
 	return ""
 }

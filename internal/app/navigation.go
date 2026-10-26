@@ -128,7 +128,12 @@ func (a *app) goDefinition(offset int) {
 	client, source, seq := n.client, a.navigationSource(), n.seq
 	text := a.code.Buffer.String()
 	path := a.sourcePath(a.openFile)
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	timeout := 45 * time.Second
+	if definition.Language(path) == "kotlin" {
+		// The first lookup imports the Gradle/Maven project before resolving.
+		timeout = 2 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	n.cancel, n.source, n.busy, n.note = cancel, &source, true, "Finding definition…"
 	a.background(func() func() {
 		locations, err := client.Definition(ctx, path, text, offset)
