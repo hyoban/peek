@@ -27,6 +27,7 @@ All of the commit's files, to read any of them as it was then.
 - The uncommitted changes always at the top of the history
 - Changed files grouped into code, tests, docs and lockfiles or generated files, with their added and deleted lines, and each diff marked viewed once read; tests, docs and generated files start folded as viewed, and a viewed diff opens again when chosen in the sidebar
 - Filter the sidebar's files by path
+- Related files nested in **Files** using the bundled [antfu/vscode-file-nesting-config](https://github.com/antfu/vscode-file-nesting-config) rules: expand a file's arrow to see its companions, or select the file itself to read it. Changes keeps its existing groups. Nesting works offline, within each directory; chains flatten to one level, and files matching several parents appear once, under the first root by name.
 - Jump to definitions in Go, TypeScript and Kotlin files in the working tree, with Back and Forward navigation
 - Syntax-highlighted diffs, with unmodified lines and imports folded away, unified or side by side
 - Step through the changes of all the files with Next and Previous Change

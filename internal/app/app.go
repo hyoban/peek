@@ -1344,7 +1344,7 @@ func (a *app) loadCommit(hash string) {
 func (a *app) loadFiles(hash string) {
 	a.background(func() func() {
 		files, err := git.ListFiles(a.repo, hash)
-		tree := fold(files)
+		tree := foldFiles(files)
 		return func() {
 			if cm, ok := a.current(); !ok || cm.Hash != hash || a.filesFor != a.loadedRow {
 				return

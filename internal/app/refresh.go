@@ -279,7 +279,7 @@ func (a *app) reloadFiles() {
 	gen := a.textGen
 	a.background(func() func() {
 		files, err := git.ListFiles(a.repo, git.Worktree)
-		tree := fold(files)
+		tree := foldFiles(files)
 		var text string
 		var textErr error
 		if open != "" {
