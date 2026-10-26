@@ -247,59 +247,39 @@ func (a *app) conversationsPane(c *ui.Context) {
 		emptyNote(c, "No Conversations")
 		return
 	}
-	a.convList.Selected = &a.convRow
-	// No keys: the list's choice following its conversation would leave
-	// a new one, at the top where the old one was, unchosen.
-	a.convList.Label = func(i int) string { return a.conversations[i].Title }
-	// The conversation deleted goes once the list is drawn, which draws
-	// its rows to the count it was given.
+	a.convList.List.Selected = &a.convRow
+	a.convList.RowHeight = 40 // of two lines
+	// The conversation deleted goes once the list is built, as its rows
+	// come from the conversations.
 	var deleted *conversation
-	a.withFocus(c, a.convList.FocusWithin(c), func() {
-		list := ui.List(c.Key("conversations"), &a.convList, len(a.conversations)).Gap(1).Label("Conversations")
-		sideList(c, list).Rows(func(row ui.ListRow) {
-			conv := a.conversations[row.Index]
-			if a.conversationItem(row, conv) {
-				deleted = conv
-			}
-		})
-	})
+	item := a.conversationItem(c, &deleted)
+	list := ui.SourceList(c.Key("conversations"), &a.convList, a.conversations, func(*conversation) []*conversation { return nil }, item)
+	sideList(c, list).Label("Conversations")
 	if deleted != nil {
 		a.deleteConversation(deleted)
 	}
 }
 
-// conversationItem is the row of a conversation, as a source list's: its
-// title, and when and what of under it, or Codex working on it. It
-// reports whether Delete Conversation was chosen in its context menu.
-func (a *app) conversationItem(row ui.ListRow, conv *conversation) (deleted bool) {
-	c := row.Context
-	t := c.Theme()
-	in := rowInk(t, row.Selected(), row.ListFocused())
-	item := ui.Row(c).FillWidth().Gap(t.Space(2)).Padding(t.Space(1.5), t.Space(2)).AlignItems(ui.Center).Children(func() {
-		ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
-			ui.Text(c, conv.Title).TextColor(in.text).SingleLine().Ellipsis("…").FillWidth()
-			detail := shortDate(conv.Created, time.Now())
-			if conv.Scope != "" {
-				detail += " · " + conv.Scope
-			}
-			ui.Text(c, detail).FontSize(smallSize).TextColor(in.muted).
-				SingleLine().Ellipsis("…").FillWidth()
-		})
-		if a.running(conv) {
-			ui.Spinner(c).Size(12, 12).Shrink(0)
-		}
-	})
+// conversationItem returns what describes the row of a conversation, as a
+// source list's: its title, over when and what of, and Codex working on
+// it. Delete Conversation in its context menu sets deleted.
+func (a *app) conversationItem(c *ui.Context, deleted **conversation) func(conv *conversation) ui.SourceListItem {
 	services := c.Services()
-	item.ContextMenu(func(m *ui.Menu) {
-		if m.Item("Copy Conversation").Chosen() {
-			services.WriteClipboard(conv.text())
+	return func(conv *conversation) ui.SourceListItem {
+		detail := shortDate(conv.Created, time.Now())
+		if conv.Scope != "" {
+			detail += " · " + conv.Scope
 		}
-		m.Separator()
-		if m.Item("Delete Conversation").Chosen() {
-			deleted = true
-		}
-	})
-	return deleted
+		return ui.SourceListItem{Title: conv.Title, Subtitle: detail, Busy: a.running(conv), Menu: func(m *ui.Menu) {
+			if m.Item("Copy Conversation").Chosen() {
+				services.WriteClipboard(conv.text())
+			}
+			m.Separator()
+			if m.Item("Delete Conversation").Chosen() {
+				*deleted = conv
+			}
+		}}
+	}
 }
 
 // text is the conversation as copied: its requests and answers.

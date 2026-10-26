@@ -4,6 +4,7 @@ package app
 
 import (
 	"fmt"
+	"image"
 	"log"
 	"os"
 	"path"
@@ -67,7 +68,7 @@ type app struct {
 	// first, kept in convFile; convRow is the one chosen, and navigator
 	// which the sidebar lists, the files or the conversations.
 	conversations []*conversation
-	convList      ui.ListState
+	convList      ui.OutlineState[*conversation]
 	convRow       int
 	convFile      string
 	navigator     int
@@ -110,9 +111,12 @@ type app struct {
 	modeChoice              int // the mode switch's, which setMode follows
 
 	commits    []git.Commit
-	commitList ui.ListState
-	commitRow  int
-	loadedRow  int // the commit whose changes are loaded, or loading
+	commitList ui.OutlineState[string] // by hash, "" the work tree
+	// pictures are the avatars and badges of the history's rows, drawn
+	// for its list, by what they show.
+	pictures  map[string]*image.RGBA
+	commitRow int
+	loadedRow int // the commit whose changes are loaded, or loading
 	// worktreeChanges are the work tree's, read with the history, for
 	// its entry's first load.
 	worktreeChanges []git.Change
@@ -722,76 +726,87 @@ func (a *app) history(c *ui.Context) {
 			loading(c)
 			return
 		}
-		a.commitList.Selected = &a.commitRow
-		a.commitList.Key = func(i int) any { return a.commits[i].Hash } // "" the work tree
-		a.commitList.Label = func(i int) string { return a.commits[i].Subject }
-		a.withFocus(c, a.commitList.FocusWithin(c), func() {
-			list := ui.List(c.Key("history"), &a.commitList, len(a.commits)).Gap(1).Label("History")
-			sideList(c, list).Rows(func(row ui.ListRow) { a.commitItem(row, row.Index) })
-		})
+		a.commitList.List.Selected = &a.commitRow
+		// An inspector's list, of rows of two lines under their avatars.
+		a.commitList.Inset, a.commitList.RowHeight = true, 46
+		hashes := make([]string, len(a.commits))
+		index := make(map[string]int, len(a.commits))
+		for i, cm := range a.commits {
+			hashes[i], index[cm.Hash] = cm.Hash, i
+		}
+		item := a.commitItem(c)
+		list := ui.SourceList(c.Key("history"), &a.commitList, hashes, func(string) []string { return nil },
+			func(hash string) ui.SourceListItem { return item(a.commits[index[hash]]) })
+		list.Grow(1).FillWidth().Label("History")
 	})
 }
 
-// commitItem is the row of the commit at index i of the history.
-func (a *app) commitItem(row ui.ListRow, i int) {
-	c := row.Context
-	t := c.Theme()
-	cm := a.commits[i]
-	in := rowInk(t, row.Selected(), row.ListFocused())
-	text, muted := in.text, in.muted
-	item := ui.Row(c).FillWidth().Gap(t.Space(2.5)).Padding(t.Space(2), t.Space(2)).AlignItems(ui.Start).Children(func() {
+// commitItem returns what describes the row of a commit of the history:
+// its subject over when and who, after its author's avatar with the
+// first co-author's over its corner, as GitHub stacks them; the work
+// tree's and a range's with their badges, over their summaries.
+func (a *app) commitItem(c *ui.Context) func(cm git.Commit) ui.SourceListItem {
+	dark := c.Theme().Dark
+	orange, purple := system(c, systemOrange), system(c, systemPurple)
+	ring := c.Theme().Background
+	services := c.Services()
+	return func(cm git.Commit) ui.SourceListItem {
+		it := ui.SourceListItem{Title: cm.Subject, Bold: true, ImageSize: 34}
 		if cm.Hash == git.Worktree || git.IsRange(cm.Hash) {
-			tint, glyph := system(c, systemOrange), worktreeIcon
+			tint, glyph, name := orange, worktreeIcon, "worktree"
 			if cm.Hash != git.Worktree {
-				tint, glyph = system(c, systemPurple), branchIcon
+				tint, glyph, name = purple, branchIcon, "range"
+				it.Tooltip = cm.Body
 			}
-			badge := ui.Box(c).Size(30, 30).Shrink(0).Radius(999).Center().
-				Background(tint.Alpha(0.16)).TextColor(tint)
-			if in.onAccent {
-				badge.Background(t.AccentText.Alpha(0.2)).TextColor(t.AccentText)
-			}
-			badge.Children(func() { ui.Icon(c, glyph).Size(15, 15) })
-			ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
-				ui.Text(c, cm.Subject).FontWeight(600).TextColor(text).SingleLine()
-				ui.Text(c, cm.Summary).FontSize(smallSize).TextColor(muted).SingleLine()
+			it.Subtitle = cm.Summary
+			it.Image = a.drawn(fmt.Sprint(name, dark), 30, func(c *ui.Context) {
+				ui.Box(c).Size(30, 30).Radius(999).Center().Background(tint.Alpha(0.16)).TextColor(tint).
+					Children(func() { ui.Icon(c, glyph).Size(15, 15) })
 			})
-			return
+			return it
 		}
-		// The first co-author over the author's corner, as GitHub
-		// stacks them.
-		ui.Box(c).Size(30, 30).Shrink(0).Children(func() {
-			a.personAvatar(c, cm.Author, cm.Email, 30)
-			if len(cm.CoAuthors) > 0 {
-				co := cm.CoAuthors[0]
-				// A ring of the row's own color parts the two.
-				ring := t.Background
-				if row.Selected() {
-					ring = t.Accent
+		it.Subtitle = shortDate(cm.Time, time.Now()) + " · " + authors(cm)
+		it.Tooltip = commitMessage(cm)
+		var co *git.Person
+		key := fmt.Sprint("avatar", dark, cm.Author, cm.Email, a.avatar(cm.Email) != nil)
+		if len(cm.CoAuthors) > 0 {
+			co = &cm.CoAuthors[0]
+			key += fmt.Sprint(co.Name, co.Email, a.avatar(co.Email) != nil)
+		}
+		it.Image = a.drawn(key, 30, func(c *ui.Context) {
+			ui.Box(c).Size(30, 30).Children(func() {
+				a.personAvatar(c, cm.Author, cm.Email, 30)
+				if co != nil {
+					// A ring of the window's color parts the two.
+					ui.Box(c).Size(19, 19).Radius(9.5).Center().Background(ring).
+						Absolute().Right(-4).Bottom(-4).Children(func() {
+						a.personAvatar(c, co.Name, co.Email, 16)
+					})
 				}
-				ui.Box(c).Size(19, 19).Radius(9.5).Center().Background(ring).
-					Absolute().Right(-4).Bottom(-4).Children(func() {
-					a.personAvatar(c, co.Name, co.Email, 16)
-				})
-			}
-		})
-		// What first, across the whole line, then when and who under it.
-		// The hash is in the details.
-		ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
-			ui.Text(c, cm.Subject).FontWeight(600).TextColor(text).SingleLine().Ellipsis("…").FillWidth()
-			ui.Row(c).FillWidth().Gap(t.Space(1.5)).AlignItems(ui.Baseline).Children(func() {
-				ui.Text(c, shortDate(cm.Time, time.Now())).FontSize(smallSize).TextColor(muted).SingleLine().Shrink(0)
-				ui.Text(c, "·").FontSize(smallSize).TextColor(muted).Shrink(0)
-				ui.Text(c, authors(cm)).FontSize(smallSize).TextColor(muted).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
 			})
 		})
-	})
-	switch {
-	case git.IsRange(cm.Hash):
-		item.Tooltip(cm.Body)
-	case cm.Hash != git.Worktree:
-		item.Tooltip(commitMessage(cm))
-		a.commitMenu(c, item, i, cm)
+		it.Menu = func(m *ui.Menu) { a.commitMenu(c, services, m, cm) }
+		return it
 	}
+}
+
+// drawn draws view, size DIPs square, as a picture for a list of the
+// system's, once for each key.
+func (a *app) drawn(key string, size int, view func(c *ui.Context)) *image.RGBA {
+	if pic, ok := a.pictures[key]; ok {
+		return pic
+	}
+	if a.pictures == nil {
+		a.pictures = map[string]*image.RGBA{}
+	}
+	// Room for what spills past the square, as a co-author's avatar.
+	room := size + 4
+	pic := ui.Render(func(c *ui.Context) {
+		c.Root().Background(ui.Transparent)
+		ui.Box(c).Size(float32(room), float32(room)).Children(func() { view(c) })
+	}, room, room, 2)
+	a.pictures[key] = pic
+	return pic
 }
 
 // commitMessage is a commit's whole message, its subject and body.
@@ -801,24 +816,21 @@ func commitMessage(cm git.Commit) string {
 
 // commitMenu is the context menu of a commit's row: copying its hash or
 // message, and its page on GitHub.
-func (a *app) commitMenu(c *ui.Context, item ui.Element, i int, cm git.Commit) {
-	services := c.Services()
-	item.ContextMenu(func(m *ui.Menu) {
-		if m.Item("Copy Commit Hash").Chosen() {
-			services.WriteClipboard(cm.Hash)
-			c.Toast("Commit Hash Copied")
+func (a *app) commitMenu(c *ui.Context, services ui.Services, m *ui.Menu, cm git.Commit) {
+	if m.Item("Copy Commit Hash").Chosen() {
+		services.WriteClipboard(cm.Hash)
+		c.Toast("Commit Hash Copied")
+	}
+	if m.Item("Copy Commit Message").Chosen() {
+		services.WriteClipboard(commitMessage(cm))
+		c.Toast("Commit Message Copied")
+	}
+	if a.github != "" {
+		m.Separator()
+		if m.Item("Open on GitHub").Chosen() {
+			services.OpenURL(a.github + "/commit/" + cm.Hash)
 		}
-		if m.Item("Copy Commit Message").Chosen() {
-			services.WriteClipboard(commitMessage(cm))
-			c.Toast("Commit Message Copied")
-		}
-		if a.github != "" {
-			m.Separator()
-			if m.Item("Open on GitHub").Chosen() {
-				services.OpenURL(a.github + "/commit/" + cm.Hash)
-			}
-		}
-	})
+	}
 }
 
 // personAvatar is the picture of someone, size DIPs across. Avatar lays
