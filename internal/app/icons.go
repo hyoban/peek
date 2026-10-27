@@ -15,6 +15,7 @@ var (
 	backIcon     = icon(`<path d="M10 3L5 8l5 5" stroke-width="1.8"/>`)
 	forwardIcon  = icon(`<path d="M6 3l5 5-5 5" stroke-width="1.8"/>`)
 	branchIcon   = icon(`<circle cx="4.5" cy="3.5" r="1.5"/><circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="5" r="1.5"/><path d="M4.5 5v6M11.5 6.5c0 2.5-3 2.5-5.5 4.6"/>`)
+	tagIcon      = icon(`<path d="M2.5 3.5a1 1 0 0 1 1-1h4l6 6-5 5-6-6z"/><circle cx="5.5" cy="5.5" r="1"/>`)
 	pullIcon     = icon(`<circle cx="4.5" cy="3.5" r="1.5"/><circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="12.5" r="1.5"/><path d="M4.5 5v6M11.5 11V6.5a2 2 0 0 0-2-2H7.5"/><path d="M9 3l-1.5 1.5L9 6"/>`)
 	checkIcon    = icon(`<path d="M3.5 8.5l3 3 6-7" stroke-width="1.6"/>`)
 	pullArrow    = icon(`<path d="M8 2.5v10M4 8.5l4 4 4-4" stroke-width="1.6"/>`)

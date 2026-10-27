@@ -170,6 +170,25 @@ func TestLoadCommitsBody(t *testing.T) {
 	}
 }
 
+func TestLoadCommitsTags(t *testing.T) {
+	dir := testutil.Repo(t)
+	testutil.Git(t, dir, "tag", "v1")
+	testutil.Git(t, dir, "tag", "-a", "v1.0.0", "-m", "Release")
+	testutil.Git(t, dir, "branch", "topic") // a branch is no tag
+	testutil.Git(t, dir, "commit", "-q", "--allow-empty", "-m", "Untagged")
+	commits, err := LoadCommits(dir, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(commits[0].Tags) != 0 {
+		t.Errorf("untagged commit's tags %q", commits[0].Tags)
+	}
+	got := slices.Sorted(slices.Values(commits[1].Tags))
+	if want := []string{"v1", "v1.0.0"}; !slices.Equal(got, want) {
+		t.Errorf("tags %q, want %q", got, want)
+	}
+}
+
 func TestLoadCommitsCoAuthors(t *testing.T) {
 	dir := testutil.Repo(t)
 	msg := "Pair on it\n\nWhy it changed.\n\nCo-authored-by: Bob Lee <bob@example.com>\nco-authored-by: Ada <ADA@example.com>\nCo-authored-by: Cy <cy@example.com>\nCo-authored-by: Bob Again <bob@example.com>\n"

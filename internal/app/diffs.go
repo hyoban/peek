@@ -358,6 +358,9 @@ func (a *app) commitMessage(c *ui.Context) {
 			})
 			ui.Column(c).Shrink(0).AlignItems(ui.End).Gap(t.Space(0.5)).Children(func() {
 				ui.Text(c, cm.Time.Format("Monday, January 2, 2006 at 15:04")).FontSize(smallSize).TextColor(t.TextMuted).SingleLine()
+				if len(cm.Tags) > 0 {
+					a.commitTags(c, cm.Tags)
+				}
 				ui.Text(c, cm.Short).FontSize(smallSize).Font(monoFamily).TextColor(t.TextMuted).SingleLine().
 					Tooltip(cm.Hash).ContextMenu(func(m *ui.Menu) {
 					if m.Item("Copy Commit Hash").Chosen() {
@@ -369,6 +372,27 @@ func (a *app) commitMessage(c *ui.Context) {
 		})
 		if body := strings.TrimSpace(cm.Body); body != "" {
 			ui.Text(c, body).TextColor(t.Text).Selectable().FillWidth()
+		}
+	})
+}
+
+// commitTags are the tags on a commit, each in a capsule of its own.
+func (a *app) commitTags(c *ui.Context, tags []string) {
+	t := c.Theme()
+	services := c.Services()
+	ui.Row(c).Gap(t.Space(1)).AlignItems(ui.Center).Children(func() {
+		for _, tag := range tags {
+			ui.Row(c.Key("tag:"+tag)).Gap(t.Space(1)).AlignItems(ui.Center).Padding(0, t.Space(1.5)).
+				Radius(999).Background(t.TextMuted.Alpha(0.12)).TextColor(t.TextMuted).Tooltip("Tag " + tag).
+				ContextMenu(func(m *ui.Menu) {
+					if m.Item("Copy Tag Name").Chosen() {
+						services.WriteClipboard(tag)
+						c.Toast("Tag Name Copied")
+					}
+				}).Children(func() {
+				ui.Icon(c, tagIcon).Size(10, 10).Shrink(0)
+				ui.Text(c, tag).FontSize(smallSize).FontWeight(500).SingleLine()
+			})
 		}
 	})
 }

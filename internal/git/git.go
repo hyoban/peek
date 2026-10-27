@@ -30,7 +30,8 @@ type Commit struct {
 	// name, as GitHub credits them, less the author.
 	CoAuthors []Person
 	Time      time.Time
-	Summary   string // what the work tree's entry says of its changes
+	Tags      []string // the tags on the commit
+	Summary   string   // what the work tree's entry says of its changes
 }
 
 // Worktree is the hash of the entry for the changes not committed yet:
@@ -124,16 +125,18 @@ func LoadCommits(repo string, limit int) ([]Commit, error) {
 	// The body spans lines, so the records end with a separator of
 	// their own.
 	const sep, end, each = "\x1f", "\x1e", "\x1d"
-	out, err := git(repo, "log", fmt.Sprintf("-n%d", limit),
+	// %D, of the tags alone, is "tag: v2, tag: v1": no tag's name has
+	// a space.
+	out, err := git(repo, "log", fmt.Sprintf("-n%d", limit), "--decorate-refs=refs/tags/",
 		"--format=%H"+sep+"%h"+sep+"%s"+sep+"%an"+sep+"%ae"+sep+"%at"+sep+
-			"%(trailers:key=Co-authored-by,valueonly,unfold,separator=%x1d)"+sep+"%b"+end)
+			"%(trailers:key=Co-authored-by,valueonly,unfold,separator=%x1d)"+sep+"%D"+sep+"%b"+end)
 	if err != nil {
 		return nil, err
 	}
 	var commits []Commit
 	for record := range strings.SplitSeq(out, end) {
 		f := strings.Split(strings.TrimLeft(record, "\n"), sep)
-		if len(f) != 8 {
+		if len(f) != 9 {
 			continue
 		}
 		unix, _ := strconv.ParseInt(f[5], 10, 64)
@@ -150,7 +153,12 @@ func LoadCommits(repo string, limit int) ([]Commit, error) {
 				cm.CoAuthors = append(cm.CoAuthors, p)
 			}
 		}
-		cm.Body = withoutCoAuthors(f[7], credited)
+		for ref := range strings.SplitSeq(f[7], ", ") {
+			if tag, ok := strings.CutPrefix(ref, "tag: "); ok {
+				cm.Tags = append(cm.Tags, tag)
+			}
+		}
+		cm.Body = withoutCoAuthors(f[8], credited)
 		commits = append(commits, cm)
 	}
 	return commits, nil

@@ -829,7 +829,8 @@ func (a *app) commitItem(c *ui.Context) func(cm git.Commit) ui.SourceListItem {
 			})
 			return it
 		}
-		it.Subtitle = shortDate(cm.Time, time.Now()) + " · " + authors(cm)
+		// The tags lead the line under the subject, which they leave whole.
+		it.Subtitle = strings.Join(append(slices.Clone(cm.Tags), shortDate(cm.Time, time.Now()), authors(cm)), " · ")
 		it.Tooltip = commitMessage(cm)
 		var co *git.Person
 		key := fmt.Sprint("avatar", dark, cm.Author, cm.Email, a.avatar(cm.Email) != nil)
