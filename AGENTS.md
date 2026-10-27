@@ -46,7 +46,9 @@ Performance, and leave out the others, such as `refactor`, `docs`, `test`,
 `ci` and `chore`. Mark a breaking change with `!`, as `feat!:`. A release
 is a commit `chore: release v0.2.0` that raises the version in
 `mygo.config.ts`, tagged and pushed, which the release workflow builds and
-publishes. bumpp makes it, as `bump.config.ts` sets it up:
+publishes. bumpp makes it, as `bump.config.ts` sets it up, choosing the
+version from the commits since the last tag: a breaking change raises the
+major, a `feat` the minor, anything else the patch:
 
 ```bash
 npx bumpp@12
