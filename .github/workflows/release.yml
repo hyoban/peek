@@ -15,10 +15,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      # mygo build uploads to the release of mygo.json's version, whichever
+      # mygo build uploads to the release of mygo.config.ts's version, whichever
       # tag started the workflow, so a tag that disagrees builds nothing.
       - name: Check the version
-        run: test "$GITHUB_REF_NAME" = "v$(jq -r .version mygo.json)"
+        run: test "$GITHUB_REF_NAME" = "v$(node -e 'import("./mygo.config.ts").then((m) => console.log(m.default.version))')"
       - name: Create the draft release
         env:
           GH_TOKEN: ${{ github.token }}

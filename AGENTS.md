@@ -15,16 +15,18 @@ behavior should look and work as macOS's own do.
 
 ## After every change
 
-Once the tests pass, build the app again, put it in place of the installed
-one and restart it, so the change can be tried in the app in use:
+Once the tests pass, build Peek Dev, the development build, put it in place
+of the installed one and restart it, so the change can be tried in the app
+in use. Peek Dev installs beside Peek, the release, which updates itself
+and is left alone:
 
 ```bash
-go tool mygo build -skip-dmg &&
-  osascript -e 'tell application "/Applications/Peek.app" to quit' &&
-  while pgrep -qf /Applications/Peek.app/Contents/MacOS/Peek; do sleep 0.2; done &&
-  rm -rf /Applications/Peek.app &&
-  ditto build/darwin-arm64/Peek.app /Applications/Peek.app &&
-  open /Applications/Peek.app
+PEEK_DEV=1 go tool mygo build -skip-dmg &&
+  osascript -e 'tell application "/Applications/Peek Dev.app" to quit' &&
+  while pgrep -qf "/Applications/Peek Dev.app/Contents/MacOS/"; do sleep 0.2; done &&
+  rm -rf "/Applications/Peek Dev.app" &&
+  ditto "build/darwin-arm64/Peek Dev.app" "/Applications/Peek Dev.app" &&
+  open "/Applications/Peek Dev.app"
 ```
 
 The app quits through AppleScript to keep what it saves on quitting.

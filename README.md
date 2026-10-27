@@ -68,6 +68,10 @@ go tool mygo build
 
 Use `go tool mygo build -skip-dmg` to build just the app.
 
+`PEEK_DEV=1 go tool mygo build -skip-dmg` builds Peek Dev instead: an app
+with an orange icon that installs beside Peek, keeps its own state, and does
+not update itself.
+
 Optional tools enable additional features:
 
 | Tool | Used for |
@@ -258,7 +262,7 @@ cross-file function and type definitions, including UTF-16 and CRLF positions.
 Releases are published to GitHub, and installed copies of Peek update
 themselves from the latest one. To publish one:
 
-1. Raise `version` in [mygo.json](mygo.json), and add a section for it to
+1. Raise `version` in [mygo.config.ts](mygo.config.ts), and add a section for it to
    [CHANGELOG.md](CHANGELOG.md), such as `## 0.2.0`. The section becomes
    the release notes Peek shows.
 2. Commit, then push a tag of the version:
