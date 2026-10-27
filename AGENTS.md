@@ -30,3 +30,14 @@ PEEK_DEV=1 go tool mygo build -skip-dmg &&
 ```
 
 The app quits through AppleScript to keep what it saves on quitting.
+
+## Commits
+
+Write commit messages as [Conventional Commits](https://www.conventionalcommits.org):
+a type, an optional scope, and a summary in the imperative, such as
+`feat(review): explain a change in its file` or `fix: keep the selection
+after refreshing`. The release notes list the commits since the last tag by
+type: `feat` under Features, `fix` under Bug Fixes and `perf` under
+Performance, and leave out the others, such as `refactor`, `docs`, `test`,
+`ci` and `chore`. Mark a breaking change with `!`, as `feat!:`. A release
+is a commit `chore: release v0.2.0` that raises the version.

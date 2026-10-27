@@ -262,20 +262,22 @@ cross-file function and type definitions, including UTF-16 and CRLF positions.
 Releases are published to GitHub, and installed copies of Peek update
 themselves from the latest one. To publish one:
 
-1. Raise `version` in [mygo.config.ts](mygo.config.ts), and add a section for it to
-   [CHANGELOG.md](CHANGELOG.md), such as `## 0.2.0`. The section becomes
-   the release notes Peek shows.
-2. Commit, then push a tag of the version:
+1. Raise `version` in [mygo.config.ts](mygo.config.ts) and commit it,
+   as `chore: release v0.2.0`.
+2. Push a tag of the version:
 
    ```bash
    git tag v0.2.0
-   git push origin v0.2.0
+   git push origin main v0.2.0
    ```
 
 The [release workflow](.github/workflows/release.yml) checks that the tag
-matches `version`, builds Peek, signs its updates, uploads the disk image,
-the updates and the install script to the release of the tag, and
-publishes it.
+matches `version`, writes the release notes with
+[changelogithub](https://github.com/antfu-collective/changelogithub) from
+the [Conventional Commits](https://www.conventionalcommits.org) since the
+last tag, which Peek's update window shows too, builds Peek, signs its
+updates, uploads the disk image, the updates and the install script to the
+release of the tag, and publishes it.
 
 The workflow signs updates with the `MYGO_UPDATER_PRIVATE_KEY` secret of the
 repository, the key that `go tool mygo keygen` wrote. Installed copies
