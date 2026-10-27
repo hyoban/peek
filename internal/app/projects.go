@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/plugins/updater"
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 )
@@ -486,9 +487,11 @@ func (p *projects) setMenu() {
 		}},
 	}
 	mygo.App.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
-		// The app menu as AppKit's, with Settings… (⌘,) after About.
+		// The app menu as AppKit's, with Check for Updates… after About, as
+		// Sparkle puts it, then Settings… (⌘,).
 		{Label: "Peek", Submenu: []*mygo.MenuItem{
 			{Role: mygo.RoleAbout},
+			updater.MenuItem(),
 			mygo.Separator(),
 			{Label: "Settings…", Accelerator: "Cmd+,", Click: func(*mygo.MenuItem, *mygo.Window) { p.showSettings() }},
 			mygo.Separator(),

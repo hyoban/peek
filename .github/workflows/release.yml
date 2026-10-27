@@ -1,0 +1,51 @@
+name: Release
+
+# Pushing a tag such as v0.2.0 builds Peek, signs its updates, uploads
+# them with the disk image and install script to the release of the tag,
+# and publishes it, which installed copies of Peek then update to.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # the release, and the uploads to it
+
+jobs:
+  draft-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # mygo build uploads to the release of mygo.json's version, whichever
+      # tag started the workflow, so a tag that disagrees builds nothing.
+      - name: Check the version
+        run: test "$GITHUB_REF_NAME" = "v$(jq -r .version mygo.json)"
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+              --draft --verify-tag --title "$GITHUB_REF_NAME" --generate-notes
+          fi
+
+  build:
+    needs: draft-release
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Build and upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
+        run: go tool mygo build -platform darwin/arm64 -upload
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false

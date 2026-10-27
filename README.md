@@ -22,6 +22,31 @@ Browse every file at the selected commit or in the working tree. Related files a
   <img alt="Files mode: the commit's files and the text of one of them" src="docs/files-light.png">
 </picture>
 
+## Install
+
+Peek runs on Macs with Apple silicon. Install the latest release into
+`/Applications`:
+
+```bash
+curl -fsSL https://github.com/hyoban/peek/releases/latest/download/install.sh | sh
+```
+
+Run the same command again to reinstall. Once installed, Peek checks for new
+versions in the background and offers to install them; use
+**Peek → Check for Updates…** to check now. Updates are signed, and Peek
+installs only those signed with the project's key.
+
+Releases are not signed with an Apple Developer ID or notarized. The install
+script avoids Gatekeeper's warning, because files downloaded with `curl` are
+not quarantined. If you download the `.dmg` from
+[Releases](https://github.com/hyoban/peek/releases) in a browser instead,
+macOS blocks Peek the first time it opens. After moving it to Applications,
+allow it in **System Settings → Privacy & Security → Open Anyway**, or run:
+
+```bash
+xattr -d com.apple.quarantine /Applications/Peek.app
+```
+
 ## Get started
 
 To run from source, use macOS, Go 1.27.3 or later (as specified in
@@ -227,6 +252,36 @@ also checks real cross-file, TypeScript path-alias and standard-library definiti
 With `kotlin-lsp`, Maven and a JDK installed,
 `PEEK_KOTLIN_LSP_TEST=1 go test ./internal/definition` checks real Kotlin
 cross-file function and type definitions, including UTF-16 and CRLF positions.
+
+### Releases
+
+Releases are published to GitHub, and installed copies of Peek update
+themselves from the latest one. To publish one:
+
+1. Raise `version` in [mygo.json](mygo.json), and add a section for it to
+   [CHANGELOG.md](CHANGELOG.md), such as `## 0.2.0`. The section becomes
+   the release notes Peek shows.
+2. Commit, then push a tag of the version:
+
+   ```bash
+   git tag v0.2.0
+   git push origin v0.2.0
+   ```
+
+The [release workflow](.github/workflows/release.yml) checks that the tag
+matches `version`, builds Peek, signs its updates, uploads the disk image,
+the updates and the install script to the release of the tag, and
+publishes it.
+
+The workflow signs updates with the `MYGO_UPDATER_PRIVATE_KEY` secret of the
+repository, the key that `go tool mygo keygen` wrote. Installed copies
+accept only updates signed with it: keep a copy outside this Mac, and never
+commit it. To release from this Mac instead, give the build the key and
+publish the draft it uploads:
+
+```bash
+MYGO_UPDATER_PRIVATE_KEY="$(cat ~/Library/Application\ Support/mygo/update-keys/mygo-update.key)" go tool mygo build -upload
+```
 
 ### Screenshots
 

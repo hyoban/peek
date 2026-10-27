@@ -19,6 +19,7 @@ import (
 	"peek/internal/review"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/plugins/updater/native"
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 )
@@ -1438,6 +1439,9 @@ func Run(args []string) {
 	if err != nil && len(args) > 0 {
 		log.Fatal(err)
 	}
+	// Checks the releases on GitHub in the background, and offers new
+	// versions in a window of native UI.
+	mygo.Use(native.Plugin)
 	p := newProjects()
 	// The icons load while the app starts, ready by its first window.
 	icons := make(chan struct{})
