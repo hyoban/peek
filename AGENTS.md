@@ -40,4 +40,10 @@ after refreshing`. The release notes list the commits since the last tag by
 type: `feat` under Features, `fix` under Bug Fixes and `perf` under
 Performance, and leave out the others, such as `refactor`, `docs`, `test`,
 `ci` and `chore`. Mark a breaking change with `!`, as `feat!:`. A release
-is a commit `chore: release v0.2.0` that raises the version.
+is a commit `chore: release v0.2.0` that raises the version in
+`mygo.config.ts`, tagged and pushed, which the release workflow builds and
+publishes. bumpp makes it, as `bump.config.ts` sets it up:
+
+```bash
+npx bumpp@12
+```
