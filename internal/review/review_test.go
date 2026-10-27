@@ -219,3 +219,13 @@ func TestBranchSnapshot(t *testing.T) {
 		t.Fatalf("a commit during the review: %v", err)
 	}
 }
+
+func TestJudgeAtTheChosenPriority(t *testing.T) {
+	r := Result{Findings: []Finding{{Priority: 3}, {Priority: 2}}}
+	for blocking, want := range []string{"passed", "passed", "failed", "failed"} {
+		r.Judge(blocking)
+		if r.Verdict != want {
+			t.Errorf("failing at P%d: %s, want %s", blocking, r.Verdict, want)
+		}
+	}
+}

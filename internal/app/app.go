@@ -1470,9 +1470,12 @@ func Run(args []string) {
 		p.setDockMenu()
 		p.showMenuBar(p.prefs().MenuBar)
 		p.followNetwork()
-		if err == nil {
+		switch {
+		case err == nil:
 			p.open(repo)
-		} else {
+		case mygo.App.WasOpenedAtLogin() && p.prefs().MenuBar:
+			// Opened as the user logged in, it waits in the menu bar.
+		default:
 			p.restore()
 		}
 	})

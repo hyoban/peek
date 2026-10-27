@@ -450,6 +450,7 @@ func (a *app) loadDiff(d *fileDiff) {
 	gen := a.diffGen
 	shown := d.state // which a reload updates where it is
 	ch := d.change   // a refresh may change its counts meanwhile
+	prefs := a.prefs()
 	a.background(func() func() {
 		// A text too large to show is not read whole: its patch shows.
 		limit := maxTextSize
@@ -498,9 +499,10 @@ func (a *app) loadDiff(d *fileDiff) {
 				// sideways would drift with the slant of every vertical
 				// swipe on a touchpad, the list taking the swipe's height
 				// and the diff under the pointer its width.
-				Wrap:  true,
-				Font:  codeFont,
-				Theme: codeTheme,
+				Wrap:             true,
+				IgnoreWhitespace: prefs.IgnoreWhitespace,
+				Font:             prefs.codeFont(),
+				Theme:            codeTheme,
 			}
 			if patch != nil {
 				state.SetPatch(*patch)
@@ -573,8 +575,6 @@ func filePatch(repo, hash string, ch git.Change) *editor.FilePatch {
 // the system's monospaced font.
 const monoFamily = "MonoLisaCode, MonoLisa Variable, monospace"
 
-var codeFont = ui.Font{Family: monoFamily, Size: codeSize}
-
 // codeTheme is the default's, light or dark, with comments in italics.
 var codeTheme = func() *editor.Theme {
 	ct := &editor.Theme{} // the default's colors fill those left zero
@@ -619,7 +619,7 @@ func newCode(p, text string) *editor.State { return codeOf(codeBuffer(p, text), 
 // file's takes a while to, wrapped and its imports folded as the user
 // chose.
 func codeOf(buf *editor.Buffer, s settings) *editor.State {
-	st := &editor.State{Buffer: buf, ReadOnly: true, SoftWrap: s.WrapLines, Font: codeFont, Theme: codeTheme}
+	st := &editor.State{Buffer: buf, ReadOnly: true, SoftWrap: s.WrapLines, Font: s.codeFont(), Theme: codeTheme}
 	if s.FoldImports {
 		st.FoldImports()
 	}

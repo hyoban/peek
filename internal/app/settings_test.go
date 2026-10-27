@@ -114,3 +114,17 @@ func TestSettingsPanes(t *testing.T) {
 		tt.SetDark(false)
 	}
 }
+
+func TestCodeFontAndReviewsAsChosen(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, settingsFile), []byte(`{"codeFont": "Menlo", "codeFontSize": 15, "ignoreWhitespace": true, "reviewFailsAtPriority": 1}`), 0o644)
+	s := readSettings(dir)
+	if f := s.codeFont(); f.Family != "Menlo" || f.Size != 15 || !s.IgnoreWhitespace || s.ReviewBlocking != 1 {
+		t.Errorf("settings %+v, font %+v, want Menlo at 15, whitespace ignored and reviews failing at P1", s, f)
+	}
+	os.WriteFile(filepath.Join(dir, settingsFile), []byte(`{"codeFontSize": 7, "reviewFailsAtPriority": 9}`), 0o644)
+	s = readSettings(dir)
+	if f := s.codeFont(); f.Family != monoFamily || f.Size != codeSize || s.ReviewBlocking != defaultSettings.ReviewBlocking {
+		t.Errorf("font %+v, reviews at P%d, want the defaults for what is not offered", f, s.ReviewBlocking)
+	}
+}

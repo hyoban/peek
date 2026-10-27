@@ -144,9 +144,21 @@ type Result struct {
 	Verdict string `json:"-"`
 }
 
-// blockingPriority is the lowest priority a finding fails the review at:
-// those of P3, minor, show with a passed one.
-const blockingPriority = 2
+// DefaultBlocking is the lowest priority a finding fails the review at
+// unless the user chooses another (Judge): those of P3, minor, show with
+// a passed one.
+const DefaultBlocking = 2
+
+// Judge gives the review its verdict: failed where a finding is of P0 to
+// P<blocking>, else passed.
+func (r *Result) Judge(blocking int) {
+	r.Verdict = "passed"
+	for _, f := range r.Findings {
+		if f.Priority <= blocking {
+			r.Verdict = "failed"
+		}
+	}
+}
 
 func (r Result) Text() string {
 	var text strings.Builder
@@ -157,8 +169,8 @@ func (r Result) Text() string {
 	return text.String()
 }
 
-// validate checks the review Codex returned and judges its verdict: failed
-// where a finding is of P0 to P2, else passed.
+// validate checks the review Codex returned and judges its verdict at
+// DefaultBlocking.
 func (r *Result) validate() error {
 	if strings.TrimSpace(r.Summary) == "" || r.Findings == nil {
 		return fmt.Errorf("Codex returned an incomplete review")
@@ -170,15 +182,12 @@ func (r *Result) validate() error {
 	default:
 		return fmt.Errorf("Codex returned an invalid review status")
 	}
-	r.Verdict = "passed"
 	for _, f := range r.Findings {
 		if f.Priority < 0 || f.Priority > 3 || f.Line < 1 || strings.TrimSpace(f.Title) == "" || strings.TrimSpace(f.Body) == "" || strings.TrimSpace(f.Path) == "" {
 			return fmt.Errorf("Codex returned an incomplete review finding")
 		}
-		if f.Priority <= blockingPriority {
-			r.Verdict = "failed"
-		}
 	}
+	r.Judge(DefaultBlocking)
 	return nil
 }
 

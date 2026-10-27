@@ -78,7 +78,7 @@ Optional tools enable additional features:
 - Background fetches, incoming commit counts, and one-click fast-forward pulls. Fetches pause while offline or on a metered connection.
 - **Show in Menu Bar** replaces the Dock icon with a menu of recent repositories, changed-file counts and commits to pull; right-click its icon to bring Peek forward.
 - **Hide When Inactive** hides Peek when another app comes forward. Incoming commits are also counted on the Dock icon when it is shown.
-- **Peek → Settings…** (⌘,) holds these choices and more, in panes as Xcode's: what opens at launch and notifications (General), file nesting and folding tests, docs and generated files (Navigation), the first diff layout, line wrapping and import folding in Files (Text Editing), whether and how often remotes are fetched, metered connections included (Source Control), and the model Ship writes commit messages with (Intelligence).
+- **Peek → Settings…** (⌘,) holds these choices and more, in panes as Xcode's: opening at login, what opens at launch and notifications (General), file nesting and folding tests, docs and generated files (Navigation), the code's font and size, the first diff layout, ignoring whitespace in diffs, and line wrapping and import folding in Files (Text Editing), whether and how often remotes are fetched, metered connections included (Source Control), and the model Ship writes commit messages with and the lowest priority that fails a review (Intelligence).
 - Notifications when shipping or a review finishes in the background, native macOS menus and controls, and system light and dark appearance.
 
 ## Shortcuts
@@ -180,8 +180,8 @@ push destination. A new branch is compared with the remote's default branch,
 falling back to `main` or `master` when needed. Remote refs are those known locally.
 
 The result appears in the conversation, and the toolbar shows **Passed**,
-**Not Passed** or **Review Error**. Any P0–P2 finding fails the review; P3
-findings alone still pass. Findings also appear beside the affected diff lines.
+**Not Passed** or **Review Error**. By default any P0–P2 finding fails the review and P3
+findings alone still pass; **Settings → Intelligence** changes where it fails. Findings also appear beside the affected diff lines.
 You can copy the result or ask follow-up questions in the conversation.
 
 Peek checks that the reviewed changes still match the snapshot. Changing them

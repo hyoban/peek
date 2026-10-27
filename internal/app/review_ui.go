@@ -85,7 +85,7 @@ func (a *app) startReview(request string) {
 	}
 	conv := a.newConversation("Review", snapshot.Scope, shown)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	repo := a.repo
+	repo, blocking := a.repo, a.prefs().ReviewBlocking
 	a.review = reviewState{codexTask: codexTask{running: true, cancel: cancel, phase: "Checking…", detail: "Checking the review snapshot"},
 		sourceID: snapshot.ID, scope: snapshot.Scope, head: snapshot.Head, base: snapshot.Base, conv: conv}
 	progress := a.codexProgress(ctx, &a.review.codexTask, func() bool { return !a.review.stale && a.review.sourceID == snapshot.ID })
@@ -100,6 +100,9 @@ func (a *app) startReview(request string) {
 			return result, err
 		}
 		result, err := review.Run(ctx, repo, snapshot, run)
+		if err == nil {
+			result.Judge(blocking) // as the user chose
+		}
 		return func() {
 			a.review.finish()
 			tn := conv.Turns[0]
