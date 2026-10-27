@@ -48,8 +48,9 @@ const (
 // and affordable, for easier tasks.
 const CommitModel = "gpt-6-luna"
 
-// CommitMessage embeds the staged diff and recent subjects in the prompt, so
-// Codex can answer in one turn without tools. Where the diff is over budget,
+// CommitMessage embeds the staged diff, recent subjects and the
+// repository's commit convention in the prompt, so Codex can answer in one
+// turn without tools. Where the diff is over budget,
 // it embeds code first and cut, with a summary of every file, and leaves
 // Codex to read more only if it must. It skips the user's Codex config,
 // whose plugins, hooks and reasoning effort suit coding sessions, not this,
@@ -196,6 +197,7 @@ func commitPrompt(ctx context.Context, repo string, snapshot git.Snapshot) (prom
 	} else if log, err := git.Bounded(repo, 4096, "log", "-8", "--format=%s", snapshot.Head); err == nil {
 		b.WriteString("\nRecent commit subjects:\n" + log)
 	}
+	b.WriteString(commitConvention(ctx, repo, snapshot))
 	if stat != "" {
 		b.WriteString("\nSummary:\n" + stat)
 	}
