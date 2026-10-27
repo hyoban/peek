@@ -33,7 +33,7 @@ func Stream(ctx context.Context, repo, session, prompt string, timeout time.Dura
 	if repo == "" {
 		return "", session, fmt.Errorf("a repository is required for Codex")
 	}
-	bin, err := executable()
+	bin, err := Executable()
 	if err != nil {
 		return "", session, err
 	}

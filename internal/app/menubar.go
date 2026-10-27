@@ -52,9 +52,13 @@ func useDock(dock bool) {
 	}
 }
 
-// fetchClosedEvery is how often the remotes of recent repositories
-// without a window are fetched, less often than those that show.
-const fetchClosedEvery = 15 * time.Minute
+// statusEvery is how often the menu reads the status of the recent
+// repositories without a window, and fetchClosedEvery how often their
+// remotes are fetched, less often than those that show.
+const (
+	statusEvery      = 3 * time.Minute
+	fetchClosedEvery = 15 * time.Minute
+)
 
 // showMenuBar puts Peek's item in the menu bar in place of its Dock
 // icon, reading the status of the recent repositories again every while,
@@ -118,7 +122,7 @@ func (p *projects) showMenuBar(on bool) {
 	}
 	p.readStatus()
 	go func() {
-		tick := time.NewTicker(fetchEvery)
+		tick := time.NewTicker(statusEvery)
 		defer tick.Stop()
 		for {
 			select {
@@ -137,7 +141,8 @@ func (p *projects) showMenuBar(on bool) {
 
 // menuBarItems are the menu's: the recent repositories, the one shown
 // checked, as the project switcher checks it; the commits to
-// pull; the File menu's Open Folder; the app menu's choices; and Quit.
+// pull; the File menu's Open Folder; the choices that matter without a
+// Dock icon, and Settings…; and Quit.
 func (p *projects) menuBarItems() []*mygo.MenuItem {
 	var items, pulls []*mygo.MenuItem
 	for _, repo := range p.recent {
@@ -175,9 +180,10 @@ func (p *projects) menuBarItems() []*mygo.MenuItem {
 		&mygo.MenuItem{Label: "Show in Menu Bar", Type: mygo.MenuItemCheckbox, Checked: true,
 			ToolTip: "Show Peek in the Dock instead",
 			Click:   func(*mygo.MenuItem, *mygo.Window) { p.setMenuBarOn(false) }},
-		&mygo.MenuItem{Label: "Hide When Inactive", Type: mygo.MenuItemCheckbox, Checked: p.hideInactive,
+		&mygo.MenuItem{Label: "Hide When Inactive", Type: mygo.MenuItemCheckbox, Checked: p.prefs().HideInactive,
 			ToolTip: "Hide Peek as another app comes to the front",
-			Click:   func(*mygo.MenuItem, *mygo.Window) { p.setHideInactive(!p.hideInactive) }},
+			Click:   func(*mygo.MenuItem, *mygo.Window) { p.setHideInactive(!p.prefs().HideInactive) }},
+		&mygo.MenuItem{Label: "Settings…", Accelerator: "Cmd+,", Click: func(*mygo.MenuItem, *mygo.Window) { p.settingsInFront() }},
 		mygo.Separator(),
 		&mygo.MenuItem{Label: "Quit Peek", Accelerator: "Cmd+Q", Click: func(*mygo.MenuItem, *mygo.Window) { mygo.App.Quit() }},
 	)
@@ -228,7 +234,7 @@ func (p *projects) readStatus() {
 		if p.apps[repo] != nil {
 			continue
 		}
-		fetch := networkAllows() && time.Since(bar.fetched[repo]) >= fetchClosedEvery
+		fetch := p.fetchAllowed() && time.Since(bar.fetched[repo]) >= fetchClosedEvery
 		if fetch {
 			bar.fetched[repo] = time.Now()
 		}
@@ -290,6 +296,14 @@ func (p *projects) activate() {
 	if p.win != nil {
 		p.win.Focus()
 	}
+}
+
+// settingsInFront opens the Settings window, in front, as the menu bar's
+// item leaves Peek behind another app.
+func (p *projects) settingsInFront() {
+	mygo.App.Show()
+	mygo.App.Focus()
+	p.showSettings()
 }
 
 // openRepo shows the repository in the window, in front.

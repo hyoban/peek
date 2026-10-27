@@ -14,7 +14,7 @@ import (
 func TestFoldFiles(t *testing.T) {
 	files := []string{"apps/web/src/main.go", "apps/web/src/main_test.go", "apps/web/go.mod", "apps/web/go.sum", "go.sum", "other/main_test.go", "package.json", ".npmrc/config"}
 	tree := newPathTree()
-	tree.set(foldFiles(files))
+	tree.set(foldFiles(files, true))
 	if tree.parents["apps/web/go.sum"] != "apps/web/go.mod" || tree.parents["apps/web/src/main_test.go"] != "apps/web/src/main.go" {
 		t.Fatalf("nested parents: %v", tree.parents)
 	}
@@ -50,7 +50,7 @@ func TestFoldFiles(t *testing.T) {
 func TestNestedFilterAndReplace(t *testing.T) {
 	tree := newPathTree()
 	files := []string{"src/main.go", "src/main_test.go", "go.mod", "go.sum"}
-	tree.set(foldFiles(files))
+	tree.set(foldFiles(files, true))
 	tt := ui.NewTester(func(c *ui.Context) {
 		tree.applyFilter()
 		tree.view(c, "Files", func(p string) ui.SourceListItem { return ui.SourceListItem{Title: tree.labels[p]} })
@@ -78,12 +78,12 @@ func TestNestedFilterAndReplace(t *testing.T) {
 	}
 	tree.show("src/main_test.go")
 	tt.Frame()
-	tree.replace(foldFiles([]string{"src/main_test.go", "go.mod", "go.sum"}))
+	tree.replace(foldFiles([]string{"src/main_test.go", "go.mod", "go.sum"}, true))
 	tt.Frame()
 	if tree.chosen() != "src/main_test.go" || tree.parents["src/main_test.go"] != "src" {
 		t.Fatal("removing the parent lost the selected child")
 	}
-	tree.replace(foldFiles(files))
+	tree.replace(foldFiles(files, true))
 	tt.Frame()
 	if tree.chosen() != "src/main_test.go" || !tree.state.Open.Has("src/main.go") {
 		t.Fatal("restoring the parent hid the selected child")

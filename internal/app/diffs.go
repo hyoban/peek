@@ -61,11 +61,12 @@ func (a *app) resetDiffs() {
 }
 
 // newDiff is the diff of a changed file of the commit, read where it was
-// marked so, or else where it is a test, docs or generated.
+// marked so, or else where it is a test, docs or generated, as the user
+// chose.
 func (a *app) newDiff(ch git.Change) *fileDiff {
 	read, ok := a.read[a.readKey(ch.Path)]
 	if !ok {
-		read = filekind.Of(ch.Path) != filekind.Code
+		read = a.prefs().FoldKinds && filekind.Of(ch.Path) != filekind.Code
 	}
 	return &fileDiff{change: ch, read: read}
 }
@@ -79,7 +80,7 @@ func (a *app) openChanges(known map[string][]string) {
 		if _, ok := known[dir]; ok || dir == "" {
 			continue
 		}
-		if !isGroup(dir) || dir == groupPrefix+filekind.Names[filekind.Code] {
+		if !isGroup(dir) || dir == groupPrefix+filekind.Names[filekind.Code] || !a.prefs().FoldKinds {
 			t.state.Open.Add(dir)
 		}
 	}
@@ -612,13 +613,16 @@ func codeBuffer(p, text string) *editor.Buffer {
 
 // newCode shows a file's text, its imports folded away, as they are
 // seldom what a file is read for.
-func newCode(p, text string) *editor.State { return codeOf(codeBuffer(p, text)) }
+func newCode(p, text string) *editor.State { return codeOf(codeBuffer(p, text), defaultSettings) }
 
 // codeOf shows the text of a buffer made off the UI thread, as a long
-// file's takes a while to.
-func codeOf(buf *editor.Buffer) *editor.State {
-	st := &editor.State{Buffer: buf, ReadOnly: true, SoftWrap: true, Font: codeFont, Theme: codeTheme}
-	st.FoldImports()
+// file's takes a while to, wrapped and its imports folded as the user
+// chose.
+func codeOf(buf *editor.Buffer, s settings) *editor.State {
+	st := &editor.State{Buffer: buf, ReadOnly: true, SoftWrap: s.WrapLines, Font: codeFont, Theme: codeTheme}
+	if s.FoldImports {
+		st.FoldImports()
+	}
 	return st
 }
 

@@ -277,9 +277,10 @@ func (a *app) updateChanges(changes []git.Change) {
 func (a *app) reloadFiles() {
 	open, md, code := a.openFile, a.preview, a.code
 	gen := a.textGen
+	nest := a.prefs().NestFiles
 	a.background(func() func() {
 		files, err := git.ListFiles(a.repo, git.Worktree)
-		tree := foldFiles(files)
+		tree := foldFiles(files, nest)
 		var text string
 		var textErr error
 		if open != "" {
@@ -323,7 +324,7 @@ func (a *app) reloadFiles() {
 				if buf == nil {
 					buf = codeBuffer(open, text)
 				}
-				a.code = codeOf(buf)
+				a.code = codeOf(buf, a.prefs())
 				a.codePath, a.codeHash = open, git.Worktree
 				a.picture, a.codeNote, a.preview = nil, "", nil
 				if isMarkdown(open) {
@@ -340,14 +341,13 @@ func (a *app) watch() {
 	ctx, cancel := context.WithCancel(context.Background())
 	a.unwatch = cancel
 	win := a.win
-	// The remote, at once and every while, for its new commits.
+	// The remote, at once and every while, for its new commits: each tick
+	// asks whether the interval the user chose has passed.
 	go func() {
-		tick := time.NewTicker(fetchEvery)
+		tick := time.NewTicker(fetchTick)
 		defer tick.Stop()
 		for {
-			if networkAllows() {
-				win.Update(a.fetchRemote)
-			}
+			win.Update(a.fetchIfDue)
 			select {
 			case <-ctx.Done():
 				return

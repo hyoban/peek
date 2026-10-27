@@ -57,10 +57,14 @@ type folded struct {
 	nested  map[string]bool
 }
 
-// foldFiles adds file nesting to the Files navigator. Changes continues to
-// use foldGrouped, keeping its file-kind groups and diff order unchanged.
-func foldFiles(files []string) folded {
+// foldFiles adds file nesting to the Files navigator, where nest asks.
+// Changes continues to use foldGrouped, keeping its file-kind groups and
+// diff order unchanged.
+func foldFiles(files []string, nest bool) folded {
 	f := fold(files)
+	if !nest {
+		return f
+	}
 	f.nested = map[string]bool{}
 	children := map[string][]string{}
 	for dir, entries := range f.dirs {

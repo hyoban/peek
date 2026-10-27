@@ -11,9 +11,9 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// fetchEvery is how often the remote the branch tracks is fetched while
-// its project shows, for the toolbar to tell of new commits there.
-const fetchEvery = 3 * time.Minute
+// fetchTick is how often a project asks whether its remote is due to be
+// fetched (fetchIfDue).
+const fetchTick = 30 * time.Second
 
 type pullState struct {
 	fetching bool
@@ -69,6 +69,15 @@ func (a *app) startPull() {
 	})
 }
 
+// fetchIfDue fetches the remote where the interval the user chose has
+// passed since it last did, as the user and the network allow.
+func (a *app) fetchIfDue() {
+	if a.closed || time.Since(a.fetchedAt) < a.projects.fetchEvery() || !a.projects.fetchAllowed() {
+		return
+	}
+	a.fetchRemote()
+}
+
 // fetchRemote fetches the remote the branch tracks, unless git is busy
 // with the branch meanwhile, and reads the history again where the
 // upstream moved. Failures, as offline, pass quietly until the next.
@@ -77,6 +86,7 @@ func (a *app) fetchRemote() {
 		return
 	}
 	a.pull.fetching = true
+	a.fetchedAt = time.Now()
 	repo := a.repo
 	a.background(func() func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)

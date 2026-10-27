@@ -45,7 +45,7 @@ func navigationApp(t *testing.T) (*app, *ui.Tester, string) {
 
 func TestDefinitionPointerFeedback(t *testing.T) {
 	a, _, _ := navigationApp(t)
-	a.code = codeOf(codeBuffer("main.go", "target()"))
+	a.code = codeOf(codeBuffer("main.go", "target()"), defaultSettings)
 	a.navigation.client = &fakeDefinitions{lookup: func(string, string, int) ([]definition.Location, error) {
 		t.Fatal("hover should not query the language server")
 		return nil, nil

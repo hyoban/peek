@@ -239,7 +239,7 @@ func (a *app) visit(target filePlace, step int) {
 			}
 			a.textGen++
 			a.openFile, a.codePath, a.codeHash = target.path, target.path, git.Worktree
-			a.code = codeOf(buf)
+			a.code = codeOf(buf, a.prefs())
 			a.code.Select(definition.OffsetAt(text, target.start), definition.OffsetAt(text, target.end))
 			if target.restore {
 				a.code.SetScrollY(target.scroll)

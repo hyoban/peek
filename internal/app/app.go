@@ -58,6 +58,7 @@ type app struct {
 	dirty                    int    // the files the work tree changes, as last read
 	behind                   int    // the upstream's commits, as fetched, the branch has not
 	upstream                 string // the upstream's name, where the branch is behind it
+	fetchedAt                time.Time
 	pull                     pullState
 	review                   reviewState
 	answer                   answerState
@@ -1342,9 +1343,10 @@ func (a *app) loadCommit(hash string) {
 // file open where the commit has it too. The files and the text of the
 // commit shown before stay until the new ones come, not to flash empty.
 func (a *app) loadFiles(hash string) {
+	nest := a.prefs().NestFiles
 	a.background(func() func() {
 		files, err := git.ListFiles(a.repo, hash)
-		tree := foldFiles(files)
+		tree := foldFiles(files, nest)
 		return func() {
 			if cm, ok := a.current(); !ok || cm.Hash != hash || a.filesFor != a.loadedRow {
 				return
@@ -1388,7 +1390,7 @@ func (a *app) loadText(hash, p string) {
 					preview *mdPreview
 				)
 				if buf != nil {
-					code = codeOf(buf)
+					code = codeOf(buf, a.prefs())
 					if isMarkdown(p) {
 						preview = a.newPreview(hash, p, text)
 					}
@@ -1459,14 +1461,14 @@ func Run(args []string) {
 	})
 	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { p.quitting = true })
 	p.followApp()
-	if p.menuBarOn {
+	if p.prefs().MenuBar {
 		useDock(false) // from the start, its icon never showing
 	}
 	mygo.App.WhenReady(func() {
 		<-icons
 		p.setMenu()
 		p.setDockMenu()
-		p.showMenuBar(p.menuBarOn)
+		p.showMenuBar(p.prefs().MenuBar)
 		p.followNetwork()
 		if err == nil {
 			p.open(repo)

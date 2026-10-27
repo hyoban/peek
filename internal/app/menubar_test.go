@@ -32,7 +32,7 @@ func TestMenuBarItems(t *testing.T) {
 	openLabel := p.label(open) + " — main, 3 files changed"
 	closedLabel := p.label(closed) + " — main, 1 file changed"
 	pull := "Pull 2 New Commits into " + path.Base(closed)
-	want := []string{openLabel, closedLabel, "", pull, "", "Open Folder…", "", "Show in Menu Bar", "Hide When Inactive", "", "Quit Peek"}
+	want := []string{openLabel, closedLabel, "", pull, "", "Open Folder…", "", "Show in Menu Bar", "Hide When Inactive", "Settings…", "", "Quit Peek"}
 	if len(labels) != len(want) {
 		t.Fatalf("items %q, want %q", labels, want)
 	}
@@ -59,19 +59,21 @@ func TestTrayIcon(t *testing.T) {
 func TestHideWhenInactiveKept(t *testing.T) {
 	dir := t.TempDir()
 	p := &projects{apps: map[string]*app{}, inline: true, dir: dir}
-	p.setHideInactive(true)
-	file := filepath.Join(dir, hideInactiveFile)
-	for i := 0; !exists(file) && i < 100; i++ {
-		time.Sleep(10 * time.Millisecond) // written off the main thread
+	kept := func() settings {
+		for i := 0; i < 100; i++ {
+			if exists(filepath.Join(dir, settingsFile)) && readSettings(dir).HideInactive == p.prefs().HideInactive {
+				break
+			}
+			time.Sleep(10 * time.Millisecond) // written off the main thread
+		}
+		return readSettings(dir)
 	}
-	if !p.hideInactive || !exists(file) {
+	p.setHideInactive(true)
+	if !p.prefs().HideInactive || !kept().HideInactive {
 		t.Fatal("the choice was not kept")
 	}
 	p.setHideInactive(false)
-	for i := 0; exists(file) && i < 100; i++ {
-		time.Sleep(10 * time.Millisecond)
-	}
-	if p.hideInactive || exists(file) {
+	if p.prefs().HideInactive || kept().HideInactive {
 		t.Error("the choice was not taken back")
 	}
 }

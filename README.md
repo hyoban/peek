@@ -78,12 +78,14 @@ Optional tools enable additional features:
 - Background fetches, incoming commit counts, and one-click fast-forward pulls. Fetches pause while offline or on a metered connection.
 - **Show in Menu Bar** replaces the Dock icon with a menu of recent repositories, changed-file counts and commits to pull; right-click its icon to bring Peek forward.
 - **Hide When Inactive** hides Peek when another app comes forward. Incoming commits are also counted on the Dock icon when it is shown.
+- **Peek → Settings…** (⌘,) holds these choices and more, in panes as Xcode's: what opens at launch and notifications (General), file nesting and folding tests, docs and generated files (Navigation), the first diff layout, line wrapping and import folding in Files (Text Editing), whether and how often remotes are fetched, metered connections included (Source Control), and the model Ship writes commit messages with (Intelligence).
 - Notifications when shipping or a review finishes in the background, native macOS menus and controls, and system light and dark appearance.
 
 ## Shortcuts
 
 | Shortcut | Action |
 | --- | --- |
+| <kbd>⌘</kbd> <kbd>,</kbd> | Settings |
 | <kbd>⌘</kbd> <kbd>O</kbd> | Open a folder |
 | <kbd>⌘</kbd> <kbd>1</kbd> | Changes mode |
 | <kbd>⌘</kbd> <kbd>2</kbd> | Files mode |
@@ -197,7 +199,8 @@ Click **Ship** in the toolbar (⌘P) to stage all changes, including untracked
 files that Git does not ignore, write a commit message with Codex, commit and
 push. Peek supplies the staged diff and recent commit subjects so the message
 follows the repository's style. Commit messages use a separate small-model
-configuration; reviews and conversations use your Codex settings.
+configuration, whose model **Settings → Intelligence** can change; reviews
+and conversations use your Codex settings.
 
 Before committing, Peek verifies that the branch, HEAD and staged tree have
 not changed. It fetches the remote before committing and pushing. If the remote

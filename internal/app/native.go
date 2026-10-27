@@ -28,18 +28,18 @@ func (p *projects) followApp() {
 	})
 	mygo.App.OnDidResignActive(func() {
 		appActive, resignedAt = false, time.Now()
-		if p.hideInactive && !p.quitting {
+		if p.prefs().HideInactive && !p.quitting {
 			mygo.App.Hide()
 		}
 	})
 }
 
 // notify tells of work finished, as a push or a review, in a notification
-// where the user is not looking at its project; a click shows it in the
+// where the user is not looking at its project and chose to be told; a click shows it in the
 // window, in front, and runs then on its thread.
 func (a *app) notify(title, body string, then func()) {
 	shown := a.projects == nil || a.projects.cur == a
-	if a.inline || a.win == nil || appActive && a.win.IsFocused() && shown {
+	if !a.prefs().Notify || a.inline || a.win == nil || appActive && a.win.IsFocused() && shown {
 		return
 	}
 	win := a.win
@@ -64,28 +64,23 @@ func (a *app) notify(title, body string, then func()) {
 	go n.Show() // which waits for the user's answer the first time
 }
 
-// networkAllows reports whether the remote may be fetched in the
-// background: online, and not on a connection that counts its data, as a
-// phone's hotspot or Low Data Mode.
-func networkAllows() bool {
-	s := mygo.Network.Status()
-	return s.Online && !s.Metered
-}
-
 // followNetwork fetches the projects' remotes as the network comes back,
-// rather than at the next fetch.
+// or stops counting its data (fetchAllowed), rather than at the next fetch.
 func (p *projects) followNetwork() {
-	was := networkAllows()
-	mygo.Network.OnChanged(func(mygo.NetworkStatus) {
-		now := networkAllows()
-		if now && !was {
+	was := mygo.Network.Status()
+	mygo.Network.OnChanged(func(now mygo.NetworkStatus) {
+		better := now.Online && (!was.Online || was.Metered && !now.Metered)
+		was = now
+		if better {
 			mygo.App.WhenReady(func() {
+				if !p.fetchAllowed() {
+					return
+				}
 				for _, a := range p.apps {
 					a.fetchRemote()
 				}
 			})
 		}
-		was = now
 	})
 }
 

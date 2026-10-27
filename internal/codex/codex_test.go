@@ -42,7 +42,7 @@ func TestCommitMessageEmbedsSmallChanges(t *testing.T) {
 			var snapshot git.Snapshot
 			generate := func(ctx context.Context, directory string, captured git.Snapshot) (string, error) {
 				snapshot = captured
-				return CommitMessage(ctx, directory, captured)
+				return CommitMessage(ctx, directory, captured, "")
 			}
 			if _, err := git.Push(context.Background(), repo, generate, func(string) {}); err != nil {
 				t.Fatal(err)
@@ -93,7 +93,7 @@ func TestCodexSmoke(t *testing.T) {
 	repo, _ := testutil.RemoteRepo(t)
 	testutil.Git(t, repo, "add", "--all")
 	snapshot := git.Snapshot{Head: testutil.Git(t, repo, "rev-parse", "HEAD"), Tree: testutil.Git(t, repo, "write-tree")}
-	message, err := CommitMessage(context.Background(), repo, snapshot)
+	message, err := CommitMessage(context.Background(), repo, snapshot, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func TestCommitMessageFollowsStagedAttributes(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := git.Push(context.Background(), repo, CommitMessage, func(string) {}); err != nil {
+	if _, err := git.Push(context.Background(), repo, defaultModel, func(string) {}); err != nil {
 		t.Fatal(err)
 	}
 	prompt, err := os.ReadFile(promptFile)
@@ -153,7 +153,7 @@ func TestCommitMessageWithoutCheckAttrSource(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo, "main.go"), []byte("package main // code\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := git.Push(context.Background(), repo, CommitMessage, func(string) {}); err != nil {
+	if _, err := git.Push(context.Background(), repo, defaultModel, func(string) {}); err != nil {
 		t.Fatal(err)
 	}
 	if prompt, err := os.ReadFile(promptFile); err != nil || !bytes.Contains(prompt, []byte("## Code\n")) || !bytes.Contains(prompt, []byte("// code")) {
@@ -230,4 +230,10 @@ func TestStream(t *testing.T) {
 	if lines := strings.Split(strings.TrimSpace(string(args)), "\n"); len(lines) != 3 || lines[2] != "app-server resume thread-1" {
 		t.Fatalf("codex ran with %q", lines)
 	}
+}
+
+// defaultModel writes commit messages with CommitModel, as Ship does
+// where the user chose no model.
+func defaultModel(ctx context.Context, repo string, s git.Snapshot) (string, error) {
+	return CommitMessage(ctx, repo, s, "")
 }
