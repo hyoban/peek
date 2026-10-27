@@ -26,10 +26,14 @@ PEEK_DEV=1 go tool mygo build -skip-dmg &&
   while pgrep -qf "/Applications/Peek Dev.app/Contents/MacOS/"; do sleep 0.2; done &&
   rm -rf "/Applications/Peek Dev.app" &&
   ditto "build/darwin-arm64/Peek Dev.app" "/Applications/Peek Dev.app" &&
-  open "/Applications/Peek Dev.app"
+  env -i HOME="$HOME" USER="$USER" LOGNAME="$LOGNAME" open "/Applications/Peek Dev.app"
 ```
 
-The app quits through AppleScript to keep what it saves on quitting.
+The app quits through AppleScript to keep what it saves on quitting, and
+opens with the environment of an app opened from the Dock, not the
+agent's: its terminal's shells inherit it, and tools that find an agent
+there (`AI_AGENT`, `CLAUDECODE`) change how they run, as `astro dev`
+detaches.
 
 ## Commits
 

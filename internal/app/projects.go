@@ -207,6 +207,7 @@ func (a *app) close() {
 	}
 	a.review.stop()
 	a.answer.stop()
+	a.closeTerminal()
 	if a.unwatch != nil {
 		a.unwatch()
 	}
@@ -226,6 +227,7 @@ func (p *projects) open(repo string) {
 		if cur := p.cur; cur != nil { // the columns as they are
 			a.showHistory, a.showTree = cur.showHistory, cur.showTree
 			a.historyWidth, a.treeWidth = cur.historyWidth, cur.treeWidth
+			a.terminal.shown, a.terminal.height = cur.terminal.shown, cur.terminal.height
 			a.split = cur.split
 		} else {
 			a.split = p.prefs().SideBySide
@@ -356,6 +358,7 @@ func (p *projects) openFolder(dir string, parent *mygo.Window) bool {
 // where it cannot.
 type menuItems struct {
 	changes, files, sidebar, history, viewed  *menuItem
+	terminal                                  *menuItem
 	layout, nextChange, previousChange        *menuItem
 	find                                      *menuItem
 	definition, back, forward                 *menuItem
@@ -396,8 +399,8 @@ func (m *menuItem) show(label string, enabled, checked bool) {
 // setMenu gives the app its menu bar, which holds every command of the
 // window as Mac apps' does: the File menu's folders, Find in the Edit
 // menu, the View menu's modes as Finder's views, ⌘1 and ⌘2, and its
-// columns as AppKit's sidebar and inspector, ⌃⌘S and ⌃⌘I, and the
-// Repository menu's work with the remote.
+// columns as AppKit's sidebar and inspector, ⌃⌘S and ⌃⌘I, the terminal
+// under the text, ⌘J, and the Repository menu's work with the remote.
 func (p *projects) setMenu() {
 	// do runs fn on the project with the focus, and shows the menu bar
 	// as it leaves it.
@@ -422,8 +425,9 @@ func (p *projects) setMenu() {
 			Click: do(func(a *app) { a.setMode(modeChanges) })}),
 		files: newMenuItem(&mygo.MenuItem{Label: "Files", Type: mygo.MenuItemRadio, Accelerator: "Cmd+2",
 			Click: do(func(a *app) { a.setMode(modeFiles) })}),
-		sidebar: item("Hide Sidebar", "Ctrl+Cmd+S", func(a *app) { a.toggle(&a.showTree, &a.collapsedTree) }),
-		history: item("Hide History", "Ctrl+Cmd+I", func(a *app) { a.toggle(&a.showHistory, &a.collapsedHistory) }),
+		sidebar:  item("Hide Sidebar", "Ctrl+Cmd+S", func(a *app) { a.toggle(&a.showTree, &a.collapsedTree) }),
+		history:  item("Hide History", "Ctrl+Cmd+I", func(a *app) { a.toggle(&a.showHistory, &a.collapsedHistory) }),
+		terminal: item("Show Terminal", "Cmd+J", func(a *app) { a.toggleTerminal() }),
 		viewed: item("Mark as Viewed", "Alt+Cmd+V", func(a *app) {
 			if d := a.diffOf[a.file]; d != nil {
 				a.setRead(d, !d.read)
@@ -511,7 +515,7 @@ func (p *projects) setMenu() {
 		{Label: "View", Submenu: []*mygo.MenuItem{
 			m.changes.MenuItem, m.files.MenuItem,
 			mygo.Separator(),
-			m.sidebar.MenuItem, m.history.MenuItem,
+			m.sidebar.MenuItem, m.history.MenuItem, m.terminal.MenuItem,
 			mygo.Separator(),
 			m.layout.MenuItem,
 			mygo.Separator(),
@@ -548,7 +552,7 @@ func (p *projects) syncMenu() {
 		return
 	}
 	if a == nil {
-		for _, item := range []*menuItem{m.changes, m.files, m.sidebar, m.history, m.viewed, m.find, m.layout, m.nextChange, m.previousChange,
+		for _, item := range []*menuItem{m.changes, m.files, m.sidebar, m.history, m.terminal, m.viewed, m.find, m.layout, m.nextChange, m.previousChange,
 			m.refresh, m.pull, m.ship, m.ask, m.review, m.explain, m.branch, m.github, m.finder, m.definition, m.back, m.forward} {
 			item.show(item.shownLabel, false, item.shownChecked)
 		}
@@ -559,6 +563,7 @@ func (p *projects) syncMenu() {
 	m.files.show("Files", true, a.mode == modeFiles)
 	m.sidebar.show(showOrHide(a.showTree, "Sidebar"), true, false)
 	m.history.show(showOrHide(a.showHistory, "History"), true, false)
+	m.terminal.show(showOrHide(a.terminal.shown, "Terminal"), true, false)
 	d := a.diffOf[a.file]
 	viewed := "Mark as Viewed"
 	if d != nil && d.read {

@@ -10,6 +10,8 @@ export default {
   copyright: "Copyright © 2026 Stephen Zhou",
   out: "build",
   macos: {
+    // The terminal's libghostty-vt runs on macOS 13 or later.
+    minimumSystemVersion: "13.0",
     infoPlist: {
       LSApplicationCategoryType: "public.app-category.developer-tools",
     },

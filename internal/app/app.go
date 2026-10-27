@@ -165,6 +165,8 @@ type app struct {
 	// previewed is the Markdown files shown as their previews, their
 	// sources showing by default.
 	previewed map[string]bool
+
+	terminal terminalState
 }
 
 func newApp(repo string) *app {
@@ -184,6 +186,7 @@ func newApp(repo string) *app {
 		ask:          askState{template: -1},
 		compose:      askState{template: -1},
 		convRow:      -1,
+		terminal:     terminalState{height: 240},
 	}
 }
 
@@ -268,14 +271,16 @@ func (a *app) view(c *ui.Context) {
 			// The toolbar's room over the text in its band, as the jump
 			// bar under it, as Xcode's editor's.
 			ui.Column(c).Shrink(0).FillWidth().Background(chromeColor(a.theme)).Children(func() { a.toolbar(c, !tree, !history) })
-			switch conv := a.shownConversation(); {
-			case conv != nil:
-				a.conversationPane(c, conv)
-			case a.mode == modeFiles:
-				a.codePane(c)
-			default:
-				a.diffPane(c)
-			}
+			a.withTerminal(c, func() {
+				switch conv := a.shownConversation(); {
+				case conv != nil:
+					a.conversationPane(c, conv)
+				case a.mode == modeFiles:
+					a.codePane(c)
+				default:
+					a.diffPane(c)
+				}
+			})
 		})
 	}
 	if split != nil {
@@ -571,6 +576,7 @@ func (a *app) toolbar(c *ui.Context, start, end bool) {
 				if page := a.githubPage(); page != "" {
 					a.linkButton(c, "github", githubIcon, "Open on GitHub", page)
 				}
+				a.terminalButton(c)
 				if end {
 					a.actions(c)
 					a.paneButton(c, "history", historyIcon, &a.showHistory, &a.collapsedHistory, "History")
@@ -619,6 +625,12 @@ func (a *app) paneButton(c *ui.Context, key string, svg *ui.SVG, on, collapsed *
 	action := showOrHide(*on, pane)
 	ui.Button(c.Key(key), "").Shrink(0).Label(action).Tooltip(action).
 		Children(func() { ui.Icon(c, svg).Size(16, 16) }).OnClick(func() { a.toggle(on, collapsed) })
+}
+
+// terminalButton shows or hides the terminal under the text.
+func (a *app) terminalButton(c *ui.Context) {
+	ui.Button(c.Key("terminal"), "").Shrink(0).Label(showOrHide(a.terminal.shown, "Terminal")).Tooltip(terminalTip(a.terminal.shown)).
+		Children(func() { ui.Icon(c, terminalIcon).Size(16, 16) }).OnClick(a.toggleTerminal)
 }
 
 // projectTitle is the title of the window, the project's name, which a
@@ -1399,6 +1411,9 @@ func (a *app) loadText(hash, p string) {
 				}
 				a.code, a.picture, a.codeNote, a.preview = code, picture, note, preview
 				a.codePath, a.codeHash = p, hash
+				if hash == git.Worktree {
+					a.placeCaret(p, code)
+				}
 			}
 		}
 	})

@@ -71,6 +71,8 @@ func (a *app) toolbarSpec(c *ui.Context) *mygo.Toolbar {
 		mygo.ToolbarItem{ID: "text-end", Kind: mygo.ToolbarFlexibleSpace},
 		mygo.ToolbarItem{ID: "github", Symbol: "arrow.up.forward.app", Label: "Open on GitHub", ToolTip: "Open on GitHub", Hidden: page == "",
 			Click: func() { services.OpenURL(page) }},
+		mygo.ToolbarItem{ID: "terminal", Symbol: "terminal", Label: showOrHide(a.terminal.shown, "Terminal"),
+			ToolTip: terminalTip(a.terminal.shown), Click: a.toggleTerminal},
 		mygo.ToolbarItem{ID: "history-separator", Kind: mygo.ToolbarSeparator, Divider: 1},
 		mygo.ToolbarItem{ID: "history-start", Kind: mygo.ToolbarFlexibleSpace},
 	)
