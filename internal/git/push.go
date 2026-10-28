@@ -324,3 +324,45 @@ func Run(ctx context.Context, repo string, args ...string) (string, error) {
 	}
 	return strings.TrimSpace(out.String()), nil
 }
+
+// Published is how far the branch's commits have reached the place Ship
+// pushes to, as last fetched: Ref names the remote's branch, as
+// "origin/main", "" for one not published yet or a detached HEAD, Hash
+// is the commit it is at, and Unpushed holds those of HEAD's commits,
+// among the limit newest, it does not have. It reads cached remote refs
+// without network I/O.
+type Published struct {
+	Ref, Hash string
+	Unpushed  map[string]bool
+}
+
+func ReadPublished(repo string, limit int) Published {
+	g := func(args ...string) (string, error) {
+		out, err := git(repo, args...)
+		return strings.TrimSpace(out), err
+	}
+	branch, _ := g("symbolic-ref", "--quiet", "--short", "HEAD")
+	remote, target, err := PushDestination(g, branch)
+	if err != nil {
+		return Published{} // nowhere to push, so nothing to mark
+	}
+	var p Published
+	not := "--remotes=" + remote
+	if branch != "" {
+		ref := "refs/remotes/" + remote + "/" + target
+		if hash, err := g("rev-parse", "--verify", "--quiet", ref+"^{commit}"); err == nil {
+			p.Ref, p.Hash, not = remote+"/"+target, hash, ref
+		}
+	}
+	out, err := g("rev-list", fmt.Sprintf("--max-count=%d", limit), "HEAD", "--not", not)
+	if err != nil {
+		return p
+	}
+	for hash := range strings.FieldsSeq(out) {
+		if p.Unpushed == nil {
+			p.Unpushed = map[string]bool{}
+		}
+		p.Unpushed[hash] = true
+	}
+	return p
+}

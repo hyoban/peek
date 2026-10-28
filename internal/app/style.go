@@ -14,6 +14,7 @@ var (
 	systemRed    = colors{"#ff3b30", "#ff453a", "#d70015", "#ff6961"}
 	systemOrange = colors{"#ff9500", "#ff9f0a", "#c93400", "#ffb340"}
 	systemPurple = colors{"#af52de", "#bf5af2", "#8944ab", "#da8fff"}
+	systemBlue   = colors{"#007aff", "#0a84ff", "#0040dd", "#409cff"}
 )
 
 // colors is a system color in light, dark, and the two with Increase

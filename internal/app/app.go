@@ -823,7 +823,7 @@ func (a *app) history(c *ui.Context) {
 // tree's and a range's with their badges, over their summaries.
 func (a *app) commitItem(c *ui.Context) func(cm git.Commit) ui.SourceListItem {
 	dark := c.Theme().Dark
-	orange, purple := system(c, systemOrange), system(c, systemPurple)
+	orange, purple, blue := system(c, systemOrange), system(c, systemPurple), system(c, systemBlue)
 	ring := c.Theme().Background
 	services := c.Services()
 	return func(cm git.Commit) ui.SourceListItem {
@@ -841,9 +841,19 @@ func (a *app) commitItem(c *ui.Context) func(cm git.Commit) ui.SourceListItem {
 			})
 			return it
 		}
-		// The tags lead the line under the subject, which they leave whole.
-		it.Subtitle = strings.Join(append(slices.Clone(cm.Tags), shortDate(cm.Time, time.Now()), authors(cm)), " · ")
+		// The remote's branch and the tags lead the line under the subject,
+		// which they leave whole.
+		var refs []string
+		if cm.Remote != "" {
+			refs = append(refs, cm.Remote)
+		}
+		it.Subtitle = strings.Join(append(append(refs, cm.Tags...), shortDate(cm.Time, time.Now()), authors(cm)), " · ")
 		it.Tooltip = commitMessage(cm)
+		if cm.Unpushed {
+			// An arrow up, as Xcode marks the commits to push.
+			it.Badges = []ui.SourceListBadge{{Text: "↑", Color: blue, Bold: true}}
+			it.Tooltip += "\n\nNot pushed yet"
+		}
 		var co *git.Person
 		key := fmt.Sprint("avatar", dark, cm.Author, cm.Email, a.avatar(cm.Email) != nil)
 		if len(cm.CoAuthors) > 0 {

@@ -226,3 +226,32 @@ func TestPushAvailability(t *testing.T) {
 	testutil.Git(t, repo, "commit", "--allow-empty", "-m", "A detached change")
 	check(true)
 }
+
+func TestReadPublished(t *testing.T) {
+	repo, _ := testutil.RemoteRepo(t)
+	pushed := testutil.Git(t, repo, "rev-parse", "HEAD")
+	testutil.Git(t, repo, "commit", "--allow-empty", "-m", "Local change")
+	local := testutil.Git(t, repo, "rev-parse", "HEAD")
+	p := ReadPublished(repo, 500)
+	if p.Ref != "origin/main" || p.Hash != pushed || len(p.Unpushed) != 1 || !p.Unpushed[local] {
+		t.Fatalf("%+v", p)
+	}
+	testutil.Git(t, repo, "push")
+	if p := ReadPublished(repo, 500); p.Hash != local || len(p.Unpushed) != 0 {
+		t.Fatalf("after push: %+v", p)
+	}
+
+	testutil.Git(t, repo, "switch", "-c", "feature")
+	testutil.Git(t, repo, "commit", "--allow-empty", "-m", "Feature change")
+	feature := testutil.Git(t, repo, "rev-parse", "HEAD")
+	// Not published yet: what no branch of the remote has.
+	if p := ReadPublished(repo, 500); p.Ref != "" || len(p.Unpushed) != 1 || !p.Unpushed[feature] {
+		t.Fatalf("unpublished: %+v", p)
+	}
+
+	bare := testutil.Repo(t)
+	testutil.Git(t, bare, "commit", "--allow-empty", "-m", "No remote")
+	if p := ReadPublished(bare, 500); p.Ref != "" || p.Unpushed != nil {
+		t.Fatalf("no remote: %+v", p)
+	}
+}

@@ -32,6 +32,11 @@ type Commit struct {
 	Time      time.Time
 	Tags      []string // the tags on the commit
 	Summary   string   // what the work tree's entry says of its changes
+	// Remote names the remote's branch Ship pushes to where it is at the
+	// commit, as "origin/main", and Unpushed is that it does not have the
+	// commit yet; the history sets them from Published.
+	Remote   string
+	Unpushed bool
 }
 
 // Worktree is the hash of the entry for the changes not committed yet:

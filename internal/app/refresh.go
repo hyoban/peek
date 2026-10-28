@@ -50,10 +50,12 @@ func readHistory(repo string) history {
 		unpushed    bool
 		behind      int
 		upstream    string
+		published   git.Published
 	)
 	// The review's snapshot asks too, not to wait on a read of its own.
 	hasUnpushed := sync.OnceValue(func() bool { return git.HasUnpushedCommits(repo) })
 	wg.Go(func() { commits, err = git.LoadCommits(repo, 500) })
+	wg.Go(func() { published = git.ReadPublished(repo, 500) })
 	wg.Go(func() { changes, _ = git.LoadWorktreeChanges(repo) })
 	wg.Go(func() { snapshot, snapshotErr = review.ReadSnapshotWith(repo, hasUnpushed) })
 	wg.Go(func() { r, hasBranch = git.BranchBase(repo) })
@@ -63,6 +65,13 @@ func readHistory(repo string) history {
 	wg.Go(func() { unpushed = hasUnpushed() })
 	wg.Go(func() { behind, upstream = git.BehindUpstream(repo) })
 	wg.Wait()
+	for i := range commits {
+		cm := &commits[i]
+		cm.Unpushed = published.Unpushed[cm.Hash]
+		if cm.Hash == published.Hash {
+			cm.Remote = published.Ref
+		}
+	}
 	// The work tree's entry always shows, for its files to read as they
 	// are on disk, with changes or none.
 	summary := "No changes"

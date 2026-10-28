@@ -267,3 +267,23 @@ func TestIgnoredOnly(t *testing.T) {
 		t.Error("the project gone counts as ignored")
 	}
 }
+
+// The history marks the commits not pushed yet, and names the remote's
+// branch on the commit it is at.
+func TestHistoryMarksUnpushed(t *testing.T) {
+	repo, _ := testutil.RemoteRepo(t)
+	testutil.Git(t, repo, "commit", "--allow-empty", "-m", "Local change")
+	h := readHistory(repo)
+	var local, pushed git.Commit
+	for _, cm := range h.commits {
+		switch cm.Subject {
+		case "Local change":
+			local = cm
+		case "Initial commit":
+			pushed = cm
+		}
+	}
+	if !local.Unpushed || local.Remote != "" || pushed.Unpushed || pushed.Remote != "origin/main" {
+		t.Fatalf("local %+v, pushed %+v", local, pushed)
+	}
+}
