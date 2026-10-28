@@ -437,6 +437,10 @@ func (p *projects) settingsView(c *ui.Context) {
 			}
 		}).Gap(t.Space(4))
 	})
+	// The window's own color behind the form, as AppKit's settings
+	// windows have: its controls show through the content onto it, and
+	// a background of the content's would frame each of them.
+	c.Root().Background(ui.Transparent)
 	// The window as tall as the pane, its top where it is, as AppKit's
 	// preference windows change panes.
 	if w.body == 0 {
