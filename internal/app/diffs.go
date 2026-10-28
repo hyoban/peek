@@ -526,7 +526,7 @@ func (a *app) loadDiff(d *fileDiff) {
 				Wrap:             true,
 				IgnoreWhitespace: prefs.IgnoreWhitespace,
 				Font:             prefs.codeFont(),
-				Theme:            codeTheme,
+				Theme:            codeTheme(prefs.CodeTheme, false), // the window's appearance's as it shows
 			}
 			if patch != nil {
 				state.SetPatch(*patch)
@@ -599,16 +599,6 @@ func filePatch(repo, hash string, ch git.Change) *editor.FilePatch {
 // the system's monospaced font.
 const monoFamily = "MonoLisaCode, MonoLisa Variable, monospace"
 
-// codeTheme is the default's, light or dark, with comments in italics.
-var codeTheme = func() *editor.Theme {
-	ct := &editor.Theme{} // the default's colors fill those left zero
-	ct.Tokens[editor.TokenComment].Italic = true
-	ct.Tokens[editor.TokenEmphasis].Italic = true
-	ct.Tokens[editor.TokenHeading].Bold = true
-	ct.Tokens[editor.TokenStrong].Bold = true
-	return ct
-}()
-
 // textNote tells why these texts do not show, "" where they do.
 func textNote(texts ...string) string {
 	for _, text := range texts {
@@ -643,7 +633,7 @@ func newCode(p, text string) *editor.State { return codeOf(codeBuffer(p, text), 
 // file's takes a while to, wrapped and its imports folded as the user
 // chose.
 func codeOf(buf *editor.Buffer, s settings) *editor.State {
-	st := &editor.State{Buffer: buf, ReadOnly: true, SoftWrap: s.WrapLines, Font: s.codeFont(), Theme: codeTheme}
+	st := &editor.State{Buffer: buf, ReadOnly: true, SoftWrap: s.WrapLines, Font: s.codeFont(), Theme: codeTheme(s.CodeTheme, false)}
 	if s.FoldImports {
 		st.FoldImports()
 	}

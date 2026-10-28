@@ -33,6 +33,7 @@ type settings struct {
 	// Text Editing.
 	CodeFont         string `json:"codeFont"`     // the family of code, "" for monoFamily
 	CodeSize         int    `json:"codeFontSize"` // in points
+	CodeTheme        string `json:"codeTheme"`    // a name of codeThemeChoices, "" for the first
 	SideBySide       bool   `json:"sideBySide"`   // the diffs' layout, where no project shows to copy
 	IgnoreWhitespace bool   `json:"ignoreWhitespace"`
 	WrapLines        bool   `json:"wrapLines"` // in Files; diffs always wrap
@@ -103,6 +104,9 @@ func readSettings(dir string) settings {
 	}
 	if !slices.Contains(codeSizes, s.CodeSize) {
 		s.CodeSize = defaultSettings.CodeSize
+	}
+	if _, ok := codeThemes[s.CodeTheme]; !ok {
+		s.CodeTheme = defaultSettings.CodeTheme
 	}
 	if s.ReviewBlocking < 0 || s.ReviewBlocking >= len(reviewChoices) {
 		s.ReviewBlocking = defaultSettings.ReviewBlocking
@@ -235,6 +239,7 @@ type settingsWindow struct {
 	shown                 settings
 	launch, layout, fetch string
 	font, size, reviews   string
+	codeTheme             string
 	// fonts are the monospaced families installed, read as the window
 	// opens; login whether Peek opens at login, as the system has it.
 	fonts           []string
@@ -313,6 +318,7 @@ func (p *projects) showSettings() {
 		w.layout = layoutChoices[1]
 	}
 	w.font, w.size, w.reviews = cmp.Or(s.CodeFont, defaultFont), sizeLabel(s.CodeSize), reviewChoices[s.ReviewBlocking]
+	w.codeTheme = cmp.Or(s.CodeTheme, codeThemeChoices[0].name)
 	w.login = mygo.App.OpenAtLogin()
 	w.wasLogin = w.login
 	w.codex, _ = codex.Executable()
@@ -374,6 +380,10 @@ func (p *projects) takeSettings() {
 		if w.size == sizeLabel(size) {
 			s.CodeSize = size
 		}
+	}
+	s.CodeTheme = w.codeTheme
+	if s.CodeTheme == codeThemeChoices[0].name {
+		s.CodeTheme = ""
 	}
 	if i := slices.Index(reviewChoices, w.reviews); i >= 0 {
 		s.ReviewBlocking = i
@@ -503,6 +513,13 @@ func (p *projects) textEditingSettings(c *ui.Context) {
 			ui.NativePopUpButton(c.Key("size"), &w.size, sizes)
 		})
 	}).Description("Of diffs and files. Default is MonoLisa where it is installed, else the system’s monospaced font.")
+	settingsField(c, "Theme", func() {
+		var names []string
+		for _, ch := range codeThemeChoices {
+			names = append(names, ch.name)
+		}
+		ui.NativePopUpButton(c.Key("codeTheme"), &w.codeTheme, names).Width(220)
+	}).Description("The colors of code, light or dark as the system’s appearance is.")
 	settingsSection(c)
 	settingsField(c, "Diff Layout", func() {
 		ui.NativePopUpButton(c.Key("layout"), &w.layout, layoutChoices).Width(220)

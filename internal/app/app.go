@@ -1232,6 +1232,7 @@ func (a *app) codePane(c *ui.Context) {
 			case a.previewing():
 				previewView(c, a.preview)
 			default:
+				a.code.Theme = codeTheme(a.prefs().CodeTheme, c.Theme().Dark)
 				editor.View(c.Key("code:"+a.openFile), a.code).Grow(1).FillWidth().Bind(&a.navigation.editor)
 				if a.navigation.focus {
 					a.navigation.focus = false

@@ -41,6 +41,7 @@ func (a *app) layoutButton(c *ui.Context) {
 func (a *app) configure(c *ui.Context, d *fileDiff) {
 	st := d.state
 	st.Layout = a.diffLayout()
+	st.Theme = codeTheme(a.prefs().CodeTheme, c.Theme().Dark)
 	// A patch's lines are not numbered as the file's, for references.
 	st.LineSelection = !d.patch
 	st.OnGutterButton = nil

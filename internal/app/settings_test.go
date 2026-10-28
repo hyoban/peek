@@ -10,6 +10,7 @@ import (
 	"peek/internal/testutil"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
 )
 
 func TestSettingsFromTheChoicesOfBefore(t *testing.T) {
@@ -79,6 +80,29 @@ func TestCodeAsChosen(t *testing.T) {
 	code := codeOf(codeBuffer("main.go", "package main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n)\n\nfunc main() { fmt.Println(os.Args) }\n"), s)
 	if code.SoftWrap || len(code.Folded()) != 0 {
 		t.Errorf("wrapped %v, folded %v, want neither", code.SoftWrap, code.Folded())
+	}
+}
+
+func TestCodeThemeAsChosen(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, settingsFile), []byte(`{"codeTheme": "Nonesuch"}`), 0o644)
+	if s := readSettings(dir); s.CodeTheme != "" {
+		t.Errorf("theme %q, want the default for one not offered", s.CodeTheme)
+	}
+	if codeTheme("Nonesuch", false) != codeTheme("", false) {
+		t.Error("a theme not offered isn't the default's")
+	}
+	for _, ch := range codeThemeChoices[1:] {
+		light, dark := codeTheme(ch.name, false), codeTheme(ch.name, true)
+		if light == dark || light.Text == dark.Text {
+			t.Errorf("%s the same light and dark", ch.name)
+		}
+		if got := light.TokenColor(editor.TokenKeyword); got == light.Text {
+			t.Errorf("%s keywords in the text's color", ch.name)
+		}
+		if got := dark.TokenColor(editor.TokenPunctuation); got != dark.Text {
+			t.Errorf("%s punctuation %v, want the text's %v", ch.name, got, dark.Text)
+		}
 	}
 }
 
