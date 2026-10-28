@@ -287,3 +287,46 @@ func TestHistoryMarksUnpushed(t *testing.T) {
 		t.Fatalf("local %+v, pushed %+v", local, pushed)
 	}
 }
+
+// Each repository shows again the entry of the history it showed last,
+// the branch's changes over the uncommitted ones that would show first,
+// however the branch moved meanwhile.
+func TestKeptEntry(t *testing.T) {
+	repo, _ := testutil.RemoteRepo(t)
+	testutil.Git(t, repo, "add", "--all")
+	testutil.Git(t, repo, "commit", "-q", "-m", "Update the files")
+	testutil.Git(t, repo, "push", "-q", "origin", "main")
+	testutil.Git(t, repo, "switch", "-q", "-c", "feature")
+	commit := func(name string) {
+		if err := os.WriteFile(filepath.Join(repo, name), []byte("package main\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		testutil.Git(t, repo, "add", name)
+		testutil.Git(t, repo, "commit", "-q", "-m", "Add "+name)
+	}
+	commit("run.go")
+	if err := os.WriteFile(filepath.Join(repo, "wip.go"), []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	open := func() (*app, *ui.Tester) {
+		p := &projects{apps: map[string]*app{}, inline: true, dir: dir, entries: readEntries(dir)}
+		tt := ui.NewTester(p.view, 1200, 800)
+		p.open(repo)
+		settle(tt)
+		return p.cur, tt
+	}
+
+	a, tt := open()
+	if cm, ok := a.current(); !ok || cm.Hash != git.Worktree {
+		t.Fatalf("shown %+v, want the uncommitted changes first", cm)
+	}
+	a.commitRow = 1 // the branch's changes
+	settle(tt)
+	commit("more.go") // the branch moves on
+
+	a, _ = open()
+	if cm, ok := a.current(); !ok || !git.IsRange(cm.Hash) || cm.Summary != "2 commits since main" {
+		t.Fatalf("shown %+v, want the branch's changes as left", cm)
+	}
+}

@@ -34,6 +34,9 @@ type projects struct {
 	// next is the project of the group to show from the next pass on, as
 	// the user chose a file of it in the sidebar.
 	next *app
+	// entries are the history's entry each repository showed last
+	// (entries.go).
+	entries map[string]string
 	// chosen are the user's choices, nil for the defaults (prefs), and
 	// settings the Settings window, nil while closed.
 	chosen   *settings
@@ -49,6 +52,7 @@ func newProjects() *projects {
 		p.dir = filepath.Join(dir, "peek")
 		p.recent = p.readList("recent")
 		p.groups = p.readGroups()
+		p.entries = readEntries(p.dir)
 		s := readSettings(p.dir)
 		p.chosen = &s
 	}

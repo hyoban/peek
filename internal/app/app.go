@@ -1285,7 +1285,11 @@ func (a *app) loadChosen(c *ui.Context) (git.Commit, bool) {
 			a.navigator = navFiles // the entry chosen shows its changes
 		}
 		a.loadedRow = a.commitRow
-		a.loadCommit(a.commits[a.commitRow].Hash)
+		hash := a.commits[a.commitRow].Hash
+		a.loadCommit(hash)
+		if a.projects != nil {
+			a.projects.keepEntry(a.repo, hash)
+		}
 	}
 	cm, ok := a.current()
 	if ok && a.mode == modeFiles && a.filesFor != a.loadedRow {
@@ -1367,6 +1371,9 @@ func (a *app) loadCommits() {
 			a.readPullURL(false)
 			if len(h.commits) > 0 {
 				a.commitRow = landingRow(h)
+				if row, ok := a.keptRow(); ok {
+					a.commitRow = row // as the user left it
+				}
 			}
 		}
 	})
