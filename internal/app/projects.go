@@ -24,12 +24,16 @@ type projects struct {
 	apps    map[string]*app // the projects open, by repository
 	cur     *app            // the project the window shows, nil for none
 	recent  []string        // the repositories opened, the latest first
+	groups  [][]string      // the repositories shown together (group.go)
 	dir     string          // where recent and the projects open are kept, "" for nowhere
 	inline  bool            // no windows, the apps' loads on the UI thread, for tests
 	menu    *menuItems      // the menu bar's items that follow the project, nil in tests
 	win     *mygo.Window    // the window, which shows the project shown; nil while closed and in tests
 	bar     *menuBar        // the item in the menu bar, nil in tests
 	badge   int             // the count on the Dock icon
+	// next is the project of the group to show from the next pass on, as
+	// the user chose a file of it in the sidebar.
+	next *app
 	// chosen are the user's choices, nil for the defaults (prefs), and
 	// settings the Settings window, nil while closed.
 	chosen   *settings
@@ -44,6 +48,7 @@ func newProjects() *projects {
 	if dir, err := os.UserConfigDir(); err == nil {
 		p.dir = filepath.Join(dir, "peek")
 		p.recent = p.readList("recent")
+		p.groups = p.readGroups()
 		s := readSettings(p.dir)
 		p.chosen = &s
 	}
@@ -53,17 +58,29 @@ func newProjects() *projects {
 // readList reads the repositories listed in the file of the app's folder
 // that still exist; nil for none or no file.
 func (p *projects) readList(name string) []string {
-	data, err := os.ReadFile(filepath.Join(p.dir, name))
-	if err != nil {
-		return nil
-	}
 	var repos []string
-	for _, repo := range strings.Split(string(data), "\n") {
-		if repo != "" && exists(repo) {
+	for _, repo := range p.readLines(name) {
+		if exists(repo) {
 			repos = append(repos, repo)
 		}
 	}
 	return repos
+}
+
+// readLines reads the lines of the file of the app's folder that hold
+// anything; nil for none or no file.
+func (p *projects) readLines(name string) []string {
+	data, err := os.ReadFile(filepath.Join(p.dir, name))
+	if err != nil {
+		return nil
+	}
+	var lines []string
+	for _, line := range strings.Split(string(data), "\n") {
+		if line != "" {
+			lines = append(lines, line)
+		}
+	}
+	return lines
 }
 
 // writeList keeps the repositories in the file of the app's folder.
@@ -110,6 +127,11 @@ func exists(p string) bool {
 // whole content: each project builds its own widgets, which keep their
 // state apart, as the user left them.
 func (p *projects) view(c *ui.Context) {
+	if next := p.next; next != nil {
+		p.next = nil
+		p.open(next.repo)
+		next.sidebarTree().toList = true // the sidebar keeps the keys
+	}
 	if p.cur == nil {
 		p.welcome(c)
 		p.syncMenu()
@@ -218,27 +240,12 @@ func (a *app) close() {
 // it first among the recent ones.
 func (p *projects) open(repo string) {
 	p.showWindow()
-	a := p.apps[repo]
-	if a == nil {
-		a = newApp(repo)
-		a.projects, a.avatars, a.inline, a.win = p, p.avatars, p.inline, p.win
-		a.convFile = conversationsFile(p.dir, repo)
-		a.loadConversations()
-		if cur := p.cur; cur != nil { // the columns as they are
-			a.showHistory, a.showTree = cur.showHistory, cur.showTree
-			a.historyWidth, a.treeWidth = cur.historyWidth, cur.treeWidth
-			a.terminal.shown, a.terminal.height = cur.terminal.shown, cur.terminal.height
-			a.split = cur.split
-		} else {
-			a.split = p.prefs().SideBySide
-		}
-		p.apps[repo] = a
-		if !p.inline {
-			a.shot = shotFromEnv()
-			a.watch()
-		}
-		a.loadCommits()
-	} else if a != p.cur {
+	_, was := p.apps[repo]
+	a := p.app(repo)
+	if a != p.cur && p.cur != nil && slices.Contains(p.groupOf(repo), p.cur.repo) {
+		a.takeLayout(p.cur) // the group's window as it is
+	}
+	if was && a != p.cur {
 		a.refresh() // what changed since it last showed
 	}
 	p.cur = a
@@ -259,6 +266,33 @@ func (p *projects) open(repo string) {
 		mygo.App.AddRecentDocument(repo) // File ▸ Open Recent
 		p.saveOpen()
 	}
+}
+
+// app returns the project of the repository, opening it, with the
+// columns of the project shown, where it is not open.
+func (p *projects) app(repo string) *app {
+	if a := p.apps[repo]; a != nil {
+		return a
+	}
+	a := newApp(repo)
+	a.projects, a.avatars, a.inline, a.win = p, p.avatars, p.inline, p.win
+	a.convFile = conversationsFile(p.dir, repo)
+	a.loadConversations()
+	if cur := p.cur; cur != nil { // the columns as they are
+		a.showHistory, a.showTree = cur.showHistory, cur.showTree
+		a.historyWidth, a.treeWidth = cur.historyWidth, cur.treeWidth
+		a.terminal.shown, a.terminal.height = cur.terminal.shown, cur.terminal.height
+		a.split = cur.split
+	} else {
+		a.split = p.prefs().SideBySide
+	}
+	p.apps[repo] = a
+	if !p.inline {
+		a.shot = shotFromEnv()
+		a.watch()
+	}
+	a.loadCommits()
+	return a
 }
 
 // saveOpen keeps the projects open, the one shown first, for the next
@@ -292,6 +326,9 @@ func (p *projects) switcher(win *mygo.Window, x, y float32) {
 	items = append(items, &mygo.MenuItem{
 		Label: "Open Folder…", Accelerator: "CmdOrCtrl+O",
 		Click: func(*mygo.MenuItem, *mygo.Window) { p.choose() },
+	}, &mygo.MenuItem{
+		Label: "Add Folder…", Accelerator: "Shift+CmdOrCtrl+O",
+		Click: func(*mygo.MenuItem, *mygo.Window) { p.chooseToAdd() },
 	})
 	menu := mygo.NewMenu(items)
 	go menu.PopupAt(win, int(x), int(y)) // which waits for the menu to close
@@ -339,9 +376,19 @@ func (p *projects) choose() {
 // openFolder opens the repository the folder is in, from any goroutine,
 // or warns that it is in none. It waits for the warning to be read.
 func (p *projects) openFolder(dir string, parent *mygo.Window) bool {
+	return p.openWith(dir, parent, p.open)
+}
+
+// addFolder shows the repository the folder is in with the project shown,
+// as openFolder opens it.
+func (p *projects) addFolder(dir string, parent *mygo.Window) bool {
+	return p.openWith(dir, parent, p.add)
+}
+
+func (p *projects) openWith(dir string, parent *mygo.Window, open func(repo string)) bool {
 	repo, err := git.RepoRoot(dir)
 	if err == nil {
-		mygo.App.WhenReady(func() { p.open(repo) })
+		mygo.App.WhenReady(func() { open(repo) })
 		return true
 	}
 	mygo.Dialog.Message(mygo.MessageOptions{
@@ -365,6 +412,7 @@ type menuItems struct {
 	refresh, pull, ship, ask, review, explain *menuItem
 	branch                                    *menuItem
 	github, finder                            *menuItem
+	add                                       *menuItem
 }
 
 // menuItem is an item of the menu bar, and what it last showed, so that
@@ -474,6 +522,7 @@ func (p *projects) setMenu() {
 		}),
 		github: item("Open on GitHub", "", func(a *app) { mygo.Shell.OpenExternal(a.githubPage()) }),
 		finder: item("Show in Finder", "Alt+Cmd+R", func(a *app) { mygo.Shell.ShowItemInFolder(a.repo) }),
+		add:    item("Add Folder…", "Shift+Cmd+O", func(*app) { p.chooseToAdd() }),
 	}
 	p.menu = m
 	edit := []*mygo.MenuItem{
@@ -507,6 +556,7 @@ func (p *projects) setMenu() {
 		}},
 		{Label: "File", Submenu: []*mygo.MenuItem{
 			{Label: "Open Folder…", Accelerator: "CmdOrCtrl+O", Click: func(*mygo.MenuItem, *mygo.Window) { p.choose() }},
+			m.add.MenuItem,
 			{Role: mygo.RoleOpenRecent},
 			mygo.Separator(),
 			{Role: mygo.RoleClose},
@@ -553,7 +603,7 @@ func (p *projects) syncMenu() {
 	}
 	if a == nil {
 		for _, item := range []*menuItem{m.changes, m.files, m.sidebar, m.history, m.terminal, m.viewed, m.find, m.layout, m.nextChange, m.previousChange,
-			m.refresh, m.pull, m.ship, m.ask, m.review, m.explain, m.branch, m.github, m.finder, m.definition, m.back, m.forward} {
+			m.refresh, m.pull, m.ship, m.ask, m.review, m.explain, m.branch, m.github, m.finder, m.definition, m.back, m.forward, m.add} {
 			item.show(item.shownLabel, false, item.shownChecked)
 		}
 		return
@@ -605,6 +655,7 @@ func (p *projects) syncMenu() {
 	m.branch.show("Switch Branch…", a.branch != "" && !busy, false)
 	m.github.show("Open on GitHub", a.githubPage() != "", false)
 	m.finder.show("Show in Finder", true, false)
+	m.add.show("Add Folder…", true, false)
 }
 
 // showOrHide names the command that shows or hides a column, as AppKit's

@@ -978,10 +978,13 @@ func (a *app) treePane(c *ui.Context) {
 		title, key, tree, label = "Files", "all", &a.allTree, "Files"
 	}
 	tree.applyFilter()
+	members := a.together()
 	// The lines the changes add and delete in all, as GitHub's pull
-	// requests total them, or how many files the filter keeps.
+	// requests total them, or how many files the filter keeps; each
+	// repository's own where the sidebar lists several.
 	detail := func() {
 		switch {
+		case len(members) > 1:
 		case tree.keep != nil:
 			kept, all := tree.filterCount()
 			mutedDetail(c, fmt.Sprintf("%d of %s", kept, count(all, "file")))()
@@ -991,16 +994,34 @@ func (a *app) treePane(c *ui.Context) {
 		}
 	}
 	sideColumn(c, sidebarBackground(c), toolbar, title, detail, func() {
-		switch {
-		case tree.dirs == nil:
-			loading(c)
-		case tree.keep != nil && len(tree.entries("")) == 0:
-			emptyNote(c, "No Results")
-		default:
-			a.treeView(c.Key(key), tree, label)
+		if len(members) > 1 {
+			a.memberTrees(c, members, key, label)
+		} else {
+			a.treeBody(c, tree, key, label, nil)
 		}
 		a.filterBar(c, key, &tree.filterState)
 	})
+}
+
+// treeBody is the sidebar's tree, or what shows while it has no rows;
+// pick, where not nil, runs as a file's row is clicked.
+func (a *app) treeBody(c *ui.Context, tree *pathTree, key, label string, pick func()) {
+	switch {
+	case tree.dirs == nil:
+		loading(c)
+	case tree.keep != nil && len(tree.entries("")) == 0:
+		emptyNote(c, "No Results")
+	default:
+		a.treeView(c.Key(key), tree, label, pick)
+	}
+}
+
+// sidebarTree is the tree the sidebar lists in the mode.
+func (a *app) sidebarTree() *pathTree {
+	if a.mode == modeFiles {
+		return &a.allTree
+	}
+	return &a.changeTree
 }
 
 // filterBar is the field at the bottom of the sidebar that filters its
@@ -1041,8 +1062,19 @@ func (a *app) filterFiles() {
 	tree.focus = true
 }
 
-func (a *app) treeView(c *ui.Context, tree *pathTree, label string) {
-	sideList(c, tree.view(c, label, a.treeItem(c, tree)))
+func (a *app) treeView(c *ui.Context, tree *pathTree, label string, pick func()) {
+	item := a.treeItem(c, tree)
+	if pick != nil {
+		inner := item
+		item = func(p string) ui.SourceListItem {
+			it := inner(p)
+			if !tree.isDir(p) {
+				it.OnClick = pick
+			}
+			return it
+		}
+	}
+	sideList(c, tree.view(c, label, item))
 }
 
 // treeItem returns what describes the rows of the tree, as the sidebar's
@@ -1206,17 +1238,7 @@ func (a *app) codePane(c *ui.Context) {
 func (a *app) sync(c *ui.Context) {
 	a.checkNavigation()
 	a.applyShot(c)
-	if a.changeTree.sync() || a.allTree.sync() {
-		c.Services().Invalidate()
-	}
-	if a.commitRow >= 0 && a.commitRow < len(a.commits) && a.commitRow != a.loadedRow {
-		if a.loadedRow >= 0 {
-			a.navigator = navFiles // the entry chosen shows its changes
-		}
-		a.loadedRow = a.commitRow
-		a.loadCommit(a.commits[a.commitRow].Hash)
-	}
-	cm, ok := a.current()
+	cm, ok := a.loadChosen(c)
 	if !ok {
 		return
 	}
@@ -1234,15 +1256,33 @@ func (a *app) sync(c *ui.Context) {
 		}
 		a.releaseFarDiffs()
 	case modeFiles:
-		if a.filesFor != a.loadedRow {
-			a.filesFor = a.loadedRow
-			a.loadFiles(cm.Hash)
-		}
 		if p := a.allTree.chosen(); p != "" && !a.allTree.isDir(p) && p != a.openFile {
 			a.openFile = p
 			a.loadText(cm.Hash, p)
 		}
 	}
+}
+
+// loadChosen starts loading the changes of the commit chosen in the
+// history, and its files in the files mode, for the sidebar to list,
+// and returns the commit loaded, or loading.
+func (a *app) loadChosen(c *ui.Context) (git.Commit, bool) {
+	if a.changeTree.sync() || a.allTree.sync() {
+		c.Services().Invalidate()
+	}
+	if a.commitRow >= 0 && a.commitRow < len(a.commits) && a.commitRow != a.loadedRow {
+		if a.loadedRow >= 0 {
+			a.navigator = navFiles // the entry chosen shows its changes
+		}
+		a.loadedRow = a.commitRow
+		a.loadCommit(a.commits[a.commitRow].Hash)
+	}
+	cm, ok := a.current()
+	if ok && a.mode == modeFiles && a.filesFor != a.loadedRow {
+		a.filesFor = a.loadedRow
+		a.loadFiles(cm.Hash)
+	}
+	return cm, ok
 }
 
 // current returns the commit whose changes are loaded, or loading.
