@@ -330,3 +330,28 @@ func TestKeptEntry(t *testing.T) {
 		t.Fatalf("shown %+v, want the branch's changes as left", cm)
 	}
 }
+
+func TestGitOnly(t *testing.T) {
+	hints := func(paths ...string) []mygo.FileEvent {
+		var out []mygo.FileEvent
+		for _, p := range paths {
+			out = append(out, mygo.FileEvent{Op: mygo.FileHint, Path: p, IsDir: true})
+		}
+		return out
+	}
+	for _, tc := range []struct {
+		events []mygo.FileEvent
+		want   bool
+	}{
+		{hints(".git"), true},
+		{hints(".git", ".git/refs/remotes/origin"), true},
+		{hints(".git", "web"), false},
+		{hints(".github"), false},
+		{hints("."), false},
+		{nil, false},
+	} {
+		if got := gitOnly(tc.events); got != tc.want {
+			t.Errorf("gitOnly(%v) = %v", tc.events, got)
+		}
+	}
+}

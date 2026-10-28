@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 )
 
 // Client owns the language servers of one repository. Queries serialize
@@ -19,6 +20,7 @@ type Client struct {
 	cancel  context.CancelFunc
 	gate    chan struct{}
 	servers map[string]*rpc
+	stale   atomic.Bool
 }
 
 func New(root string) *Client {
@@ -27,6 +29,10 @@ func New(root string) *Client {
 }
 
 func (c *Client) Close() { c.cancel() }
+
+// Restart has the next query start the servers anew, reading the
+// repository as it is then. The query in flight still gets its answer.
+func (c *Client) Restart() { c.stale.Store(true) }
 
 // serverOf names the server for the file at path, and the language it
 // opens the file as: npmx's for package manifests, where it finds the
@@ -77,6 +83,12 @@ func (c *Client) query(ctx context.Context, key, language, path, text string, as
 	}
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if c.stale.Swap(false) {
+		for k, r := range c.servers {
+			r.stop()
+			delete(c.servers, k)
+		}
 	}
 	root, serverKey := c.root, key
 	if key == "kotlin" {

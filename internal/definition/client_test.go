@@ -208,3 +208,41 @@ func TestInstalledServers(t *testing.T) {
 		})
 	}
 }
+
+func TestRestartAfterQuery(t *testing.T) {
+	t.Setenv("PEEK_DEFINITION_HELPER", "1")
+	c := New(t.TempDir())
+	defer c.Close()
+	r, err := startRPC(c.ctx, c.root, os.Args[0], "-test.run=^TestDefinitionServerProcess$")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var raw json.RawMessage
+	if err := r.call(ctx, "initialize", struct{}{}, &raw); err != nil {
+		t.Fatal(err)
+	}
+	c.servers["go"] = r
+	path := filepath.Join(c.root, "main.go")
+	// A refresh while the server answers lets the answer through.
+	err = c.query(ctx, "go", "go", path, "package main\n", func(r *rpc, uri string) error {
+		c.Restart()
+		return r.call(ctx, "textDocument/hover", struct{}{}, &raw)
+	})
+	if err != nil {
+		t.Fatalf("query cut short: %v", err)
+	}
+	select {
+	case <-r.done:
+		t.Fatal("server stopped before the next query")
+	case <-time.After(100 * time.Millisecond):
+	}
+	// The next query starts it anew.
+	c.query(ctx, "go", "go", path, "package main\n", func(*rpc, string) error { return nil })
+	select {
+	case <-r.done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("server kept after a restart")
+	}
+}

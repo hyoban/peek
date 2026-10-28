@@ -34,7 +34,8 @@ func (f *fakeDefinitions) Hover(_ context.Context, _, text string, offset, verbo
 func (f *fakeDefinitions) Definition(_ context.Context, p, text string, offset int) ([]definition.Location, error) {
 	return f.lookup(p, text, offset)
 }
-func (f *fakeDefinitions) Close() { f.closed = true }
+func (f *fakeDefinitions) Close()   { f.closed = true }
+func (f *fakeDefinitions) Restart() {}
 
 func navigationApp(t *testing.T) (*app, *ui.Tester, string) {
 	t.Helper()

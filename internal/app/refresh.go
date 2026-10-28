@@ -101,7 +101,13 @@ func readHistory(repo string) history {
 // refresh reads the history and the work tree again, as the watch asks
 // once files change, keeping what shows where it still is.
 func (a *app) refresh() {
-	a.invalidateDefinitions()
+	a.restartDefinitions()
+	a.reread()
+}
+
+// reread is refresh for changes only git's own files have, as a fetch's
+// or a commit's: the language servers read nothing of them.
+func (a *app) reread() {
 	if a.refreshing {
 		a.refreshAgain = true
 		return
@@ -113,7 +119,7 @@ func (a *app) refresh() {
 			a.refreshing = false
 			if a.refreshAgain {
 				a.refreshAgain = false
-				defer a.refresh()
+				defer a.reread()
 			}
 			if h.err == nil {
 				a.applyHistory(h)
@@ -384,7 +390,11 @@ func (a *app) watch() {
 			if ignoredOnly(a.repo, events) {
 				continue
 			}
-			win.Update(a.refresh)
+			if gitOnly(events) {
+				win.Update(a.reread)
+			} else {
+				win.Update(a.refresh)
+			}
 		}
 	}()
 }
@@ -401,6 +411,16 @@ func ignoredOnly(repo string, events []mygo.FileEvent) bool {
 		dirs = append(dirs, ev.Path)
 	}
 	return git.AllIgnored(repo, dirs)
+}
+
+// gitOnly reports whether the changes are all in .git.
+func gitOnly(events []mygo.FileEvent) bool {
+	for _, ev := range events {
+		if ev.Path != ".git" && !strings.HasPrefix(ev.Path, ".git/") {
+			return false
+		}
+	}
+	return len(events) > 0
 }
 
 // churn is what changes often without changing what the window shows:

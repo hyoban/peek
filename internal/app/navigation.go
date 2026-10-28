@@ -21,6 +21,7 @@ import (
 type definitionClient interface {
 	Definition(context.Context, string, string, int) ([]definition.Location, error)
 	Hover(context.Context, string, string, int, int) (definition.Hover, error)
+	Restart()
 	Close()
 }
 
@@ -115,7 +116,15 @@ func (a *app) cancelNavigation() {
 }
 
 // Servers have no unsaved documents between queries. A repository refresh
-// drops their caches too, including changes in unopened files and config.
+// restarts them too, for changes in unopened files and config, at the
+// next lookup or hover: one the refresh cut short would show nothing, as
+// the first hover did while the window's first fetch wrote to .git.
+func (a *app) restartDefinitions() {
+	if a.navigation.client != nil {
+		a.navigation.client.Restart()
+	}
+}
+
 func (a *app) invalidateDefinitions() {
 	a.cancelNavigation()
 	if a.navigation.client != nil {
