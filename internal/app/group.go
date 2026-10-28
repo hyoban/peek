@@ -175,15 +175,29 @@ func (a *app) memberTrees(c *ui.Context, members []*app, key, label string) {
 			tree.filter = filter
 			tree.applyFilter()
 		}
-		ui.Column(c.Key("member:" + m.repo)).Grow(1).Basis(0).MinHeight(0).FillWidth().Children(func() {
+		folded := a.projects.isFolded(m.repo)
+		member := ui.Column(c.Key("member:" + m.repo)).MinHeight(0).FillWidth()
+		if folded {
+			member.Shrink(0)
+		} else {
+			member.Grow(1).Basis(0)
+		}
+		member.Children(func() {
 			heading := ui.Row(c).Shrink(0).FillWidth().AlignItems(ui.Center).Gap(t.Space(2)).
 				Padding(t.Space(2), t.Space(4), t.Space(1), t.Space(4)).Tooltip(m.repo)
+			// A click on the name folds the repository's files away, or
+			// shows them again, as the sections of Finder's sidebar.
+			heading.KeepFocus().OnClick(func() { a.projects.fold(m.repo, !folded) })
 			heading.ContextMenu(func(menu *ui.Menu) {
 				if menu.Item("Remove from Window").Chosen() {
 					a.projects.remove(m.repo)
 				}
 			})
 			heading.Children(func() {
+				chevron := ui.Icon(c, chevronIcon).Size(10, 10).Shrink(0).TextColor(t.TextMuted)
+				if folded {
+					chevron.Rotate(-90)
+				}
 				color := t.TextMuted
 				if m == a {
 					color = t.Text // the repository shown
@@ -195,6 +209,9 @@ func (a *app) memberTrees(c *ui.Context, members []*app, key, label string) {
 					lineCounts(c, added, deleted, false)
 				}
 			})
+			if folded {
+				return
+			}
 			if m.err != "" {
 				emptyNote(c, m.err)
 				return
@@ -218,6 +235,26 @@ func (a *app) memberTrees(c *ui.Context, members []*app, key, label string) {
 			c.Services().Invalidate()
 		}
 	}
+}
+
+// isFolded reports whether the sidebar hides the repository's files under
+// its name.
+func (p *projects) isFolded(repo string) bool {
+	return slices.Contains(p.folded, repo)
+}
+
+// fold hides the repository's files in the sidebar under its name, or
+// shows them again, kept for the next launch.
+func (p *projects) fold(repo string, fold bool) {
+	if p.isFolded(repo) == fold {
+		return
+	}
+	if fold {
+		p.folded = append(p.folded, repo)
+	} else {
+		p.folded = slices.DeleteFunc(p.folded, func(r string) bool { return r == repo })
+	}
+	p.writeList("folded", p.folded)
 }
 
 // choseInSidebar reports whether the user chose a file in the sidebar that

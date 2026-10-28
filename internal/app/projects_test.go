@@ -93,6 +93,22 @@ func TestProjectsGroup(t *testing.T) {
 		t.Error("the other repository left the sidebar")
 	}
 
+	// A repository folded keeps only its name in the sidebar.
+	if err := tt.Click(p.label(two)); err != nil {
+		t.Fatal(err)
+	}
+	settle(tt)
+	if tt.HasText("second.go") || !tt.HasText(p.label(two)) || !tt.HasText("first.go") {
+		t.Errorf("folded: texts %q", tt.Texts())
+	}
+	if err := tt.Click(p.label(two)); err != nil {
+		t.Fatal(err)
+	}
+	settle(tt)
+	if !tt.HasText("second.go") {
+		t.Error("unfolded repository lacks its files")
+	}
+
 	// Kept for the next launch.
 	time.Sleep(100 * time.Millisecond) // writeList writes in the background
 	again := &projects{apps: map[string]*app{}, inline: true, dir: dir}

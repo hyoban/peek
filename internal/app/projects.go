@@ -25,12 +25,15 @@ type projects struct {
 	cur     *app            // the project the window shows, nil for none
 	recent  []string        // the repositories opened, the latest first
 	groups  [][]string      // the repositories shown together (group.go)
-	dir     string          // where recent and the projects open are kept, "" for nowhere
-	inline  bool            // no windows, the apps' loads on the UI thread, for tests
-	menu    *menuItems      // the menu bar's items that follow the project, nil in tests
-	win     *mygo.Window    // the window, which shows the project shown; nil while closed and in tests
-	bar     *menuBar        // the item in the menu bar, nil in tests
-	badge   int             // the count on the Dock icon
+	// folded are the repositories of groups whose files the sidebar hides
+	// under their names (group.go).
+	folded []string
+	dir    string       // where recent and the projects open are kept, "" for nowhere
+	inline bool         // no windows, the apps' loads on the UI thread, for tests
+	menu   *menuItems   // the menu bar's items that follow the project, nil in tests
+	win    *mygo.Window // the window, which shows the project shown; nil while closed and in tests
+	bar    *menuBar     // the item in the menu bar, nil in tests
+	badge  int          // the count on the Dock icon
 	// next is the project of the group to show from the next pass on, as
 	// the user chose a file of it in the sidebar.
 	next *app
@@ -52,6 +55,7 @@ func newProjects() *projects {
 		p.dir = filepath.Join(dir, "peek")
 		p.recent = p.readList("recent")
 		p.groups = p.readGroups()
+		p.folded = p.readList("folded")
 		p.entries = readEntries(p.dir)
 		s := readSettings(p.dir)
 		p.chosen = &s
