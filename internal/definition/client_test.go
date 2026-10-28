@@ -151,7 +151,7 @@ func TestInstalledServers(t *testing.T) {
 			} else {
 				source, target, name = "main.tsx", "greet.ts", "greet"
 				files["tsconfig.json"] = `{"compilerOptions":{"strict":true,"target":"ES2020","jsx":"preserve","baseUrl":".","paths":{"@lib/*":["./*"]}}}`
-				files[source] = "import { greet } from '@lib/greet';\nconst emoji = '😀'; export const result = greet();\nexport const promise = Promise.resolve(result);\n"
+				files[source] = "import { greet } from '@lib/greet';\nconst emoji = '😀'; export const result = greet();\nexport const promise = Promise.resolve(result);\ninterface Box { value: string }\nexport const box: Box = { value: result };\n"
 				files[target] = "export function greet() { return 'hi'; }\n"
 			}
 			for p, text := range files {
@@ -174,6 +174,22 @@ func TestInstalledServers(t *testing.T) {
 				start := OffsetAt(files[target], locs[0].Range.Start)
 				if !strings.HasPrefix(files[target][start:], name) {
 					t.Fatalf("target offset %d", start)
+				}
+			}
+			h, err := client.Hover(ctx, filepath.Join(dir, source), files[source], strings.LastIndex(files[source], name), 0)
+			if err != nil || !strings.Contains(h.Markdown, "string") {
+				t.Fatalf("hover %+v: %v", h, err)
+			}
+			if language == "typescript" {
+				// A value's type names its interface, which expands.
+				at := strings.LastIndex(files[source], "box")
+				short, err := client.Hover(ctx, filepath.Join(dir, source), files[source], at, 0)
+				if err != nil || !short.Expandable {
+					t.Fatalf("hover %+v: %v", short, err)
+				}
+				long, err := client.Hover(ctx, filepath.Join(dir, source), files[source], at, 1)
+				if err != nil || len(long.Markdown) <= len(short.Markdown) {
+					t.Fatalf("expanded %q from %q: %v", long.Markdown, short.Markdown, err)
 				}
 			}
 			// Standard-library definitions live outside the repository.

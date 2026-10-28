@@ -105,21 +105,3 @@ func (c *Client) Diagnostics(ctx context.Context, path, text string) ([]Diagnost
 	}
 	return out, nil
 }
-
-// Installed finds the package.json of the dependency named at offset of
-// the package.json at path, as installed under node_modules.
-func (c *Client) Installed(ctx context.Context, path, text string, offset int) ([]Location, error) {
-	if filepath.Base(path) != "package.json" {
-		return nil, nil
-	}
-	var raw json.RawMessage
-	err := c.query(ctx, "npmx", "json", path, text, func(r *rpc, uri string) error {
-		return r.call(ctx, "textDocument/definition", map[string]any{
-			"textDocument": map[string]any{"uri": uri}, "position": PositionAt(text, offset),
-		}, &raw)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return locations(raw)
-}

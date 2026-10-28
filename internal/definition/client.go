@@ -28,17 +28,29 @@ func New(root string) *Client {
 
 func (c *Client) Close() { c.cancel() }
 
-func (c *Client) Definition(ctx context.Context, path, text string, offset int) ([]Location, error) {
-	language := Language(path)
-	if language == "" {
-		return nil, errors.New("definition lookup supports Go, TypeScript and Kotlin files")
+// serverOf names the server for the file at path, and the language it
+// opens the file as: npmx's for package manifests, where it finds the
+// package.json of a dependency as installed.
+func serverOf(path string) (key, language string, err error) {
+	if language = Manifest(path); language != "" {
+		return "npmx", language, nil
 	}
-	key := language
-	if key == "typescriptreact" {
-		key = "typescript"
+	switch language = Language(path); language {
+	case "":
+		return "", "", errors.New("language servers support Go, TypeScript, Kotlin and package manifests")
+	case "typescriptreact":
+		return "typescript", language, nil
+	}
+	return language, language, nil
+}
+
+func (c *Client) Definition(ctx context.Context, path, text string, offset int) ([]Location, error) {
+	key, language, err := serverOf(path)
+	if err != nil {
+		return nil, err
 	}
 	var raw json.RawMessage
-	err := c.query(ctx, key, language, path, text, func(r *rpc, uri string) error {
+	err = c.query(ctx, key, language, path, text, func(r *rpc, uri string) error {
 		return r.call(ctx, "textDocument/definition", map[string]any{
 			"textDocument": map[string]any{"uri": uri}, "position": PositionAt(text, offset),
 		}, &raw)
@@ -109,9 +121,18 @@ func (c *Client) query(ctx context.Context, key, language, path, text string, as
 }
 
 func (c *Client) start(ctx context.Context, root, key string) (*rpc, error) {
-	program, args, err := serverCommand(root, key)
-	if err != nil {
-		return nil, err
+	var program string
+	var args []string
+	var options any
+	var err error
+	ts7 := false
+	if key == "typescript" {
+		program, args, options, ts7 = tsgo(root)
+	}
+	if !ts7 {
+		if program, args, err = serverCommand(root, key); err != nil {
+			return nil, err
+		}
 	}
 	r, err := startRPC(c.ctx, root, program, args...)
 	if err != nil {
@@ -125,11 +146,10 @@ func (c *Client) start(ctx context.Context, root, key string) (*rpc, error) {
 			} `json:"experimental"`
 		} `json:"capabilities"`
 	}
-	var options any
-	if key == "typescript" {
+	if key == "typescript" && !ts7 {
 		// The syntax server can answer the first click with only the local
 		// import alias while the semantic project is still loading.
-		options = map[string]any{"tsserver": map[string]any{"useSyntaxServer": "never"}, "disableAutomaticTypingAcquisition": true}
+		options = map[string]any{"tsserver": map[string]any{"useSyntaxServer": "never"}, "disableAutomaticTypingAcquisition": true, "supportsHoverVerbosity": true}
 	}
 	err = r.call(ctx, "initialize", map[string]any{
 		"initializationOptions": options,
@@ -141,10 +161,13 @@ func (c *Client) start(ctx context.Context, root, key string) (*rpc, error) {
 			"textDocument": map[string]any{
 				"definition":   map[string]any{"linkSupport": true},
 				"documentLink": map[string]any{"tooltipSupport": true},
+				"hover":        map[string]any{"contentFormat": []string{"markdown", "plaintext"}},
 				// Diagnostics are asked for, not pushed after each change.
 				"diagnostic": map[string]any{},
 			},
 			"workspace": map[string]any{"configuration": true, "workspaceFolders": true},
+			// TypeScript 7 expands the types of hovers, as VS Code's do.
+			"experimental": map[string]any{"hoverVerbosityLevel": true},
 		},
 	}, &initialized)
 	if err == nil && initialized.Capabilities.PositionEncoding != "" && initialized.Capabilities.PositionEncoding != "utf-16" {

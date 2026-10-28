@@ -10,21 +10,28 @@ import (
 	"peek/internal/definition"
 	"peek/internal/git"
 	"peek/internal/testutil"
+
+	"github.com/egoist/mygo/ui/editor"
 )
 
 type fakePackages struct {
 	// installed finds a package from the offset of its name.
 	installed func(offset int) []definition.Location
 	links     []definition.Link
+	hover     string
 	found     []definition.Diagnostic
 	asked     int
 }
 
-func (f *fakePackages) Installed(_ context.Context, _, _ string, offset int) ([]definition.Location, error) {
+func (f *fakePackages) Definition(_ context.Context, _, _ string, offset int) ([]definition.Location, error) {
 	if f.installed == nil {
 		return nil, nil
 	}
 	return f.installed(offset), nil
+}
+
+func (f *fakePackages) Hover(context.Context, string, string, int, int) (definition.Hover, error) {
+	return definition.Hover{Markdown: f.hover}, nil
 }
 
 func (f *fakePackages) Links(context.Context, string, string) ([]definition.Link, error) {
@@ -115,7 +122,7 @@ func TestGoToInstalledPackage(t *testing.T) {
 	a, tt := testApp(t, repo, func(a *app) { a.packages.client = fake })
 	t.Cleanup(a.close)
 	var opened []string
-	a.packages.open = func(url string) { opened = append(opened, url) }
+	a.openURL = func(url string) { opened = append(opened, url) }
 	a.setMode(modeFiles)
 	tt.Frame()
 	a.openInFiles(git.Worktree, "package.json")
@@ -146,7 +153,7 @@ func TestOpenUninstalledPackage(t *testing.T) {
 	a, tt := testApp(t, manifestRepo(t), func(a *app) { a.packages.client = fake })
 	t.Cleanup(a.close)
 	var opened []string
-	a.packages.open = func(url string) { opened = append(opened, url) }
+	a.openURL = func(url string) { opened = append(opened, url) }
 	a.setMode(modeFiles)
 	tt.Frame()
 	a.openInFiles(git.Worktree, "package.json")
@@ -158,5 +165,23 @@ func TestOpenUninstalledPackage(t *testing.T) {
 	a.code.OnDefinition(strings.Index(manifestAfter, "left"))
 	if len(opened) != 1 || a.navigation.note != "No package here" {
 		t.Fatalf("opened %q, note %q", opened, a.navigation.note)
+	}
+}
+
+func TestPackageHover(t *testing.T) {
+	fake := &fakePackages{hover: "[npmx](https://npmx.dev/package/right) · signed by its build"}
+	a, tt := testApp(t, manifestRepo(t), func(a *app) { a.packages.client = fake })
+	t.Cleanup(a.close)
+	a.setMode(modeFiles)
+	tt.Frame()
+	a.openInFiles(git.Worktree, "package.json")
+	tt.Frame()
+	if a.code.OnHover == nil {
+		t.Fatal("package.json offers no hovers")
+	}
+	a.code.OnHover(editor.HoverRequest{Offset: strings.Index(manifestAfter, "right") + 1, Version: a.code.Buffer.Version()})
+	tt.Frame()
+	if !tt.HasText("signed by its build") {
+		t.Errorf("the hover does not show, texts %q", tt.Texts())
 	}
 }

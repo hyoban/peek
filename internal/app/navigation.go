@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"peek/internal/definition"
@@ -19,6 +20,7 @@ import (
 
 type definitionClient interface {
 	Definition(context.Context, string, string, int) ([]definition.Location, error)
+	Hover(context.Context, string, string, int, int) (definition.Hover, error)
 	Close()
 }
 
@@ -47,6 +49,8 @@ type navigationState struct {
 	back, forward []filePlace
 	editor        ui.Handle
 	focus         bool
+	// hovers counts the hovers asked for, the last of which shows.
+	hovers atomic.Int64
 }
 
 func (a *app) worktreeFiles() bool {
@@ -67,10 +71,12 @@ func (a *app) configureNavigation() {
 		return
 	}
 	a.code.OnDefinition = nil
+	a.code.OnHover = nil
 	a.code.ContextMenu = nil
 	switch {
 	case a.canDefine():
 		a.code.OnDefinition = a.goDefinition
+		a.code.OnHover = a.hover
 		a.code.ContextMenu = func(m *ui.Menu) {
 			if m.Item("Go to Definition").Chosen() {
 				a.goDefinition(a.code.Cursor())
@@ -78,6 +84,7 @@ func (a *app) configureNavigation() {
 		}
 	case a.canOpenPackage():
 		a.code.OnDefinition = func(offset int) { a.goPackage(offset, false) }
+		a.code.OnHover = a.packageHover
 		a.code.ContextMenu = func(m *ui.Menu) {
 			if m.Item("Go to Definition").Chosen() {
 				a.goPackage(a.code.Cursor(), false)

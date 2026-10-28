@@ -18,7 +18,8 @@ import (
 // diff adds.
 
 type packageClient interface {
-	Installed(context.Context, string, string, int) ([]definition.Location, error)
+	Hover(context.Context, string, string, int, int) (definition.Hover, error)
+	Definition(context.Context, string, string, int) ([]definition.Location, error)
 	Links(context.Context, string, string) ([]definition.Link, error)
 	Diagnostics(context.Context, string, string) ([]definition.Diagnostic, error)
 	Close()
@@ -28,8 +29,6 @@ type packageClient interface {
 // each query sends the text shown, and it keeps what the registry said.
 type packagesState struct {
 	client packageClient
-	// open opens a package's page, as the window's services do.
-	open func(url string)
 	// code is the file whose diagnostics were asked for, at version.
 	code    *editor.State
 	version uint64
@@ -65,7 +64,7 @@ func (a *app) canOpenPackage() bool {
 // offset, or on its line, or opens the package on npmx.dev where it is not
 // installed; web opens it there in any case.
 func (a *app) goPackage(offset int, web bool) {
-	if !a.canOpenPackage() || a.packages.open == nil {
+	if !a.canOpenPackage() || a.openURL == nil {
 		return
 	}
 	a.cancelNavigation()
@@ -81,9 +80,9 @@ func (a *app) goPackage(offset int, web bool) {
 		if !web {
 			// npmx goes from a dependency's name; a click on its version
 			// goes from the name the line starts with.
-			installed, err = client.Installed(ctx, path, text, offset)
+			installed, err = client.Definition(ctx, path, text, offset)
 			if name := lineName(text, offset); err == nil && len(installed) == 0 && name != offset {
-				installed, err = client.Installed(ctx, path, text, name)
+				installed, err = client.Definition(ctx, path, text, name)
 			}
 		}
 		if err == nil && len(installed) == 0 {
@@ -106,7 +105,7 @@ func (a *app) goPackage(offset int, web bool) {
 			}
 			if link, ok := packageLink(text, links, offset); ok {
 				n.note = ""
-				a.packages.open(link.Target)
+				a.openURL(link.Target)
 				return
 			}
 			n.note = "No package here"

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -19,7 +20,15 @@ import (
 
 type fakeDefinitions struct {
 	lookup func(string, string, int) ([]definition.Location, error)
+	hover  func(text string, offset, verbosity int) definition.Hover
 	closed bool
+}
+
+func (f *fakeDefinitions) Hover(_ context.Context, _, text string, offset, verbosity int) (definition.Hover, error) {
+	if f.hover == nil {
+		return definition.Hover{}, nil
+	}
+	return f.hover(text, offset, verbosity), nil
 }
 
 func (f *fakeDefinitions) Definition(_ context.Context, p, text string, offset int) ([]definition.Location, error) {
@@ -295,5 +304,83 @@ func TestFileLoadsRejectOldRevision(t *testing.T) {
 	tt.Frame()
 	if !strings.Contains(a.code.Buffer.String(), "target") || a.codeHash != git.Worktree {
 		t.Fatal("old revision replaced the working tree")
+	}
+}
+
+func TestHoverShowsType(t *testing.T) {
+	a, tt, text := navigationApp(t)
+	at := strings.LastIndex(text, "target")
+	var asked []int
+	a.navigation.client = &fakeDefinitions{hover: func(_ string, offset, _ int) definition.Hover {
+		asked = append(asked, offset)
+		return definition.Hover{Markdown: "```go\nfunc target()\n```\n\nTarget does nothing."}
+	}}
+	tt.Frame()
+	if a.code.OnHover == nil {
+		t.Fatal("the working tree's Go file offers no hovers")
+	}
+	a.code.OnHover(editor.HoverRequest{Offset: at + 2, Version: a.code.Buffer.Version()})
+	tt.Frame()
+	if len(asked) != 1 || asked[0] != at+2 {
+		t.Fatalf("asked %v", asked)
+	}
+	if !tt.HasText("func target()") || !tt.HasText("Target does nothing.") {
+		t.Errorf("the hover does not show, texts %q", tt.Texts())
+	}
+	if start, end := wordAt(text, at+2); text[start:end] != "target" {
+		t.Errorf("word %q", text[start:end])
+	}
+}
+
+func TestHoverLinks(t *testing.T) {
+	a, tt, _ := navigationApp(t)
+	backend := filepath.Join(a.repo, "backend.py")
+	if err := os.WriteFile(backend, []byte("a\nb\nc\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var opened []string
+	a.openURL = func(u string) { opened = append(opened, u) }
+	a.hoverLink("https://example.com/docs")
+	a.hoverLink("ftp://example.com/x")
+	if len(opened) != 1 || opened[0] != "https://example.com/docs" {
+		t.Fatalf("opened %q", opened)
+	}
+	// A content mapper links the backend implementation of an operation.
+	a.hoverLink("file://" + backend + "#L3")
+	tt.Frame()
+	if filepath.Base(a.openFile) != "backend.py" || a.code.Cursor() != len("a\nb\n") {
+		t.Fatalf("opened %q at %d, note %q", a.openFile, a.code.Cursor(), a.navigation.note)
+	}
+}
+
+func TestHoverExpandsTypes(t *testing.T) {
+	a, tt, text := navigationApp(t)
+	var levels []int
+	a.navigation.client = &fakeDefinitions{hover: func(_ string, _, verbosity int) definition.Hover {
+		levels = append(levels, verbosity)
+		if verbosity == 0 {
+			return definition.Hover{Markdown: "```go\nvar x Outer\n```", Expandable: true}
+		}
+		return definition.Hover{Markdown: "```go\nvar x struct{ inner Inner }\n```"}
+	}}
+	tt.Frame()
+	a.code.OnHover(editor.HoverRequest{Offset: strings.LastIndex(text, "target"), Version: a.code.Buffer.Version()})
+	tt.Frame()
+	if !tt.HasText("var x Outer") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+	if err := tt.Click("Expand Type"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !tt.HasText("var x struct{ inner Inner }") || !reflect.DeepEqual(levels, []int{0, 1}) {
+		t.Fatalf("levels %v, texts %q", levels, tt.Texts())
+	}
+	if err := tt.Click("Collapse Type"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !tt.HasText("var x Outer") || !reflect.DeepEqual(levels, []int{0, 1, 0}) {
+		t.Fatalf("levels %v, texts %q", levels, tt.Texts())
 	}
 }

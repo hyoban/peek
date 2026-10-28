@@ -2,6 +2,7 @@ package definition
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,15 +45,19 @@ func TestInstalledNpmx(t *testing.T) {
 	if err != nil || len(links) != 2 || !strings.HasPrefix(links[0].Target, "https://npmx.dev/package/") {
 		t.Fatalf("links %+v: %v", links, err)
 	}
-	locs, err := client.Installed(ctx, path, text, strings.Index(text, "vue"))
+	locs, err := client.Definition(ctx, path, text, strings.Index(text, "vue"))
 	if err != nil || len(locs) != 1 {
 		t.Fatalf("installed %+v: %v", locs, err)
 	}
 	if want, _ := filepath.EvalSymlinks(installed); locs[0].Path != installed && locs[0].Path != want {
 		t.Fatalf("installed at %s, want %s", locs[0].Path, installed)
 	}
-	if locs, err := client.Installed(ctx, path, text, strings.Index(text, "request")); err != nil || len(locs) != 0 {
+	if locs, err := client.Definition(ctx, path, text, strings.Index(text, "request")); err != nil || len(locs) != 0 {
 		t.Fatalf("uninstalled %+v: %v", locs, err)
+	}
+	h, err := client.Hover(ctx, path, text, strings.Index(text, "vue"), 0)
+	if err != nil || !strings.Contains(h.Markdown, "npmx.dev") {
+		t.Fatalf("hover %q: %v", h.Markdown, err)
 	}
 	found, err := client.Diagnostics(ctx, path, text)
 	if err != nil {
@@ -64,5 +69,19 @@ func TestInstalledNpmx(t *testing.T) {
 	}
 	if !deprecated {
 		t.Fatalf("diagnostics %+v", found)
+	}
+}
+
+func TestHoverMarkdown(t *testing.T) {
+	for raw, want := range map[string]string{
+		`{"kind":"markdown","value":"**x**"}`:                 "**x**",
+		`{"kind":"plaintext","value":"int"}`:                  "```\nint\n```",
+		`{"language":"typescript","value":"const x: number"}`: "```typescript\nconst x: number\n```",
+		`["doc", {"language":"go","value":"var x int"}, ""]`:  "doc\n\n```go\nvar x int\n```",
+		`"plain"`: "plain",
+	} {
+		if got := hoverMarkdown(json.RawMessage(raw)); got != want {
+			t.Errorf("%s: %q, want %q", raw, got, want)
+		}
 	}
 }

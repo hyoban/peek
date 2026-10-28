@@ -160,6 +160,7 @@ type app struct {
 	closed             bool
 	navigation         navigationState
 	packages           packagesState
+	openURL            func(string)   // opens pages, as the window's services do
 	picture            ui.ImageSource // the file's picture, in place of code
 	codeNote           string         // why the text does not show
 	preview            *mdPreview     // a Markdown file's, beside its code
@@ -1206,8 +1207,8 @@ func emptyNote(c *ui.Context, note string) {
 }
 
 func (a *app) codePane(c *ui.Context) {
-	if a.packages.open == nil {
-		a.packages.open = c.Services().OpenURL
+	if a.openURL == nil {
+		a.openURL = c.Services().OpenURL
 	}
 	a.configureNavigation()
 	a.checkFileDependencies()
