@@ -37,10 +37,15 @@ type filterState struct {
 	toList bool                // the tree is to take the keys, as Down in the field asks
 	gen    int                 // counts the trees set, whose open folders differ
 	// filtered is the query keep holds the items of, for the tree of
-	// filteredGen; keep is nil without a query.
+	// filteredGen; keep is nil without a query. shown are the items each
+	// directory keeps, and matched and total count the files the query
+	// keeps and all of them, so that a frame need not walk the tree.
 	filtered    string
 	filteredGen int
 	keep        map[string]bool
+	shown       map[string][]string
+	matched     int
+	total       int
 	// saved are the folders open as filtering began, in the tree of
 	// savedGen.
 	saved    []string
@@ -283,7 +288,7 @@ func (t *pathTree) applyFilter() {
 		if t.keep == nil {
 			return // a new tree, unfiltered
 		}
-		t.keep = nil
+		t.keep, t.shown = nil, nil
 		if t.savedGen == t.gen {
 			t.state.Open.Clear()
 			for _, dir := range t.saved {
@@ -301,20 +306,33 @@ func (t *pathTree) applyFilter() {
 		t.saved, t.savedGen = slices.Collect(t.state.Open.All()), t.gen
 	}
 	words := strings.Fields(q)
-	t.keep = map[string]bool{}
+	t.keep, t.shown = map[string]bool{}, map[string][]string{}
+	t.matched, t.total = 0, 0
 	var walk func(dir string) bool
 	walk = func(dir string) bool {
-		kept := false
+		var shown []string
 		for _, p := range t.dirs[dir] {
-			if !t.isDir(p) && pathMatches(itemPath(p), words) {
-				t.keep[p], kept = true, true
+			kept := false
+			if !t.isDir(p) {
+				t.total++
+				if pathMatches(itemPath(p), words) {
+					t.matched++
+					kept = true
+				}
 			}
 			if walk(p) {
-				t.keep[p], kept = true, true
+				kept = true
 				t.state.Open.Add(p)
 			}
+			if kept {
+				t.keep[p] = true
+				shown = append(shown, p)
+			}
 		}
-		return kept
+		if shown != nil {
+			t.shown[dir] = shown
+		}
+		return shown != nil
 	}
 	walk("")
 	t.choose(chosen)
@@ -338,25 +356,16 @@ func (t *pathTree) entries(dir string) []string {
 	if t.keep == nil {
 		return t.dirs[dir]
 	}
-	var kept []string
-	for _, p := range t.dirs[dir] {
-		if t.keep[p] {
-			kept = append(kept, p)
-		}
-	}
-	return kept
+	return t.shown[dir]
 }
 
 // filterCount counts the files the filter keeps, and all of them.
 func (t *pathTree) filterCount() (kept, all int) {
-	words := strings.Fields(t.filtered)
-	for _, p := range t.files() {
-		all++
-		if t.keep[p] && pathMatches(itemPath(p), words) {
-			kept++
-		}
+	if t.keep == nil {
+		n := len(t.files())
+		return n, n
 	}
-	return kept, all
+	return t.matched, t.total
 }
 
 func (t *pathTree) isDir(p string) bool { return t.dirs[p] != nil && !t.nested[p] }
