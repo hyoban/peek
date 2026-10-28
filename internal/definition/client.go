@@ -29,20 +29,6 @@ func New(root string) *Client {
 func (c *Client) Close() { c.cancel() }
 
 func (c *Client) Definition(ctx context.Context, path, text string, offset int) ([]Location, error) {
-	select {
-	case c.gate <- struct{}{}:
-		defer func() { <-c.gate }()
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-c.ctx.Done():
-		return nil, c.ctx.Err()
-	}
-	if err := c.ctx.Err(); err != nil {
-		return nil, err
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
 	language := Language(path)
 	if language == "" {
 		return nil, errors.New("definition lookup supports Go, TypeScript and Kotlin files")
@@ -50,6 +36,35 @@ func (c *Client) Definition(ctx context.Context, path, text string, offset int) 
 	key := language
 	if key == "typescriptreact" {
 		key = "typescript"
+	}
+	var raw json.RawMessage
+	err := c.query(ctx, key, language, path, text, func(r *rpc, uri string) error {
+		return r.call(ctx, "textDocument/definition", map[string]any{
+			"textDocument": map[string]any{"uri": uri}, "position": PositionAt(text, offset),
+		}, &raw)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return locations(raw)
+}
+
+// query opens text as the document at path on the server for key, asks
+// it, and closes the document again.
+func (c *Client) query(ctx context.Context, key, language, path, text string, ask func(r *rpc, uri string) error) error {
+	select {
+	case c.gate <- struct{}{}:
+		defer func() { <-c.gate }()
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-c.ctx.Done():
+		return c.ctx.Err()
+	}
+	if err := c.ctx.Err(); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	root, serverKey := c.root, key
 	if key == "kotlin" {
@@ -66,51 +81,9 @@ func (c *Client) Definition(ctx context.Context, path, text string, offset int) 
 		}
 	}
 	if r == nil {
-		program, args, err := serverCommand(root, key)
-		if err != nil {
-			return nil, err
-		}
-		r, err = startRPC(c.ctx, root, program, args...)
-		if err != nil {
-			return nil, err
-		}
-		var initialized struct {
-			Capabilities struct {
-				PositionEncoding string `json:"positionEncoding"`
-				Experimental     struct {
-					WorkspaceImport bool `json:"workspaceImport"`
-				} `json:"experimental"`
-			} `json:"capabilities"`
-		}
-		var options any
-		if key == "typescript" {
-			// The syntax server can answer the first click with only the local
-			// import alias while the semantic project is still loading.
-			options = map[string]any{"tsserver": map[string]any{"useSyntaxServer": "never"}, "disableAutomaticTypingAcquisition": true}
-		}
-		err = r.call(ctx, "initialize", map[string]any{
-			"initializationOptions": options,
-			"processId":             os.Getpid(), "rootUri": fileURI(root),
-			"clientInfo":       map[string]any{"name": "Peek"},
-			"workspaceFolders": []any{map[string]any{"uri": fileURI(root), "name": filepath.Base(root)}},
-			"capabilities": map[string]any{
-				"general":      map[string]any{"positionEncodings": []string{"utf-16"}},
-				"textDocument": map[string]any{"definition": map[string]any{"linkSupport": true}},
-				"workspace":    map[string]any{"configuration": true, "workspaceFolders": true},
-			},
-		}, &initialized)
-		if err == nil && initialized.Capabilities.PositionEncoding != "" && initialized.Capabilities.PositionEncoding != "utf-16" {
-			err = errors.New("language server did not select UTF-16 positions")
-		}
-		if err == nil {
-			err = r.notify("initialized", struct{}{})
-		}
-		if err == nil && key == "kotlin" && initialized.Capabilities.Experimental.WorkspaceImport {
-			err = r.waitImport(ctx)
-		}
-		if err != nil {
-			r.stop()
-			return nil, err
+		var err error
+		if r, err = c.start(ctx, root, key); err != nil {
+			return err
 		}
 		c.servers[serverKey] = r
 	}
@@ -119,28 +92,75 @@ func (c *Client) Definition(ctx context.Context, path, text string, offset int) 
 	uri := fileURI(path)
 	stop := context.AfterFunc(ctx, r.stop)
 	defer stop()
-	if err := r.notify("textDocument/didOpen", map[string]any{"textDocument": map[string]any{
+	err := r.notify("textDocument/didOpen", map[string]any{"textDocument": map[string]any{
 		"uri": uri, "languageId": language, "version": 1, "text": text,
-	}}); err != nil {
-		r.stop()
-		delete(c.servers, serverKey)
-		return nil, err
+	}})
+	if err == nil {
+		err = ask(r, uri)
 	}
-	var raw json.RawMessage
-	err := r.call(ctx, "textDocument/definition", map[string]any{
-		"textDocument": map[string]any{"uri": uri}, "position": PositionAt(text, offset),
-	}, &raw)
+	if err == nil {
+		err = r.notify("textDocument/didClose", map[string]any{"textDocument": map[string]any{"uri": uri}})
+	}
 	if err != nil {
 		r.stop()
 		delete(c.servers, serverKey)
+	}
+	return err
+}
+
+func (c *Client) start(ctx context.Context, root, key string) (*rpc, error) {
+	program, args, err := serverCommand(root, key)
+	if err != nil {
 		return nil, err
 	}
-	if err := r.notify("textDocument/didClose", map[string]any{"textDocument": map[string]any{"uri": uri}}); err != nil {
+	r, err := startRPC(c.ctx, root, program, args...)
+	if err != nil {
+		return nil, err
+	}
+	var initialized struct {
+		Capabilities struct {
+			PositionEncoding string `json:"positionEncoding"`
+			Experimental     struct {
+				WorkspaceImport bool `json:"workspaceImport"`
+			} `json:"experimental"`
+		} `json:"capabilities"`
+	}
+	var options any
+	if key == "typescript" {
+		// The syntax server can answer the first click with only the local
+		// import alias while the semantic project is still loading.
+		options = map[string]any{"tsserver": map[string]any{"useSyntaxServer": "never"}, "disableAutomaticTypingAcquisition": true}
+	}
+	err = r.call(ctx, "initialize", map[string]any{
+		"initializationOptions": options,
+		"processId":             os.Getpid(), "rootUri": fileURI(root),
+		"clientInfo":       map[string]any{"name": "Peek"},
+		"workspaceFolders": []any{map[string]any{"uri": fileURI(root), "name": filepath.Base(root)}},
+		"capabilities": map[string]any{
+			"general": map[string]any{"positionEncodings": []string{"utf-16"}},
+			"textDocument": map[string]any{
+				"definition":   map[string]any{"linkSupport": true},
+				"documentLink": map[string]any{"tooltipSupport": true},
+				// Diagnostics are asked for, not pushed after each change.
+				"diagnostic": map[string]any{},
+			},
+			"workspace": map[string]any{"configuration": true, "workspaceFolders": true},
+		},
+	}, &initialized)
+	if err == nil && initialized.Capabilities.PositionEncoding != "" && initialized.Capabilities.PositionEncoding != "utf-16" {
+		err = errors.New("language server did not select UTF-16 positions")
+	}
+	if err == nil {
+		err = r.notify("initialized", struct{}{})
+	}
+	if err == nil && key == "kotlin" && initialized.Capabilities.Experimental.WorkspaceImport {
+		err = r.waitImport(ctx)
+	}
+	if err != nil {
 		r.stop()
-		delete(c.servers, serverKey)
 		return nil, err
 	}
-	return locations(raw)
+	return r, nil
 }
 
 func serverCommand(root, language string) (string, []string, error) {
@@ -158,6 +178,12 @@ func serverCommand(root, language string) (string, []string, error) {
 	case "kotlin":
 		name, install = "kotlin-lsp", "brew install JetBrains/utils/kotlin-lsp"
 		args = []string{"--stdio"}
+	case "npmx":
+		name, install = "npmx-language-server", "npm install -g npmx-language-server"
+		args = []string{"--stdio"}
+		if p := filepath.Join(root, "node_modules", ".bin", name); executable(p) {
+			return p, args, nil
+		}
 	default:
 		return "", nil, fmt.Errorf("unsupported language: %s", language)
 	}

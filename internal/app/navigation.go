@@ -68,11 +68,22 @@ func (a *app) configureNavigation() {
 	}
 	a.code.OnDefinition = nil
 	a.code.ContextMenu = nil
-	if a.canDefine() {
+	switch {
+	case a.canDefine():
 		a.code.OnDefinition = a.goDefinition
 		a.code.ContextMenu = func(m *ui.Menu) {
 			if m.Item("Go to Definition").Chosen() {
 				a.goDefinition(a.code.Cursor())
+			}
+		}
+	case a.canOpenPackage():
+		a.code.OnDefinition = func(offset int) { a.goPackage(offset, false) }
+		a.code.ContextMenu = func(m *ui.Menu) {
+			if m.Item("Go to Definition").Chosen() {
+				a.goPackage(a.code.Cursor(), false)
+			}
+			if m.Item("Open Package on npmx").Chosen() {
+				a.goPackage(a.code.Cursor(), true)
 			}
 		}
 	}

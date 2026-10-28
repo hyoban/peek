@@ -159,6 +159,7 @@ type app struct {
 	textGen            int    // rejects older file loads, including the same path in another commit
 	closed             bool
 	navigation         navigationState
+	packages           packagesState
 	picture            ui.ImageSource // the file's picture, in place of code
 	codeNote           string         // why the text does not show
 	preview            *mdPreview     // a Markdown file's, beside its code
@@ -1205,7 +1206,11 @@ func emptyNote(c *ui.Context, note string) {
 }
 
 func (a *app) codePane(c *ui.Context) {
+	if a.packages.open == nil {
+		a.packages.open = c.Services().OpenURL
+	}
 	a.configureNavigation()
+	a.checkFileDependencies()
 	detail := ""
 	if a.picture != nil {
 		detail = pictureSize(a.picture)

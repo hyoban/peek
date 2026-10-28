@@ -19,6 +19,8 @@ func testApp(t *testing.T, repo string, setup func(*app)) (*app, *ui.Tester) {
 	t.Helper()
 	a := newApp(repo)
 	a.inline = true
+	// Tests never reach npm's registry.
+	a.packages.client = &fakePackages{}
 	if setup != nil {
 		setup(a)
 	}

@@ -27,8 +27,9 @@ type fileDiff struct {
 	// patch marks a diff of the patch's lines alone, as of a file too
 	// large to show whole, whose lines are not numbered as the file's.
 	patch  bool
-	read   bool // marked read: its diff folds away under its header
-	opened bool // read, its diff shown again by a click on its header
+	deps   dependencyNotes // what npmx found of a manifest's new text
+	read   bool            // marked read: its diff folds away under its header
+	opened bool            // read, its diff shown again by a click on its header
 }
 
 // folded reports whether the diff folds away under its header.

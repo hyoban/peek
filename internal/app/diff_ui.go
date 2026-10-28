@@ -51,6 +51,7 @@ func (a *app) configure(c *ui.Context, d *fileDiff) {
 	if st.RenderAnnotation == nil {
 		st.RenderAnnotation = func(c *ui.Context, an editor.DiffAnnotation) { a.annotation(c, d, an) }
 	}
+	a.checkDiffDependencies(d)
 	a.annotate(c, d)
 }
 
@@ -150,11 +151,13 @@ func (a *app) markChange(i, h int) {
 }
 
 // revealKey keys the annotation that scrolls the change gone to into
-// view, findingKey a finding of the review's and commentKey a comment.
+// view, findingKey a finding of the review's, commentKey a comment and
+// dependencyKey what npmx found of a dependency.
 type (
-	revealKey  struct{}
-	findingKey int
-	commentKey int
+	revealKey     struct{}
+	findingKey    int
+	commentKey    int
+	dependencyKey int
 )
 
 // revealAnnotation is the annotation over the change gone to, in the
@@ -436,7 +439,8 @@ func (a *app) annotationWidth() float32 {
 }
 
 // annotate lists what shows under the lines of the diff: the review's
-// findings, the comments, and what scrolls the change gone to into view.
+// findings, what npmx found of the dependencies added, the comments, and
+// what scrolls the change gone to into view.
 func (a *app) annotate(c *ui.Context, d *fileDiff) {
 	st := d.state
 	st.Annotations = st.Annotations[:0]
@@ -453,6 +457,10 @@ func (a *app) annotate(c *ui.Context, d *fileDiff) {
 		}
 		h := card(text(findingTitle(f), 600) + annotationGap + text(f.Body, 0))
 		st.Annotations = append(st.Annotations, editor.DiffAnnotation{Side: editor.DiffNew, Line: line, Height: h, Key: findingKey(i)})
+	}
+	for i, f := range dependencyFindings(d) {
+		h := card(text(f.Message, 0))
+		st.Annotations = append(st.Annotations, editor.DiffAnnotation{Side: editor.DiffNew, Line: f.Range.Start.Line, Height: h, Key: dependencyKey(i)})
 	}
 	for i, cm := range a.commentsOf(d) {
 		h := card(commentBarHeight + annotationGap + text(cm.text, 0))
@@ -480,6 +488,10 @@ func (a *app) annotation(c *ui.Context, d *fileDiff, an editor.DiffAnnotation) {
 	case findingKey:
 		if fs := a.findings(d); int(k) < len(fs) {
 			findingCard(c, fs[k])
+		}
+	case dependencyKey:
+		if fs := dependencyFindings(d); int(k) < len(fs) {
+			dependencyCard(c, fs[k])
 		}
 	case commentKey:
 		if cms := a.commentsOf(d); int(k) < len(cms) {

@@ -228,6 +228,7 @@ func (p *projects) showWindow() {
 func (a *app) close() {
 	a.closed = true
 	a.invalidateDefinitions()
+	a.closePackages()
 	if a.push.cancel != nil {
 		a.push.cancel()
 	}
