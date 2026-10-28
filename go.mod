@@ -29,4 +29,4 @@ require (
 // (SourceList), search field (NativeSearchField) and split view, whose
 // dividers drag and whose sidebars slide, under the content. Until MyGo
 // does.
-replace github.com/egoist/mygo => github.com/hyoban/mygo v0.6.4-0.20261027033635-b112ba821e2c
+replace github.com/egoist/mygo => github.com/hyoban/mygo v0.6.4-0.20261028063249-489c29b30ba1
