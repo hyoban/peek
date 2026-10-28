@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"os"
 	"path"
 	"path/filepath"
@@ -40,6 +41,9 @@ type projects struct {
 	// entries are the history's entry each repository showed last
 	// (entries.go).
 	entries map[string]string
+	// views are how the repositories showed as they last closed
+	// (views.go).
+	views views
 	// chosen are the user's choices, nil for the defaults (prefs), and
 	// settings the Settings window, nil while closed.
 	chosen   *settings
@@ -57,6 +61,7 @@ func newProjects() *projects {
 		p.groups = p.readGroups()
 		p.folded = p.readList("folded")
 		p.entries = readEntries(p.dir)
+		p.views = readViews(p.dir)
 		s := readSettings(p.dir)
 		p.chosen = &s
 	}
@@ -212,7 +217,9 @@ func (p *projects) showWindow() {
 	})
 	win := p.win
 	win.OnClosed(func() {
-		// Closing it closes the projects, as the app stays in the menu bar.
+		// Closing it closes the projects, as the app stays in the menu bar,
+		// to show as they were as they open again.
+		p.keepViews()
 		for _, a := range p.apps {
 			a.close()
 		}
@@ -294,7 +301,13 @@ func (p *projects) app(repo string) *app {
 		a.split = cur.split
 	} else {
 		a.split = p.prefs().SideBySide
+		if l := p.views.Layout; l != nil { // the columns as the window last closed
+			a.showHistory, a.showTree = l.History, l.Tree
+			a.historyWidth, a.treeWidth = cmp.Or(l.HistoryWidth, a.historyWidth), cmp.Or(l.TreeWidth, a.treeWidth)
+			a.terminal.shown, a.terminal.height = l.Terminal, cmp.Or(l.TerminalHeight, a.terminal.height)
+		}
 	}
+	a.restoreView(p.views.Repos[repo])
 	p.apps[repo] = a
 	if !p.inline {
 		a.shot = shotFromEnv()

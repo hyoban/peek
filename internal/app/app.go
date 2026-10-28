@@ -167,6 +167,9 @@ type app struct {
 	// previewed is the Markdown files shown as their previews, their
 	// sources showing by default.
 	previewed map[string]bool
+	// restoring is how the project showed as it last closed, until the
+	// file it showed shows again (restoreView).
+	restoring *repoView
 
 	terminal terminalState
 }
@@ -1321,6 +1324,7 @@ func (a *app) setMode(mode int) {
 	}
 	a.cancelNavigation()
 	a.mode, a.modeChoice = mode, mode
+	a.restoring = nil
 	cm, ok := a.current()
 	if !ok {
 		return
@@ -1413,6 +1417,7 @@ func (a *app) loadCommit(hash string) {
 				a.file = a.diffs[0].change.Path
 				a.changeTree.show(a.file)
 			}
+			a.restoreFile()
 		}
 	})
 }
@@ -1440,6 +1445,7 @@ func (a *app) loadFiles(hash string) {
 			}
 			if !a.openInFiles(hash, keep) {
 				a.openFile, a.code, a.picture, a.codeNote, a.preview = "", nil, nil, "", nil
+				a.restoring = nil // the file kept is gone
 			}
 		}
 	})
@@ -1475,6 +1481,7 @@ func (a *app) loadText(hash, p string) {
 				}
 				a.code, a.picture, a.codeNote, a.preview = code, picture, note, preview
 				a.codePath, a.codeHash = p, hash
+				a.restoreCaret(p)
 				if hash == git.Worktree {
 					a.placeCaret(p, code)
 				}
@@ -1547,7 +1554,10 @@ func Run(args []string) {
 			p.showWindow()
 		}
 	})
-	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { p.quitting = true })
+	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) {
+		p.quitting = true
+		p.keepViews()
+	})
 	p.followApp()
 	if p.prefs().MenuBar {
 		useDock(false) // from the start, its icon never showing
