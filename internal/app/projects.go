@@ -548,6 +548,8 @@ func (p *projects) setMenu() {
 			mygo.Separator(),
 			{Label: "Settings…", Accelerator: "Cmd+,", Click: func(*mygo.MenuItem, *mygo.Window) { p.showSettings() }},
 			mygo.Separator(),
+			{Label: "Install Command Line Tool…", Click: func(_ *mygo.MenuItem, w *mygo.Window) { go installCLI(w) }},
+			mygo.Separator(),
 			{Role: mygo.RoleServices},
 			mygo.Separator(),
 			{Role: mygo.RoleHide}, {Role: mygo.RoleHideOthers}, {Role: mygo.RoleUnhide},

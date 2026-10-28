@@ -1482,9 +1482,13 @@ func extendPath() {
 }
 
 // Run opens the window over the repository the folder in args holds, or
-// the one the working directory is in, and runs the app until it quits.
+// the one the working directory is in, and runs the app until it quits;
+// run as the command line tool, it opens the repository in the app.
 func Run(args []string) {
 	extendPath()
+	if forward(args) {
+		return
+	}
 	dir := "."
 	if len(args) > 0 {
 		dir = args[0]

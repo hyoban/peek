@@ -60,6 +60,19 @@ Without a path, Peek opens the repository you are in, or restores the
 repositories open when it last quit. Use **File → Open Folder** (⌘O) to open
 another repository, and the project name in the toolbar to switch between them.
 
+### Command line
+
+**Peek → Install Command Line Tool…** links `peek` into `/usr/local/bin`,
+asking for an administrator's password if needed. Then open a repository
+from a terminal in the running app:
+
+```bash
+peek path/to/repository
+```
+
+Without a path, `peek` opens the repository you are in. Peek Dev installs
+`peek-dev`.
+
 Build `Peek.app` and a `.dmg` into `build/`:
 
 ```bash
