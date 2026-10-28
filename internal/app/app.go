@@ -855,10 +855,10 @@ func (a *app) commitItem(c *ui.Context) func(cm git.Commit) ui.SourceListItem {
 			it.Tooltip += "\n\nNot pushed yet"
 		}
 		var co *git.Person
-		key := fmt.Sprint("avatar", dark, cm.Author, cm.Email, a.avatar(cm.Email) != nil)
+		key := fmt.Sprintf("avatar%v%s%s%p", dark, cm.Author, cm.Email, a.avatar(cm.Email))
 		if len(cm.CoAuthors) > 0 {
 			co = &cm.CoAuthors[0]
-			key += fmt.Sprint(co.Name, co.Email, a.avatar(co.Email) != nil)
+			key += fmt.Sprintf("%s%s%p", co.Name, co.Email, a.avatar(co.Email))
 		}
 		it.Image = a.drawn(key, 30, func(c *ui.Context) {
 			ui.Box(c).Size(30, 30).Children(func() {
