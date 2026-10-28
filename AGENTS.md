@@ -40,7 +40,11 @@ detaches.
 Write commit messages as [Conventional Commits](https://www.conventionalcommits.org):
 a type, an optional scope, and a summary in the imperative, such as
 `feat(review): explain a change in its file` or `fix: keep the selection
-after refreshing`. The release notes list the commits since the last tag by
+after refreshing`. A commit that fixes an issue ends its summary with the
+issue's number and closes it in the body, as `fix(app): refresh cached
+avatars once they are old (#4)` with `Closes #4` below: the release notes
+link only the numbers in the summary, and a bare `(#4)` doesn't close the
+issue. The release notes list the commits since the last tag by
 type: `feat` under Features, `fix` under Bug Fixes and `perf` under
 Performance, and leave out the others, such as `refactor`, `docs`, `test`,
 `ci` and `chore`. Mark a breaking change with `!`, as `feat!:`. A release
