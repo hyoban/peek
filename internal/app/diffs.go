@@ -259,11 +259,17 @@ func (a *app) releaseFarDiffs() {
 }
 
 // scrollToFile shows the file's diff at the top of the column, as a click
-// on it in the tree asks.
+// on it in the tree asks: the first's with the message over it, the top
+// of the column, as the message, a pull request's read later, would
+// otherwise grow above it, out of sight.
 func (a *app) scrollToFile(p string) {
 	if i := a.diffIndex(p); i >= 0 {
 		a.scrollTarget = i
-		a.diffList.ScrollTo(headerRow(i), ui.Start)
+		row := headerRow(i)
+		if i == 0 {
+			row = 0
+		}
+		a.diffList.ScrollTo(row, ui.Start)
 	}
 }
 
@@ -350,7 +356,10 @@ func (a *app) commitMessage(c *ui.Context) {
 	}
 	cm, ok := a.current()
 	if !ok || cm.Hash == git.Worktree || git.IsRange(cm.Hash) {
-		ui.Row(c).FillWidth().Height(0)
+		// A line, not nothing, for the list to keep its place by it at the
+		// top: a pull request's header, read later, then grows down from
+		// it, not up out of sight.
+		ui.Row(c).FillWidth().Height(1)
 		return
 	}
 	t := c.Theme()

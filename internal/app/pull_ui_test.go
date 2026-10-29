@@ -6,6 +6,7 @@ import (
 	"peek/internal/git"
 	"peek/internal/testutil"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -96,5 +97,31 @@ func TestMergeStatus(t *testing.T) {
 		if m.level != tc.level || !slices.Equal(m.reasons, tc.want) {
 			t.Errorf("%+v: %+v, want level %d, reasons %q", tc.pr, m, tc.level, tc.want)
 		}
+	}
+}
+
+// A pull request read after the branch's changes show comes in at the
+// top of their diffs, the first file chosen under it, not above out of
+// sight.
+func TestPullHeaderComesInView(t *testing.T) {
+	repo, _ := testutil.RemoteRepo(t)
+	testutil.Git(t, repo, "switch", "-q", "-c", "feature")
+	if err := os.WriteFile(filepath.Join(repo, "feature.txt"), []byte(strings.Repeat("line\n", 200)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Git(t, repo, "add", "--all")
+	testutil.Git(t, repo, "commit", "-q", "-m", "Add the feature")
+	testutil.Git(t, repo, "push", "-q", "-u", "origin", "feature")
+	testutil.Git(t, repo, "remote", "set-url", "origin", "https://github.com/hyoban/peek.git")
+	testutil.FakeGH(t, "https://github.com/hyoban/peek")
+	a, tt := testApp(t, repo, nil)
+	pr := a.pullReq
+	a.pullReq = nil // not read yet
+	settle(tt)
+	pr.Body = strings.Repeat("A paragraph of the description.\n\n", 80)
+	a.pullReq = pr
+	settle(tt)
+	if r, ok := tt.Find("By ada into main"); !ok || r.H == 0 {
+		t.Fatalf("pull request's header out of sight: %+v", r)
 	}
 }
