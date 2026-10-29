@@ -285,7 +285,7 @@ func (a *app) rows() (rows []switchRow, preferred int) {
 		return []switchRow{a.namedRow(named, prs)}, 0
 	}
 	for _, pr := range prs {
-		rows = append(rows, pullRow(a.pullTarget(pr.Number), pr))
+		rows = append(rows, pullRow(a.listedTarget(pr), pr))
 	}
 	return rows, 0
 }
@@ -294,7 +294,7 @@ func (a *app) rows() (rows []switchRow, preferred int) {
 // or to check out by its number where none listed is it.
 func (a *app) namedRow(named int, prs []git.PullRequest) switchRow {
 	if i := slices.IndexFunc(prs, func(pr git.PullRequest) bool { return pr.Number == named }); i >= 0 {
-		return pullRow(a.pullTarget(named), prs[i])
+		return pullRow(a.listedTarget(prs[i]), prs[i])
 	}
 	return switchRow{target: a.pullTarget(named), icon: pullIcon, title: fmt.Sprintf("Check out pull request #%d", named)}
 }
@@ -351,6 +351,17 @@ func (a *app) localTarget(branch string) switchTarget {
 // pullTarget is the row of a pull request of the repository listed.
 func (a *app) pullTarget(number int) switchTarget {
 	return switchTarget{pr: number, prRepo: a.switcher.prRepo}
+}
+
+// listedTarget is the row of a pull request listed: the work tree its
+// branch is checked out in, where another has it, as git keeps gh from
+// checking it out here too.
+func (a *app) listedTarget(pr git.PullRequest) switchTarget {
+	target := a.pullTarget(pr.Number)
+	if pr.Branch != a.branch {
+		target.worktree = a.switcher.branches.Worktrees[pr.Branch]
+	}
+	return target
 }
 
 // switchTo checks out the branch or the pull request, closing the
