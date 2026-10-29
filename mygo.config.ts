@@ -6,7 +6,7 @@ export default {
   name: dev ? "Peek Dev" : "Peek",
   identifier: dev ? "cc.hyoban.peek.dev" : "cc.hyoban.peek",
   icon: dev ? "icons/dev.png" : "resources/icon.png",
-  version: "0.5.0",
+  version: "0.5.1",
   copyright: "Copyright © 2026 Stephen Zhou",
   out: "build",
   macos: {
