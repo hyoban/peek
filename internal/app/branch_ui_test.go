@@ -172,6 +172,39 @@ func TestSwitcherOpensWorktree(t *testing.T) {
 	}
 }
 
+// A pull request whose branch another work tree has checked out opens
+// there, as gh would fail to check it out here.
+func TestSwitcherOpensPullRequestWorktree(t *testing.T) {
+	repo, _ := testutil.RemoteRepo(t)
+	testutil.Git(t, repo, "remote", "set-url", "origin", "https://github.com/hyoban/peek.git")
+	testutil.FakeGH(t, "https://github.com/hyoban/peek")
+	other := filepath.Join(t.TempDir(), "other")
+	testutil.Git(t, repo, "worktree", "add", "-q", "-b", "switcher", other)
+
+	p := &projects{apps: map[string]*app{}, inline: true}
+	p.open(repo)
+	tt := ui.NewTester(p.view, 1200, 800)
+	settle(tt)
+	if err := tt.Click("Switch Branch"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if err := tt.Click("Pull Requests"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !tt.HasText("Worktree") {
+		t.Fatalf("no worktree mark in %q", tt.Texts())
+	}
+	if err := tt.Click("#7 Add the switcher"); err != nil {
+		t.Fatal(err)
+	}
+	settle(tt)
+	if !git.SamePath(p.cur.repo, other) || p.cur.branch != "switcher" || git.CurrentBranch(repo) != "main" {
+		t.Fatalf("showing %q on %q; repo on %q", p.cur.repo, p.cur.branch, git.CurrentBranch(repo))
+	}
+}
+
 // In a fork whose gh takes the upstream, its pull requests are listed,
 // linked to and checked out alike, and the fork's links are not taken.
 func TestSwitcherForkPullRequests(t *testing.T) {
