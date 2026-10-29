@@ -324,3 +324,29 @@ func TestCountDirectAsGit(t *testing.T) {
 		t.Errorf("git counts %v and %v: the cases are not what they test", want["late-nul.dat"], want["big.txt"])
 	}
 }
+
+// The checks list the failing first, then those running, passing and
+// skipped, a check run again by its latest run alone.
+func TestReadChecks(t *testing.T) {
+	at := func(m int) time.Time { return time.Date(2026, 1, 1, 0, m, 0, 0, time.UTC) }
+	checks := readChecks([]ghCheck{
+		{Type: "CheckRun", Name: "build", Workflow: "CI", Status: "COMPLETED", Conclusion: "SUCCESS", StartedAt: at(1)},
+		{Type: "CheckRun", Name: "test", Workflow: "CI", Status: "COMPLETED", Conclusion: "FAILURE", StartedAt: at(1)},
+		{Type: "CheckRun", Name: "test", Workflow: "CI", Status: "IN_PROGRESS", StartedAt: at(2)},
+		{Type: "CheckRun", Name: "label", Workflow: "Triage", Status: "COMPLETED", Conclusion: "SKIPPED"},
+		{Type: "CheckRun", Name: "lint", Workflow: "CI", Status: "COMPLETED", Conclusion: "CANCELLED"},
+		{Type: "StatusContext", Context: "deploy", State: "PENDING"},
+	})
+	var got []string
+	for _, ch := range checks {
+		got = append(got, fmt.Sprint(ch.Name, ch.State))
+	}
+	want := []string{"lint0", "deploy1", "test1", "build2", "label3"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("checks %v, want %v", got, want)
+	}
+	pr := &BranchPull{Checks: checks}
+	if s, ok := pr.ChecksState(); !ok || s != CheckFailed {
+		t.Fatalf("state %v, %v", s, ok)
+	}
+}

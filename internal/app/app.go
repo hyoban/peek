@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/egoist/mygo/plugins/updater/native"
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
+	"github.com/egoist/mygo/ui/markdown"
 )
 
 // The modes of the window: the files the chosen commit changes, with
@@ -44,9 +46,16 @@ type app struct {
 	// branchURL is the branch's page on GitHub, which the button opens
 	// over the repository's where there is one.
 	branchURL string
-	// pullURL is the page of the branch's pull request, which the button
-	// opens over the branch's, as read for the branch's page pullURLFor.
-	pullURL, pullURLFor string
+	// pullReq is the branch's pull request, nil for none, as read for the
+	// branch's page pullFor: the button opens its page over the branch's,
+	// and the branch's changes show it over their diffs.
+	pullReq     *git.BranchPull
+	pullFor     string
+	pullReading bool // gh is asked for it
+	// pullMarkdown shows its description, and checksOpen tells, by its
+	// page, whether its checks list where the user chose.
+	pullMarkdown *markdown.Options
+	checksOpen   map[string]bool
 	// inline runs loads on the UI thread, as tests and snapshots want,
 	// and redraw asks for the frame a window's Update would draw then.
 	// Those a pass starts wait in published for the next, as a window's
@@ -838,6 +847,12 @@ func (a *app) commitItem(c *ui.Context) func(cm git.Commit) ui.SourceListItem {
 			if cm.Hash != git.Worktree {
 				tint, glyph, name = purple, branchIcon, "range"
 				it.Tooltip = cm.Body
+				if pr := a.pullReq; pr != nil && a.pullFor == a.branchURL {
+					if b, ok := checksBadge(c, pr); ok {
+						it.Badges = []ui.SourceListBadge{b}
+						it.Tooltip += "\n\n#" + strconv.Itoa(pr.Number) + ": " + checksSummary(pr)
+					}
+				}
 			}
 			it.Subtitle = cm.Summary
 			it.Image = a.drawn(fmt.Sprint(name, dark), 30, func(c *ui.Context) {
@@ -1379,7 +1394,7 @@ func (a *app) loadCommits() {
 			a.canPush, a.behind, a.upstream, a.dirty = h.canPush, h.behind, h.upstream, len(h.changes)
 			a.updateReviewSource(h.review, h.reviewErr)
 			a.updateBranchReview(h.branchReview)
-			a.readPullURL(false)
+			a.readPullRequest(false)
 			if len(h.commits) > 0 {
 				a.commitRow = landingRow(h)
 				if row, ok := a.keptRow(); ok {

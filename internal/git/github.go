@@ -2,6 +2,7 @@ package git
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -176,15 +178,161 @@ func ListPullRequests(ctx context.Context, repo, page string) ([]PullRequest, er
 	return prs, nil
 }
 
-// BranchPullRequestURL returns the page of the pull request of the branch
-// checked out, as gh finds it, open or merged, "" where it has none or gh
-// cannot say.
-func BranchPullRequestURL(ctx context.Context, repo string) string {
-	out, err := gh(ctx, repo, "pr", "view", "--json", "url,state", "--jq", `select(.state != "CLOSED") | .url`)
-	if url := strings.TrimSpace(out); err == nil && pullURL.MatchString(url) {
-		return url
+// BranchPull is the pull request of the branch checked out, open or
+// merged, as gh tells of it: its page, its description and the checks
+// run on its last commit.
+type BranchPull struct {
+	Number int
+	Title  string
+	Body   string
+	URL    string
+	State  string // OPEN or MERGED
+	Draft  bool
+	Author string
+	// Review is GitHub's decision of its reviews: APPROVED,
+	// CHANGES_REQUESTED or REVIEW_REQUIRED, "" where none is required.
+	Review string
+	Checks []Check // the failing first, then those running, passing and skipped
+}
+
+// CheckState is where a check of a pull request stands, in the order the
+// checks list.
+type CheckState int
+
+const (
+	CheckFailed CheckState = iota
+	CheckPending
+	CheckPassed
+	CheckSkipped
+)
+
+// Check is a check run, or a commit status, on a pull request's last
+// commit.
+type Check struct {
+	Name     string
+	Workflow string // the workflow of a GitHub Actions job's, "" for others
+	URL      string // its details
+	State    CheckState
+}
+
+// Counts returns how many of the checks stand each way, by CheckState.
+func (p *BranchPull) Counts() (n [4]int) {
+	for _, ch := range p.Checks {
+		n[ch.State]++
 	}
-	return ""
+	return n
+}
+
+// ChecksState is where the checks stand as one, as GitHub's mark beside
+// a commit: failed where one has, else running where one is, else passed;
+// false where there are none but skipped.
+func (p *BranchPull) ChecksState() (CheckState, bool) {
+	n := p.Counts()
+	for _, s := range []CheckState{CheckFailed, CheckPending, CheckPassed} {
+		if n[s] > 0 {
+			return s, true
+		}
+	}
+	return 0, false
+}
+
+type ghCheck struct {
+	Type       string    `json:"__typename"`
+	Name       string    `json:"name"`
+	Workflow   string    `json:"workflowName"`
+	Status     string    `json:"status"`
+	Conclusion string    `json:"conclusion"`
+	DetailsURL string    `json:"detailsUrl"`
+	StartedAt  time.Time `json:"startedAt"`
+	// A commit status's.
+	Context   string `json:"context"`
+	State     string `json:"state"`
+	TargetURL string `json:"targetUrl"`
+}
+
+func (g ghCheck) check() Check {
+	if g.Type == "StatusContext" {
+		ch := Check{Name: g.Context, URL: g.TargetURL, State: CheckFailed}
+		switch g.State {
+		case "SUCCESS":
+			ch.State = CheckPassed
+		case "PENDING", "EXPECTED":
+			ch.State = CheckPending
+		}
+		return ch
+	}
+	ch := Check{Name: g.Name, Workflow: g.Workflow, URL: g.DetailsURL, State: CheckFailed}
+	switch {
+	case g.Status != "COMPLETED":
+		ch.State = CheckPending
+	case g.Conclusion == "SUCCESS":
+		ch.State = CheckPassed
+	case g.Conclusion == "SKIPPED" || g.Conclusion == "NEUTRAL":
+		ch.State = CheckSkipped
+	}
+	return ch
+}
+
+// readChecks reads gh's statusCheckRollup: a check run again keeps its
+// latest run alone, as GitHub lists them.
+func readChecks(rollup []ghCheck) []Check {
+	latest := map[[2]string]int{}
+	var kept []ghCheck
+	for _, g := range rollup {
+		key := [2]string{g.Workflow, g.Name + g.Context}
+		if i, ok := latest[key]; ok {
+			if g.StartedAt.After(kept[i].StartedAt) {
+				kept[i] = g
+			}
+			continue
+		}
+		latest[key] = len(kept)
+		kept = append(kept, g)
+	}
+	checks := make([]Check, len(kept))
+	for i, g := range kept {
+		checks[i] = g.check()
+	}
+	slices.SortStableFunc(checks, func(a, b Check) int {
+		return cmp.Or(cmp.Compare(a.State, b.State), cmp.Compare(a.Workflow, b.Workflow), cmp.Compare(a.Name, b.Name))
+	})
+	return checks
+}
+
+// BranchPullRequest returns the pull request of the branch checked out,
+// as gh finds it, open or merged, nil where it has none.
+func BranchPullRequest(ctx context.Context, repo string) (*BranchPull, error) {
+	out, err := gh(ctx, repo, "pr", "view", "--json",
+		"number,title,body,url,state,isDraft,author,reviewDecision,statusCheckRollup")
+	if err != nil {
+		if strings.Contains(err.Error(), "no pull requests found") {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var pr struct {
+		Number int    `json:"number"`
+		Title  string `json:"title"`
+		Body   string `json:"body"`
+		URL    string `json:"url"`
+		State  string `json:"state"`
+		Draft  bool   `json:"isDraft"`
+		Author struct {
+			Login string `json:"login"`
+		} `json:"author"`
+		Review string    `json:"reviewDecision"`
+		Checks []ghCheck `json:"statusCheckRollup"`
+	}
+	if err := json.Unmarshal([]byte(out), &pr); err != nil {
+		return nil, fmt.Errorf("read gh's pull request: %w", err)
+	}
+	if pr.State == "CLOSED" || !pullURL.MatchString(pr.URL) {
+		return nil, nil
+	}
+	return &BranchPull{
+		Number: pr.Number, Title: pr.Title, Body: pr.Body, URL: pr.URL, State: pr.State, Draft: pr.Draft,
+		Author: pr.Author.Login, Review: pr.Review, Checks: readChecks(pr.Checks),
+	}, nil
 }
 
 // CheckoutPullRequest checks out the pull request of the repository whose

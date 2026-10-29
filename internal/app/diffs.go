@@ -339,9 +339,13 @@ func (a *app) diffPane(c *ui.Context) {
 
 // commitMessage is the first row of the diffs, as Mail shows a message's
 // header over it: who made the commit and when, its hash, and its message,
-// to read at a glance, its subject being the jump bar's. The work tree and
-// the branch's changes have none.
+// to read at a glance, its subject being the jump bar's. The work tree has
+// none, and the branch's changes their pull request's, where there is one.
 func (a *app) commitMessage(c *ui.Context) {
+	if pr := a.shownPull(); pr != nil {
+		a.pullHeader(c, pr)
+		return
+	}
 	cm, ok := a.current()
 	if !ok || cm.Hash == git.Worktree || git.IsRange(cm.Hash) {
 		ui.Row(c).FillWidth().Height(0)

@@ -139,7 +139,7 @@ func (a *app) applyHistory(h history) {
 	a.canPush, a.behind, a.upstream, a.dirty = h.canPush, h.behind, h.upstream, len(h.changes)
 	a.updateReviewSource(h.review, h.reviewErr)
 	a.updateBranchReview(h.branchReview)
-	a.readPullURL(false)
+	a.readPullRequest(false)
 	a.commitRow = -1
 	if len(h.commits) > 0 {
 		a.commitRow = 0
