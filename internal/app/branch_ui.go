@@ -14,10 +14,12 @@ import (
 )
 
 // switcherState is the branch switcher's: a popover under the branch's
-// name listing the branches and the open pull requests to check out, and
-// a field to filter them, or to name a pull request by number or page.
+// name listing the branches or the open pull requests to check out, as
+// the tab chosen has it, and a field to filter them, or to name a pull
+// request by number or page.
 type switcherState struct {
 	open     bool
+	tab      int // switchBranches or switchPulls, kept from one opening to the next
 	query    string
 	gen      int // counts the openings, to drop stale lists
 	branches git.Branches
@@ -37,6 +39,13 @@ type switcherState struct {
 	reveal   bool
 	button   ui.Handle // the branch's name, under which the switcher shows
 }
+
+// The switcher's tabs: the branches, local then remote, and the open pull
+// requests, each list of its own for neither to bury the other.
+const (
+	switchBranches = iota
+	switchPulls
+)
 
 // switchTarget is a row of the switcher: a branch, local or remote, or a
 // pull request of the repository on GitHub whose page prRepo is; or a
@@ -89,6 +98,11 @@ func (a *app) branchLabel(c *ui.Context) {
 // where there are windows, under the toolbar's item where AppKit's
 // toolbar shows.
 func (a *app) branchSwitcher(c *ui.Context) {
+	if a.switcherPopover.height == 0 {
+		// As tall as it lays out, from the first: it would grow from a
+		// guess in sight.
+		a.switcherPopover.height = a.switcherHeight()
+	}
 	if a.nativeBar {
 		r, ok := a.win.ToolbarItemBounds("branch")
 		if !ok && a.switcherPopover.win == nil {
@@ -126,8 +140,22 @@ func (a *app) focusSwitcher(c *ui.Context) {
 	}
 }
 
-// switcherWidth is the width of the switcher's content.
-const switcherWidth = 380
+// switcherWidth is the width of the switcher's content, and
+// switcherListHeight the height of its list: a fixed one, as Xcode's
+// branch menu, for the popover to keep its size as the branches and pull
+// requests load and as the tabs change, rather than jump.
+const switcherWidth, switcherListHeight = 380, 360
+
+// switcherHeight is the height of the switcher's popover as it lays out
+// at the app's text size, its list being of a fixed height: the field and
+// the tabs over it.
+func (a *app) switcherHeight() int {
+	h := switcherListHeight + 2*popoverPadding + 33
+	if a.github != "" {
+		h += 32
+	}
+	return h
+}
 
 // openSwitcher shows the switcher and reads again what it lists: the
 // branches at once, the pull requests as GitHub answers.
@@ -213,10 +241,20 @@ type switchRow struct {
 	title, detail string
 }
 
-// rows lists what the query keeps, in the switcher's order: the local
-// branches, the remote ones, the open pull requests, and the pull request
-// the query names where none listed is it. preferred is the row Enter
-// picks before the arrows move: the pull request named, else the first.
+// tab is the switcher's tab that shows: the branches where the
+// repository is not on GitHub, which has no pull requests.
+func (a *app) tab() int {
+	if a.github == "" {
+		return switchBranches
+	}
+	return a.switcher.tab
+}
+
+// rows lists what the query keeps of the tab, in the switcher's order:
+// the local branches and the remote ones, or the open pull requests; and
+// in either, first, the pull request the query names. preferred is the
+// row Enter picks before the arrows move: the pull request named, else
+// the first.
 func (a *app) rows() (rows []switchRow, preferred int) {
 	local, remote, prs, named := a.matches()
 	heading := func(title string) func() string {
@@ -229,36 +267,44 @@ func (a *app) rows() (rows []switchRow, preferred int) {
 			return ""
 		}
 	}
-	h := heading("Branches")
-	for _, b := range local {
-		rows = append(rows, switchRow{target: a.localTarget(b), heading: h(), icon: branchIcon, title: b})
-	}
-	h = heading("Remote Branches")
-	for _, b := range remote {
-		rows = append(rows, switchRow{target: switchTarget{branch: b, remote: true}, heading: h(), icon: branchIcon, title: b})
-	}
-	if a.github == "" {
+	if a.tab() == switchBranches {
+		if named > 0 && a.github != "" {
+			rows = append(rows, a.namedRow(named, prs))
+		}
+		h := heading("Branches")
+		for _, b := range local {
+			rows = append(rows, switchRow{target: a.localTarget(b), heading: h(), icon: branchIcon, title: b})
+		}
+		h = heading("Remote Branches")
+		for _, b := range remote {
+			rows = append(rows, switchRow{target: switchTarget{branch: b, remote: true}, heading: h(), icon: branchIcon, title: b})
+		}
 		return rows, 0
 	}
-	h = heading("Pull Requests")
-	listedNamed := false
+	if named > 0 {
+		return []switchRow{a.namedRow(named, prs)}, 0
+	}
 	for _, pr := range prs {
-		if pr.Number == named {
-			listedNamed, preferred = true, len(rows)
-		}
-		detail := pr.Branch
-		if pr.Draft {
-			detail = "Draft · " + detail
-		}
-		rows = append(rows, switchRow{target: a.pullTarget(pr.Number), heading: h(), icon: pullIcon,
-			title: fmt.Sprintf("#%d %s", pr.Number, pr.Title), detail: detail})
+		rows = append(rows, pullRow(a.pullTarget(pr.Number), pr))
 	}
-	if named > 0 && !listedNamed {
-		preferred = len(rows)
-		rows = append(rows, switchRow{target: a.pullTarget(named), heading: h(), icon: pullIcon,
-			title: fmt.Sprintf("Check out pull request #%d", named)})
+	return rows, 0
+}
+
+// namedRow is the row of the pull request the query names: as listed,
+// or to check out by its number where none listed is it.
+func (a *app) namedRow(named int, prs []git.PullRequest) switchRow {
+	if i := slices.IndexFunc(prs, func(pr git.PullRequest) bool { return pr.Number == named }); i >= 0 {
+		return pullRow(a.pullTarget(named), prs[i])
 	}
-	return rows, preferred
+	return switchRow{target: a.pullTarget(named), icon: pullIcon, title: fmt.Sprintf("Check out pull request #%d", named)}
+}
+
+func pullRow(target switchTarget, pr git.PullRequest) switchRow {
+	detail := pr.Branch
+	if pr.Draft {
+		detail = "Draft · " + detail
+	}
+	return switchRow{target: target, icon: pullIcon, title: fmt.Sprintf("#%d %s", pr.Number, pr.Title), detail: detail}
 }
 
 // submitSwitch checks out the row highlighted, as Enter in the field does.
@@ -354,8 +400,9 @@ func (a *app) switchTo(target switchTarget) {
 	})
 }
 
-// switcherPanel is the switcher's content: the field, then the local
-// branches, the remote ones and the open pull requests, and a note of
+// switcherPanel is the switcher's content: the tabs, the field, then the
+// local branches and the remote ones, or the open pull requests, and a
+// note of
 // what is checked out or why it was not. As a menu, the row under the
 // pointer or that the arrows move to is highlighted, which Enter checks
 // out.
@@ -363,8 +410,21 @@ func (a *app) switcherPanel(c *ui.Context) {
 	t := c.Theme()
 	s := &a.switcher
 	ui.Column(c).Width(switcherWidth).Gap(t.Space(1)).Children(func() {
+		if a.github != "" {
+			ui.Row(c).FillWidth().Justify(ui.Center).Padding(0, 0, t.Space(1), 0).Children(func() {
+				tab := s.tab
+				modeSwitch(c, &s.tab, "Branches", "Pull Requests").Label("Show")
+				if s.tab != tab {
+					s.moved, s.movedFor = 0, "\x00" // the highlight starts again at the top
+				}
+			})
+		}
+		placeholder := "Branch, or pull request number or link"
+		if a.tab() == switchPulls {
+			placeholder = "Pull request title, branch, author, number or link"
+		}
 		ui.TextInput(c.Key("branch-query"), &s.query).Bind(&s.field).Label("Branch or pull request").
-			Placeholder("Branch, or pull request number or link").OnTextKey(func(k ui.TextKey) bool {
+			Placeholder(placeholder).OnTextKey(func(k ui.TextKey) bool {
 			switch {
 			case k.Mods == 0 && k.Key == ui.KeyDown:
 				a.moveHighlight(1)
@@ -379,9 +439,9 @@ func (a *app) switcherPanel(c *ui.Context) {
 		})
 		rows, preferred := a.rows()
 		lit := a.highlighted(len(rows), preferred)
-		ui.Scroll(c.Key("branch-list")).FillWidth().MaxHeight(380).Children(func() {
+		ui.Scroll(c.Key("branch-list")).FillWidth().Height(switcherListHeight).Shrink(0).Children(func() {
 			ui.Column(c).FillWidth().Gap(1).Children(func() {
-				if !s.listed {
+				if !s.listed && a.tab() == switchBranches {
 					ui.Row(c).FillWidth().Justify(ui.Center).Padding(t.Space(2)).Children(func() { ui.Spinner(c).Label("Loading") })
 				}
 				for i, row := range rows {
@@ -392,11 +452,11 @@ func (a *app) switcherPanel(c *ui.Context) {
 						s.moved, s.movedFor = i, s.query
 					}
 				}
-				if a.github == "" {
+				if a.tab() != switchPulls {
+					if len(rows) == 0 && s.listed {
+						switcherNote(c, "No branches match")
+					}
 					return
-				}
-				if !slices.ContainsFunc(rows, func(r switchRow) bool { return r.target.pr > 0 }) {
-					switcherHeading(c, "Pull Requests")
 				}
 				_, _, prs, named := a.matches()
 				switch {
@@ -405,6 +465,8 @@ func (a *app) switcherPanel(c *ui.Context) {
 					ui.Row(c).FillWidth().Justify(ui.Center).Padding(t.Space(2)).Children(func() { ui.Spinner(c).Label("Loading pull requests") })
 				case s.prErr != "":
 					switcherNote(c, s.prErr)
+				case len(prs) == 0 && s.query != "":
+					switcherNote(c, "No pull requests match")
 				case len(prs) == 0:
 					switcherNote(c, "No open pull requests")
 				}
