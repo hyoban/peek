@@ -33,7 +33,7 @@ func pullDescription(body string) string {
 
 // pullHeader is the first row of the branch's changes where the branch
 // has a pull request, as commitMessage is a commit's: its title and where
-// it stands, its checks, and its description.
+// it stands, whether it merges, its checks, and its description.
 func (a *app) pullHeader(c *ui.Context, pr *git.BranchPull) {
 	t := c.Theme()
 	services := c.Services()
@@ -57,11 +57,13 @@ func (a *app) pullHeader(c *ui.Context, pr *git.BranchPull) {
 				ui.Text(c, r).FontSize(smallSize).TextColor(reviewTint(c, pr.Review)).SingleLine()
 			}
 		})
-		if len(pr.Checks) > 0 {
-			a.pullChecks(c, pr)
-		}
+		// Whether it merges first, as what the reader wants most, over the
+		// checks it may tell of, a long list of them below.
 		if pr.State == "OPEN" {
 			mergeBox(c, mergeStatusOf(pr))
+		}
+		if len(pr.Checks) > 0 {
+			a.pullChecks(c, pr)
 		}
 		if body := pullDescription(pr.Body); body != "" {
 			ui.Column(c).FillWidth().Children(func() {
