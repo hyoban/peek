@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"regexp"
 	"strconv"
 	"strings"
@@ -46,7 +47,11 @@ func (a *app) pullHeader(c *ui.Context, pr *git.BranchPull) {
 			pullCapsule(c, pullStateLabel(pr), pullTint(c, pr))
 		})
 		ui.Row(c).FillWidth().Gap(t.Space(1.5)).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "By "+pr.Author).FontSize(smallSize).TextColor(t.TextMuted).SingleLine()
+			by := "By " + pr.Author
+			if pr.Base != "" {
+				by += " into " + pr.Base
+			}
+			ui.Text(c, by).FontSize(smallSize).TextColor(t.TextMuted).SingleLine()
 			if r := reviewLabel(pr.Review); r != "" && pr.State == "OPEN" {
 				ui.Text(c, "·").FontSize(smallSize).TextColor(t.TextMuted)
 				ui.Text(c, r).FontSize(smallSize).TextColor(reviewTint(c, pr.Review)).SingleLine()
@@ -54,6 +59,9 @@ func (a *app) pullHeader(c *ui.Context, pr *git.BranchPull) {
 		})
 		if len(pr.Checks) > 0 {
 			a.pullChecks(c, pr)
+		}
+		if pr.State == "OPEN" {
+			mergeBox(c, mergeStatusOf(pr))
 		}
 		if body := pullDescription(pr.Body); body != "" {
 			ui.Column(c).FillWidth().Children(func() {
@@ -114,6 +122,10 @@ func (a *app) pullChecks(c *ui.Context, pr *git.BranchPull) {
 				ui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
 					checkMark(c, ch.State, 12)
 					ui.Text(c, ch.Name).FontSize(smallSize).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
+					if ch.Required {
+						ui.Text(c, "Required").FontSize(smallSize-1).TextColor(t.TextMuted).SingleLine().Shrink(0).
+							Padding(0, t.Space(1)).Radius(t.Space(1)).Background(t.TextMuted.Alpha(0.12))
+					}
 					if ch.Workflow != "" {
 						ui.Text(c, ch.Workflow).FontSize(smallSize).TextColor(t.TextMuted).SingleLine().Ellipsis("…").
 							Grow(1).MinWidth(0)
@@ -261,4 +273,124 @@ func pullCapsule(c *ui.Context, label string, tint ui.Color) {
 	t := c.Theme()
 	ui.Text(c, label).FontSize(smallSize).FontWeight(600).TextColor(tint).SingleLine().Shrink(0).
 		Padding(t.Space(0.25), t.Space(2)).Radius(999).Background(tint.Alpha(0.14))
+}
+
+// mergeLevel is how a pull request's merging stands, as the color of
+// GitHub's merge box.
+type mergeLevel int
+
+const (
+	mergeReady    mergeLevel = iota // green
+	mergeWarning                    // orange: it merges, though not all is well
+	mergeBlocked                    // red
+	mergeChecking                   // muted, while GitHub works it out
+)
+
+// mergeStatus is where merging a pull request stands: a headline, and
+// what holds it back.
+type mergeStatus struct {
+	level    mergeLevel
+	headline string
+	reasons  []string
+}
+
+// mergeStatusOf tells whether the pull request can be merged, and where
+// not, why: a draft, conflicts, the reviews, the checks and the
+// conversations the base's rules want, or the base having moved on.
+func mergeStatusOf(pr *git.BranchPull) mergeStatus {
+	base := cmp.Or(pr.Base, "the base branch")
+	if pr.Draft {
+		return mergeStatus{mergeBlocked, "This pull request is still a draft",
+			[]string{"Mark it ready for review on GitHub to merge it"}}
+	}
+	var reasons []string
+	conflicts := pr.Mergeable == "CONFLICTING" || pr.MergeState == "DIRTY"
+	if conflicts {
+		reasons = append(reasons, "This branch has conflicts with "+base+" that must be resolved")
+	}
+	if pr.MergeState == "BEHIND" {
+		reasons = append(reasons, "This branch is out of date with "+base+": update it to merge")
+	}
+	switch pr.Review {
+	case "CHANGES_REQUESTED":
+		reasons = append(reasons, "A reviewer requested changes")
+	case "REVIEW_REQUIRED":
+		reasons = append(reasons, "An approving review is required")
+	}
+	if pr.MergeState == "BLOCKED" {
+		// The checks the rules require, where GitHub told which: else
+		// any, which may be.
+		n, which := pr.RequiredCounts(), "required "
+		if pr.Unresolved < 0 {
+			n, which = pr.Counts(), ""
+		}
+		if n[git.CheckFailed] > 0 {
+			reasons = append(reasons, plural(n[git.CheckFailed], which+"check")+" failed")
+		}
+		if n[git.CheckPending] > 0 {
+			reasons = append(reasons, plural(n[git.CheckPending], which+"check")+" "+isAre(n[git.CheckPending], "still running"))
+		}
+		if pr.Unresolved > 0 {
+			reasons = append(reasons, plural(pr.Unresolved, "conversation")+" "+isAre(pr.Unresolved, "not resolved"))
+		}
+	}
+	switch {
+	case conflicts:
+		return mergeStatus{mergeBlocked, "Can’t merge: conflicts", reasons}
+	case pr.MergeState == "BLOCKED" || pr.MergeState == "BEHIND":
+		if len(reasons) == 0 {
+			reasons = []string{"The rules of " + base + " aren’t met yet"}
+		}
+		return mergeStatus{mergeBlocked, "Merging is blocked", reasons}
+	case pr.MergeState == "UNSTABLE":
+		return mergeStatus{mergeWarning, "Can merge, though checks that aren’t required failed", reasons}
+	case pr.MergeState == "CLEAN" || pr.MergeState == "HAS_HOOKS":
+		return mergeStatus{mergeReady, "Ready to merge into " + base, reasons}
+	}
+	return mergeStatus{mergeChecking, "Checking whether it can merge…", reasons}
+}
+
+// plural is a count of things, as "1 check" or "2 checks".
+func plural(n int, thing string) string {
+	if n == 1 {
+		return "1 " + thing
+	}
+	return strconv.Itoa(n) + " " + thing + "s"
+}
+
+func isAre(n int, rest string) string {
+	if n == 1 {
+		return "is " + rest
+	}
+	return "are " + rest
+}
+
+// mergeBox is the merge status as GitHub's merge box shows it: its mark
+// and headline, over what holds it back.
+func mergeBox(c *ui.Context, m mergeStatus) {
+	t := c.Theme()
+	tint := map[mergeLevel]ui.Color{mergeReady: system(c, systemGreen), mergeWarning: system(c, systemOrange),
+		mergeBlocked: system(c, systemRed), mergeChecking: t.TextMuted}[m.level]
+	ui.Column(c).FillWidth().Gap(t.Space(1)).Padding(t.Space(1.5), t.Space(2.5)).Radius(8).
+		Border(1, tint.Alpha(0.35)).Background(tint.Alpha(0.06)).Role(ui.RoleGroup).Label("Merge Status").Children(func() {
+		ui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
+			switch m.level {
+			case mergeChecking:
+				ui.Spinner(c).Size(14, 14).Shrink(0).Label("Checking")
+			case mergeReady:
+				ui.Icon(c, checkCircleIcon).Size(14, 14).Shrink(0).TextColor(tint)
+			case mergeWarning:
+				ui.Icon(c, warningIcon).Size(14, 14).Shrink(0).TextColor(tint)
+			default:
+				ui.Icon(c, crossCircleIcon).Size(14, 14).Shrink(0).TextColor(tint)
+			}
+			ui.Text(c, m.headline).FontWeight(600).Grow(1).MinWidth(0).SingleLine().Ellipsis("…").Tooltip(m.headline)
+		})
+		for i, r := range m.reasons {
+			ui.Row(c).Key(i).FillWidth().Gap(t.Space(2)).AlignItems(ui.Start).Padding(0, 0, 0, 14+t.Space(2)).Children(func() {
+				ui.Text(c, "•").FontSize(smallSize).TextColor(t.TextMuted).Shrink(0)
+				ui.Text(c, r).FontSize(smallSize).TextColor(t.Text).Grow(1).MinWidth(0).Selectable()
+			})
+		}
+	})
 }

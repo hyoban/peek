@@ -71,13 +71,16 @@ func (a *app) startPull() {
 
 // fetchIfDue fetches the remote where the interval the user chose has
 // passed since it last did, as the user and the network allow, and reads
-// the checks of the branch's pull request again while they run.
+// the branch's pull request again while its checks run or GitHub works
+// out whether it merges.
 func (a *app) fetchIfDue() {
 	if a.closed || !a.projects.fetchAllowed() {
 		return
 	}
-	if a.pullReq != nil && a.pullReq.State == "OPEN" {
-		if s, ok := a.pullReq.ChecksState(); ok && s == git.CheckPending {
+	if pr := a.pullReq; pr != nil && pr.State == "OPEN" {
+		// While GitHub works out whether it merges too.
+		s, ok := pr.ChecksState()
+		if ok && s == git.CheckPending || pr.Mergeable == "UNKNOWN" || pr.MergeState == "UNKNOWN" {
 			a.readPullRequest(true)
 		}
 	}
