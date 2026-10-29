@@ -43,17 +43,23 @@ func GitHubURL(repo string) string {
 // BranchGitHubURL returns the GitHub page of the branch checked out, on
 // the remote it tracks, "" where it tracks none on GitHub, as a branch
 // never pushed or a detached HEAD. The remote's default branch has the
-// repository's own page.
+// repository's own page. A remote may be named by its URL, as gh pr
+// checkout tracks a fork's branch, which git then tells no upstream of.
 func BranchGitHubURL(repo string) string {
-	head, err := git(repo, "symbolic-ref", "--quiet", "HEAD")
+	head, err := git(repo, "symbolic-ref", "--quiet", "--short", "HEAD")
 	if err != nil {
 		return ""
 	}
-	out, err := git(repo, "for-each-ref", "--format=%(upstream:remotename)%00%(upstream:remoteref)", strings.TrimSpace(head))
-	remote, ref, _ := strings.Cut(strings.TrimSpace(out), "\x00")
-	branch, ok := strings.CutPrefix(ref, "refs/heads/")
-	if err != nil || remote == "" || !ok {
+	name := strings.TrimSpace(head)
+	remote, _ := git(repo, "config", "--get", "branch."+name+".remote")
+	ref, _ := git(repo, "config", "--get", "branch."+name+".merge")
+	remote = strings.TrimSpace(remote)
+	branch, ok := strings.CutPrefix(strings.TrimSpace(ref), "refs/heads/")
+	if remote == "" || remote == "." || !ok {
 		return ""
+	}
+	if page := githubPage(remote); page != "" {
+		return page + "/tree/" + escapeBranch(branch)
 	}
 	url, err := git(repo, "config", "--get", "remote."+remote+".url")
 	page := githubPage(strings.TrimSpace(url))
@@ -63,11 +69,16 @@ func BranchGitHubURL(repo string) string {
 	if branch == remoteDefaultBranch(repo, remote) {
 		return page
 	}
+	return page + "/tree/" + escapeBranch(branch)
+}
+
+// escapeBranch is the branch's name as the path of its page.
+func escapeBranch(branch string) string {
 	parts := strings.Split(branch, "/")
 	for i, p := range parts {
 		parts[i] = neturl.PathEscape(p)
 	}
-	return page + "/tree/" + strings.Join(parts, "/")
+	return strings.Join(parts, "/")
 }
 
 // remoteDefaultBranch returns the branch the remote's HEAD names, or else
