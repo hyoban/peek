@@ -28,11 +28,34 @@ func TestSwitcherUI(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	for _, want := range []string{"Branches", "feature", "Pull Requests", "#7 Add the switcher"} {
+	for _, want := range []string{"Branches", "feature", "Pull Requests"} {
 		if !tt.HasText(want) {
 			t.Fatalf("no %q in %q", want, tt.Texts())
 		}
 	}
+	// The pull requests list in a tab of their own, which the switcher
+	// keeps.
+	if tt.HasText("#7 Add the switcher") {
+		t.Fatal("pull requests listed among the branches")
+	}
+	if err := tt.Click("Pull Requests"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !tt.HasText("#7 Add the switcher") || tt.HasText("feature") {
+		t.Fatalf("pull requests' tab shows %q", tt.Texts())
+	}
+	a.switcher.open = false
+	tt.Frame()
+	a.openSwitcher()
+	tt.Frame()
+	if !tt.HasText("#7 Add the switcher") {
+		t.Fatalf("tab not kept: %q", tt.Texts())
+	}
+	if err := tt.Click("Branches"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
 	if err := tt.Click("feature"); err != nil {
 		t.Fatal(err)
 	}
@@ -221,5 +244,37 @@ func TestGitHubButtonOpensPullRequest(t *testing.T) {
 	settle(tt)
 	if got, want := a.githubPage(), "https://github.com/hyoban/peek"; got != want {
 		t.Fatalf("main's page %q, want %q", got, want)
+	}
+}
+
+// The switcher is as tall loading as loaded, and on either tab, at the
+// height its popover opens at: it never jumps as the lists come.
+func TestSwitcherKeepsItsHeight(t *testing.T) {
+	repo, _ := testutil.RemoteRepo(t)
+	testutil.Git(t, repo, "remote", "set-url", "origin", "https://github.com/hyoban/peek.git")
+	testutil.FakeGH(t, "https://github.com/hyoban/peek")
+	a, _ := testApp(t, repo, nil)
+	height := func() int {
+		var h ui.Handle
+		var got float32
+		tt := ui.NewTester(func(c *ui.Context) {
+			a.themed(c)
+			a.childTheme(c)
+			ui.Column(c).Bind(&h).Padding(popoverPadding).Children(func() { a.switcherPanel(c) })
+			if e := c.Resolve(h); e.Valid() {
+				got = e.Bounds().H
+			}
+		}, 600, 900)
+		tt.Frame()
+		tt.Frame()
+		return int(got + 0.5)
+	}
+	loading := height()
+	a.openSwitcher()
+	loaded := height()
+	a.switcher.tab = switchPulls
+	pulls := height()
+	if loading != a.switcherHeight() || loaded != loading || pulls != loading {
+		t.Fatalf("heights %d loading, %d loaded, %d of the pull requests; opens at %d", loading, loaded, pulls, a.switcherHeight())
 	}
 }
