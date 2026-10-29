@@ -70,12 +70,20 @@ func (a *app) startPull() {
 }
 
 // fetchIfDue fetches the remote where the interval the user chose has
-// passed since it last did, as the user and the network allow.
+// passed since it last did, as the user and the network allow, and reads
+// the checks of the branch's pull request again while they run.
 func (a *app) fetchIfDue() {
-	if a.closed || time.Since(a.fetchedAt) < a.projects.fetchEvery() || !a.projects.fetchAllowed() {
+	if a.closed || !a.projects.fetchAllowed() {
 		return
 	}
-	a.fetchRemote()
+	if a.pullReq != nil && a.pullReq.State == "OPEN" {
+		if s, ok := a.pullReq.ChecksState(); ok && s == git.CheckPending {
+			a.readPullRequest(true)
+		}
+	}
+	if time.Since(a.fetchedAt) >= a.projects.fetchEvery() {
+		a.fetchRemote()
+	}
 }
 
 // fetchRemote fetches the remote the branch tracks, unless git is busy
@@ -94,7 +102,7 @@ func (a *app) fetchRemote() {
 		moved, _ := git.FetchUpstream(ctx, repo)
 		return func() {
 			a.pull.fetching = false
-			a.readPullURL(true) // a pull request opened since
+			a.readPullRequest(true) // a pull request opened since
 			if moved {
 				a.refresh()
 			}
@@ -105,35 +113,44 @@ func (a *app) fetchRemote() {
 // githubPage is the page the GitHub button opens: the branch's pull
 // request, else the branch's page, else the repository's.
 func (a *app) githubPage() string {
-	if a.pullURLFor == a.branchURL {
-		return cmp.Or(a.pullURL, a.branchURL, a.github)
+	if a.pullReq != nil && a.pullFor == a.branchURL {
+		return a.pullReq.URL
 	}
 	return cmp.Or(a.branchURL, a.github)
 }
 
-// readPullURL asks gh for the branch's pull request where the branch
+// readPullRequest asks gh for the branch's pull request where the branch
 // moved to another page since, or always with again. Only a branch of
-// its own on GitHub, not the default one, has one.
-func (a *app) readPullURL(again bool) {
+// its own on GitHub, not the default one, has one. What gh cannot tell,
+// as offline, leaves the pull request as last read.
+func (a *app) readPullRequest(again bool) {
 	page := a.branchURL
-	if page == a.pullURLFor && !again {
+	if page == a.pullFor && !again {
 		return
 	}
 	if !strings.Contains(page, "/tree/") {
-		a.pullURL, a.pullURLFor = "", page
+		a.pullReq, a.pullFor = nil, page
 		return
 	}
-	if page != a.pullURLFor {
-		a.pullURL, a.pullURLFor = "", page
+	if page != a.pullFor {
+		a.pullReq, a.pullFor = nil, page
 	}
+	if a.pullReading {
+		return
+	}
+	a.pullReading = true
 	repo := a.repo
 	a.background(func() func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		url := git.BranchPullRequestURL(ctx, repo)
+		pr, err := git.BranchPullRequest(ctx, repo)
 		return func() {
-			if a.branchURL == page {
-				a.pullURL, a.pullURLFor = url, page
+			a.pullReading = false
+			switch {
+			case a.branchURL != page:
+				a.readPullRequest(true) // the branch's now, which waited
+			case err == nil:
+				a.pullReq = pr
 			}
 		}
 	})

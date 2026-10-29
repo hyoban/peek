@@ -32,6 +32,8 @@ var (
 	shortcutsIcon   = icon(`<path d="M9 1.8L3.6 9h4.1l-.9 5.2L12.4 7H8.2z" fill="currentColor" stroke-width="1"/>`)
 	copyIcon        = icon(`<rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V3.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/>`)
 	checkCircleIcon = icon(`<circle cx="8" cy="8" r="6.5"/><path d="M5.2 8.2l2 2 3.8-4.2" stroke-width="1.6"/>`)
+	crossCircleIcon = icon(`<circle cx="8" cy="8" r="6.5"/><path d="M5.8 5.8l4.4 4.4M10.2 5.8l-4.4 4.4" stroke-width="1.6"/>`)
+	skipCircleIcon  = icon(`<circle cx="8" cy="8" r="6.5"/><path d="M5.5 8h5" stroke-width="1.6"/>`)
 	warningIcon     = icon(`<path d="M8 2.2L14.3 13a.6.6 0 0 1-.5.9H2.2a.6.6 0 0 1-.5-.9z"/><path d="M8 6.5v3" stroke-width="1.6"/><circle cx="8" cy="11.6" r=".4" fill="currentColor"/>`)
 	sendIcon        = icon(`<path d="M8 13.5v-11M3.5 7L8 2.5 12.5 7" stroke-width="1.8"/>`)
 	commentIcon     = icon(`<path d="M2.5 3.5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H7l-3 2.5v-2.5h-.5a1 1 0 0 1-1-1z"/>`)

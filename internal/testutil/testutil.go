@@ -85,7 +85,7 @@ echo "$@" >> "` + log + `"
 case "$1 $2" in
   "repo view") echo "` + github + `" ;;
   "pr list") printf '%s' '[{"number":7,"title":"Add the switcher","headRefName":"switcher","isDraft":false,"author":{"login":"ada"}}]' ;;
-  "pr view") echo "` + github + `/pull/7" ;;
+  "pr view") printf '%s' '{"number":7,"title":"Add the switcher","body":"Lists the branches.","url":"` + github + `/pull/7","state":"OPEN","isDraft":false,"author":{"login":"ada"},"reviewDecision":"","statusCheckRollup":[{"__typename":"CheckRun","name":"test","workflowName":"CI","status":"COMPLETED","conclusion":"FAILURE","detailsUrl":"` + github + `/actions/runs/1"},{"__typename":"CheckRun","name":"lint","workflowName":"CI","status":"IN_PROGRESS","conclusion":""},{"__typename":"StatusContext","context":"deploy","state":"SUCCESS","targetUrl":"https://example.com"}]}' ;;
   "pr checkout") git switch -q -c "pr-$3" ;;
   *) exit 1 ;;
 esac
