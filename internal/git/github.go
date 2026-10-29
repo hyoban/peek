@@ -193,6 +193,19 @@ type BranchPull struct {
 	// CHANGES_REQUESTED or REVIEW_REQUIRED, "" where none is required.
 	Review string
 	Checks []Check // the failing first, then those running, passing and skipped
+	Base   string  // the branch it merges into
+	// Mergeable tells whether it merges without conflicts: MERGEABLE,
+	// CONFLICTING, or UNKNOWN while GitHub works it out.
+	Mergeable string
+	// MergeState is where merging it stands, as GitHub's merge box:
+	// CLEAN, HAS_HOOKS, UNSTABLE (checks not required failed), BEHIND
+	// (the base moved on, and the rules want it up to date), BLOCKED (by
+	// the rules: reviews, required checks or conversations), DIRTY
+	// (conflicts), DRAFT, or UNKNOWN while GitHub works it out.
+	MergeState string
+	// Unresolved counts its review conversations not resolved yet, which
+	// the rules may want resolved; -1 where GitHub did not say.
+	Unresolved int
 }
 
 // CheckState is where a check of a pull request stands, in the order the
@@ -213,12 +226,24 @@ type Check struct {
 	Workflow string // the workflow of a GitHub Actions job's, "" for others
 	URL      string // its details
 	State    CheckState
+	Required bool // the base's rules want it passing to merge
 }
 
 // Counts returns how many of the checks stand each way, by CheckState.
 func (p *BranchPull) Counts() (n [4]int) {
 	for _, ch := range p.Checks {
 		n[ch.State]++
+	}
+	return n
+}
+
+// RequiredCounts returns how many of the checks the rules require stand
+// each way, by CheckState.
+func (p *BranchPull) RequiredCounts() (n [4]int) {
+	for _, ch := range p.Checks {
+		if ch.Required {
+			n[ch.State]++
+		}
 	}
 	return n
 }
@@ -303,7 +328,7 @@ func readChecks(rollup []ghCheck) []Check {
 // as gh finds it, open or merged, nil where it has none.
 func BranchPullRequest(ctx context.Context, repo string) (*BranchPull, error) {
 	out, err := gh(ctx, repo, "pr", "view", "--json",
-		"number,title,body,url,state,isDraft,author,reviewDecision,statusCheckRollup")
+		"number,title,body,url,state,isDraft,author,reviewDecision,statusCheckRollup,baseRefName,mergeable,mergeStateStatus")
 	if err != nil {
 		if strings.Contains(err.Error(), "no pull requests found") {
 			return nil, nil
@@ -320,8 +345,11 @@ func BranchPullRequest(ctx context.Context, repo string) (*BranchPull, error) {
 		Author struct {
 			Login string `json:"login"`
 		} `json:"author"`
-		Review string    `json:"reviewDecision"`
-		Checks []ghCheck `json:"statusCheckRollup"`
+		Review     string    `json:"reviewDecision"`
+		Checks     []ghCheck `json:"statusCheckRollup"`
+		Base       string    `json:"baseRefName"`
+		Mergeable  string    `json:"mergeable"`
+		MergeState string    `json:"mergeStateStatus"`
 	}
 	if err := json.Unmarshal([]byte(out), &pr); err != nil {
 		return nil, fmt.Errorf("read gh's pull request: %w", err)
@@ -329,10 +357,105 @@ func BranchPullRequest(ctx context.Context, repo string) (*BranchPull, error) {
 	if pr.State == "CLOSED" || !pullURL.MatchString(pr.URL) {
 		return nil, nil
 	}
-	return &BranchPull{
+	p := &BranchPull{
 		Number: pr.Number, Title: pr.Title, Body: pr.Body, URL: pr.URL, State: pr.State, Draft: pr.Draft,
 		Author: pr.Author.Login, Review: pr.Review, Checks: readChecks(pr.Checks),
-	}, nil
+		Base: pr.Base, Mergeable: pr.Mergeable, MergeState: pr.MergeState, Unresolved: -1,
+	}
+	if p.State == "OPEN" {
+		readMergeRules(ctx, repo, p)
+	}
+	return p, nil
+}
+
+// readMergeRules asks GitHub what gh pr view does not tell of what holds
+// the pull request back: which checks the rules require, and how many
+// conversations are not resolved. What GitHub cannot tell is left
+// unknown, as the pull request stands without it.
+func readMergeRules(ctx context.Context, repo string, p *BranchPull) {
+	m := pullURL.FindStringSubmatch(p.URL)
+	owner, name, _ := strings.Cut(strings.TrimPrefix(m[1], "https://github.com/"), "/")
+	const query = `query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      reviewThreads(first: 100) { nodes { isResolved } }
+      commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {
+        __typename
+        ... on CheckRun { name isRequired(pullRequestNumber: $number) checkSuite { workflowRun { workflow { name } } } }
+        ... on StatusContext { context isRequired(pullRequestNumber: $number) }
+      } } } } } }
+    }
+  }
+}`
+	out, err := gh(ctx, repo, "api", "graphql", "-f", "query="+query, "-f", "owner="+owner, "-f", "name="+name,
+		"-F", "number="+strconv.Itoa(p.Number))
+	if err != nil {
+		return
+	}
+	var r struct {
+		Data struct {
+			Repository struct {
+				PullRequest struct {
+					ReviewThreads struct {
+						Nodes []struct {
+							IsResolved bool `json:"isResolved"`
+						} `json:"nodes"`
+					} `json:"reviewThreads"`
+					Commits struct {
+						Nodes []struct {
+							Commit struct {
+								Rollup *struct {
+									Contexts struct {
+										Nodes []struct {
+											Name       string `json:"name"`
+											Context    string `json:"context"`
+											IsRequired bool   `json:"isRequired"`
+											CheckSuite struct {
+												WorkflowRun *struct {
+													Workflow struct {
+														Name string `json:"name"`
+													} `json:"workflow"`
+												} `json:"workflowRun"`
+											} `json:"checkSuite"`
+										} `json:"nodes"`
+									} `json:"contexts"`
+								} `json:"statusCheckRollup"`
+							} `json:"commit"`
+						} `json:"nodes"`
+					} `json:"commits"`
+				} `json:"pullRequest"`
+			} `json:"repository"`
+		} `json:"data"`
+	}
+	if json.Unmarshal([]byte(out), &r) != nil {
+		return
+	}
+	pr := r.Data.Repository.PullRequest
+	p.Unresolved = 0
+	for _, t := range pr.ReviewThreads.Nodes {
+		if !t.IsResolved {
+			p.Unresolved++
+		}
+	}
+	required := map[[2]string]bool{}
+	for _, cm := range pr.Commits.Nodes {
+		if cm.Commit.Rollup == nil {
+			continue
+		}
+		for _, n := range cm.Commit.Rollup.Contexts.Nodes {
+			if !n.IsRequired {
+				continue
+			}
+			workflow := ""
+			if n.CheckSuite.WorkflowRun != nil {
+				workflow = n.CheckSuite.WorkflowRun.Workflow.Name
+			}
+			required[[2]string{workflow, n.Name + n.Context}] = true
+		}
+	}
+	for i, ch := range p.Checks {
+		p.Checks[i].Required = required[[2]string{ch.Workflow, ch.Name}]
+	}
 }
 
 // CheckoutPullRequest checks out the pull request of the repository whose

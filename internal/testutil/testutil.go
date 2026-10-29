@@ -74,7 +74,8 @@ func FakeCodex(t *testing.T) {
 }
 
 // FakeGH puts a gh on the PATH that lists one pull request, takes it for
-// the branch's own and checks it out as a branch of its name, recording
+// the branch's own, its merging blocked by a review, a required check and
+// a conversation, and checks it out as a branch of its name, recording
 // what it was asked; its default repository is github's, the page of one.
 func FakeGH(t *testing.T, github string) string {
 	t.Helper()
@@ -85,8 +86,9 @@ echo "$@" >> "` + log + `"
 case "$1 $2" in
   "repo view") echo "` + github + `" ;;
   "pr list") printf '%s' '[{"number":7,"title":"Add the switcher","headRefName":"switcher","isDraft":false,"author":{"login":"ada"}}]' ;;
-  "pr view") printf '%s' '{"number":7,"title":"Add the switcher","body":"Lists the branches.","url":"` + github + `/pull/7","state":"OPEN","isDraft":false,"author":{"login":"ada"},"reviewDecision":"","statusCheckRollup":[{"__typename":"CheckRun","name":"test","workflowName":"CI","status":"COMPLETED","conclusion":"FAILURE","detailsUrl":"` + github + `/actions/runs/1"},{"__typename":"CheckRun","name":"lint","workflowName":"CI","status":"IN_PROGRESS","conclusion":""},{"__typename":"StatusContext","context":"deploy","state":"SUCCESS","targetUrl":"https://example.com"}]}' ;;
+  "pr view") printf '%s' '{"number":7,"title":"Add the switcher","body":"Lists the branches.","url":"` + github + `/pull/7","state":"OPEN","isDraft":false,"author":{"login":"ada"},"reviewDecision":"REVIEW_REQUIRED","baseRefName":"main","mergeable":"MERGEABLE","mergeStateStatus":"BLOCKED","statusCheckRollup":[{"__typename":"CheckRun","name":"test","workflowName":"CI","status":"COMPLETED","conclusion":"FAILURE","detailsUrl":"` + github + `/actions/runs/1"},{"__typename":"CheckRun","name":"lint","workflowName":"CI","status":"IN_PROGRESS","conclusion":""},{"__typename":"StatusContext","context":"deploy","state":"SUCCESS","targetUrl":"https://example.com"}]}' ;;
   "pr checkout") git switch -q -c "pr-$3" ;;
+  "api graphql") printf '%s' '{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[{"isResolved":false},{"isResolved":true}]},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"nodes":[{"__typename":"CheckRun","name":"test","isRequired":true,"checkSuite":{"workflowRun":{"workflow":{"name":"CI"}}}},{"__typename":"CheckRun","name":"lint","isRequired":false,"checkSuite":{"workflowRun":{"workflow":{"name":"CI"}}}}]}}}}]}}}}}' ;;
   *) exit 1 ;;
 esac
 `
