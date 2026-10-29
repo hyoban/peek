@@ -176,9 +176,11 @@ func ghRepo(page string) string {
 	return strings.TrimPrefix(page, "https://github.com/")
 }
 
+// ListPullRequests lists the open pull requests of the repository whose
+// page this is, the last updated first, as those at work on now.
 func ListPullRequests(ctx context.Context, repo, page string) ([]PullRequest, error) {
 	out, err := gh(ctx, repo, "pr", "list", "--repo", ghRepo(page), "--state", "open", "--limit", "50",
-		"--json", "number,title,headRefName,isDraft,author")
+		"--search", "sort:updated-desc", "--json", "number,title,headRefName,isDraft,author")
 	if err != nil {
 		return nil, err
 	}

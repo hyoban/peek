@@ -112,7 +112,7 @@ func TestSwitcherUI(t *testing.T) {
 		t.Fatalf("branch %q, switcher %+v", a.branch, a.switcher)
 	}
 	data, _ := os.ReadFile(log)
-	if !strings.Contains(string(data), "pr list --repo hyoban/peek") || !strings.Contains(string(data), "pr checkout 7 --repo hyoban/peek") {
+	if !strings.Contains(string(data), "pr list --repo hyoban/peek --state open --limit 50 --search sort:updated-desc") || !strings.Contains(string(data), "pr checkout 7 --repo hyoban/peek") {
 		t.Fatalf("gh was asked %q", data)
 	}
 
