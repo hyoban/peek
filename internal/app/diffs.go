@@ -29,11 +29,13 @@ type fileDiff struct {
 	patch  bool
 	deps   dependencyNotes // what npmx found of a manifest's new text
 	read   bool            // marked read: its diff folds away under its header
-	opened bool            // read, its diff shown again by a click on its header
+	// flipped marks a diff shown the other way from its mark by a click
+	// on its header: a read one shown, or one not read folded.
+	flipped bool
 }
 
 // folded reports whether the diff folds away under its header.
-func (d *fileDiff) folded() bool { return d.read && !d.opened }
+func (d *fileDiff) folded() bool { return d.read != d.flipped }
 
 // diffRowKey keys a file's row of the stacked diffs.
 type diffRowKey struct {
@@ -122,7 +124,7 @@ func (a *app) entryKey(hash string) string {
 
 // setRead marks the file's diff read or not, for as long as the app runs.
 func (a *app) setRead(d *fileDiff, read bool) {
-	d.read, d.opened = read, false
+	d.read, d.flipped = read, false
 	if a.read == nil {
 		a.read = map[string]bool{}
 	}
@@ -417,18 +419,14 @@ func (a *app) diffHeader(c *ui.Context, d *fileDiff) {
 		m.Separator()
 		a.fileMenu(services, m, ch.Path, false)
 	})
-	if d.read {
-		// A click on a read file's bar shows its diff again, or folds it,
-		// as GitHub's Viewed files open: still marked read. The arrow,
-		// not a pointing hand, tells it, as the hand is for links on a Mac.
-		bar.KeepFocus().OnClick(func() { d.opened = !d.opened })
-	}
+	// A click on a file's bar folds its diff or shows it again, as
+	// GitHub's do, leaving its mark as it was. The arrow, not a pointing
+	// hand, tells it, as the hand is for links on a Mac.
+	bar.KeepFocus().OnClick(func() { d.flipped = !d.flipped })
 	bar.Children(func() {
-		if d.read {
-			chevron := ui.Icon(c, chevronIcon).Size(10, 10).Shrink(0).TextColor(t.TextMuted)
-			if d.folded() {
-				chevron.Rotate(-90)
-			}
+		chevron := ui.Icon(c, chevronIcon).Size(10, 10).Shrink(0).TextColor(t.TextMuted)
+		if d.folded() {
+			chevron.Rotate(-90)
 		}
 		fileicons.View(c, ch.Path, 16, t.TextMuted, ui.Color{})
 		// The name first, then where it is, as Xcode's jump bar.
