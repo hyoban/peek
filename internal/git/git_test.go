@@ -57,6 +57,12 @@ func TestBranchGitHubURL(t *testing.T) {
 	if got, want := BranchGitHubURL(repo), "https://github.com/someone/peek"; got != want {
 		t.Errorf("main's page without the remote's HEAD %q, want %q", got, want)
 	}
+	// gh pr checkout names a fork's remote by its URL.
+	testutil.Git(t, repo, "config", "branch.feat/a#b.remote", "git@github.com:other/peek.git")
+	testutil.Git(t, repo, "config", "branch.feat/a#b.merge", "refs/heads/fix/it")
+	if got, want := BranchGitHubURL(repo), "https://github.com/other/peek/tree/fix/it"; got != want {
+		t.Errorf("fork's branch's page %q, want %q", got, want)
+	}
 	testutil.Git(t, repo, "checkout", "-q", "--detach")
 	if got := BranchGitHubURL(repo); got != "" {
 		t.Errorf("detached HEAD's page %q, want none", got)
