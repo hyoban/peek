@@ -84,7 +84,7 @@ func hunkCount(d *fileDiff) int {
 // goChange goes to the next change of the diffs, or the previous with
 // step -1, from the one gone to last, or from the top of the file at the
 // top where the user scrolled away: the next file's first where the file
-// has no more, skipping those folded as viewed.
+// has no more, skipping those folded.
 func (a *app) goChange(step int) {
 	if len(a.diffs) == 0 {
 		return

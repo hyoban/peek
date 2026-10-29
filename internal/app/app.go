@@ -1279,11 +1279,12 @@ func (a *app) sync(c *ui.Context) {
 	}
 	switch a.mode {
 	case modeChanges:
-		// A file chosen in the tree shows its diff, read or not.
+		// A file chosen in the tree shows its diff, read or not, folded or
+		// not.
 		if p := a.changeTree.chosen(); p != "" && !a.changeTree.isDir(p) && p != a.file && a.commitRow == a.loadedRow {
 			a.file = p
 			if d := a.diffOf[p]; d != nil {
-				d.opened = d.read
+				d.flipped = d.read
 			}
 			a.scrollToFile(p)
 		} else {
