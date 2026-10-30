@@ -100,6 +100,8 @@ type app struct {
 	endTools                        ui.Handle // the controls at the end of the text's toolbar
 	endWidth                        float32   // their width, as last laid out
 	alert                           alertState
+	confirming                      confirmState
+	discarding                      bool // the changes are being discarded
 	// shot is the view the app is to open at, for screenshots, nil for
 	// none or once it is shown.
 	shot *shot
@@ -331,6 +333,7 @@ func (a *app) view(c *ui.Context) {
 	a.askPopover(c)
 	a.branchSwitcher(c)
 	a.alerts(c)
+	a.confirmations(c)
 	a.sync(c)
 	// Over the window's material the sidebar shows it, and the other
 	// columns draw their own backgrounds, as AppKit's source lists do: the
@@ -1129,6 +1132,8 @@ func (a *app) treeItem(c *ui.Context, tree *pathTree) func(p string) ui.SourceLi
 		it.Menu = func(m *ui.Menu) {
 			if tree == &a.changeTree {
 				a.readMenu(m, p)
+				m.Separator()
+				a.discardMenu(m, a.diffsUnder(p))
 				if isGroup(p) {
 					return
 				}
