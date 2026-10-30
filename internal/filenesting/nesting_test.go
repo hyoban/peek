@@ -72,3 +72,12 @@ func BenchmarkParents(b *testing.B) {
 		Parents(files)
 	}
 }
+
+func TestLintSuppressions(t *testing.T) {
+	got := Parents([]string{"package.json", "eslint-suppressions.json", "oxlint-suppressions.json"})
+	for _, name := range []string{"eslint-suppressions.json", "oxlint-suppressions.json"} {
+		if got[name] != "package.json" {
+			t.Errorf("%s nests under %q, want package.json", name, got[name])
+		}
+	}
+}
