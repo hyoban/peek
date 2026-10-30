@@ -24,8 +24,8 @@ Browse every file at the selected commit or in the working tree. Related files a
 
 ## Install
 
-Peek runs on Macs with Apple silicon. Install the latest release into
-`/Applications`:
+Peek runs on Macs with Apple silicon or Intel, on macOS 13 or later.
+Install the latest release into `/Applications`:
 
 ```bash
 curl -fsSL https://github.com/hyoban/peek/releases/latest/download/install.sh | sh
@@ -288,8 +288,9 @@ The [release workflow](.github/workflows/release.yml) checks that the tag
 matches `version`, writes the release notes with
 [changelogithub](https://github.com/antfu-collective/changelogithub) from
 the [Conventional Commits](https://www.conventionalcommits.org) since the
-last tag, which Peek's update window shows too, builds Peek, signs its
-updates, uploads the disk image, the updates and the install script to the
+last tag, which Peek's update window shows too, builds Peek for Apple
+silicon and Intel, signs its updates, uploads the disk images, the updates
+and the install script to the
 release of the tag, and publishes it.
 
 The workflow signs updates with the `MYGO_UPDATER_PRIVATE_KEY` secret of the
@@ -299,7 +300,7 @@ commit it. To release from this Mac instead, give the build the key and
 publish the draft it uploads:
 
 ```bash
-MYGO_UPDATER_PRIVATE_KEY="$(cat ~/Library/Application\ Support/mygo/update-keys/mygo-update.key)" go tool mygo build -upload
+MYGO_UPDATER_PRIVATE_KEY="$(cat ~/Library/Application\ Support/mygo/update-keys/mygo-update.key)" go tool mygo build -platform darwin/arm64,darwin/amd64 -upload
 ```
 
 ### Screenshots
