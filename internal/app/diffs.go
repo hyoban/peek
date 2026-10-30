@@ -26,9 +26,9 @@ type fileDiff struct {
 	stale   bool // the file may have changed since it loaded
 	// patch marks a diff of the patch's lines alone, as of a file too
 	// large to show whole, whose lines are not numbered as the file's.
-	patch  bool
-	deps   dependencyNotes // what npmx found of a manifest's new text
-	read   bool            // marked read: its diff folds away under its header
+	patch bool
+	deps  dependencyNotes // what npmx found of a manifest's new text
+	read  bool            // marked read: its diff folds away under its header
 	// flipped marks a diff shown the other way from its mark by a click
 	// on its header: a read one shown, or one not read folded.
 	flipped bool
@@ -535,7 +535,10 @@ func (a *app) loadDiff(d *fileDiff) {
 				// sideways would drift with the slant of every vertical
 				// swipe on a touchpad, the list taking the swipe's height
 				// and the diff under the pointer its width.
-				Wrap:             true,
+				Wrap: true,
+				// A click expands 20 unchanged lines, as GitHub's: 100 ran
+				// past the view, and the change with them.
+				ExpansionLines:   20,
 				IgnoreWhitespace: prefs.IgnoreWhitespace,
 				Font:             prefs.codeFont(),
 				Theme:            codeTheme(prefs.CodeTheme, false), // the window's appearance's as it shows
