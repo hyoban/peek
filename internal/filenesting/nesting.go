@@ -1,6 +1,7 @@
 // Package filenesting groups sibling files with the rules from
 // https://github.com/antfu/vscode-file-nesting-config (updated 2026-06-24).
-// The bundled snapshot works offline; its MIT license is in LICENSE.
+// The bundled snapshot works offline; its MIT license is in LICENSE. It also
+// nests oxlint-suppressions.json as the rules nest eslint-suppressions.json.
 package filenesting
 
 import (
