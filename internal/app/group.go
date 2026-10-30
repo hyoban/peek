@@ -189,6 +189,10 @@ func (a *app) memberTrees(c *ui.Context, members []*app, key, label string) {
 			// shows them again, as the sections of Finder's sidebar.
 			heading.KeepFocus().OnClick(func() { a.projects.fold(m.repo, !folded) })
 			heading.ContextMenu(func(menu *ui.Menu) {
+				if menu.Item("Discard All Changes…").Disabled(!m.discardable()).Chosen() {
+					m.confirmDiscard(m.diffs)
+				}
+				menu.Separator()
 				if menu.Item("Remove from Window").Chosen() {
 					a.projects.remove(m.repo)
 				}

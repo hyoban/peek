@@ -426,6 +426,8 @@ func (a *app) diffHeader(c *ui.Context, d *fileDiff) {
 		m.Separator()
 		a.linesMenu(c, m, d)
 		m.Separator()
+		a.discardMenu(m, []*fileDiff{d})
+		m.Separator()
 		a.fileMenu(services, m, ch.Path, false)
 	})
 	// A click on a file's bar folds its diff or shows it again, as

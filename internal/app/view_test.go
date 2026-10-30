@@ -328,7 +328,7 @@ func TestReadByGroup(t *testing.T) {
 	if err := tt.RightClick("Docs"); err != nil {
 		t.Fatal(err)
 	}
-	if got := fmt.Sprint(tt.Menu()); got != "[Mark as Viewed Mark as Not Viewed]" {
+	if got := fmt.Sprint(tt.Menu()); got != "[Mark as Viewed Mark as Not Viewed - Discard Changes…]" {
 		t.Errorf("menu %s", got)
 	}
 	if err := tt.ChooseMenuItem("Mark as Not Viewed"); err != nil {
