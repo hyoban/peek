@@ -27,7 +27,8 @@ require (
 // macOS's Services and Writing Tools the selected text, in AppKit's
 // context menus of text; shows AppKit's toolbar over the content's
 // columns, the sidebars on its glass; and shows AppKit's outline views
-// (SourceList), search field (NativeSearchField) and split view, whose
-// dividers drag and whose sidebars slide, under the content. Until MyGo
-// does.
-replace github.com/egoist/mygo => github.com/hyoban/mygo v0.7.2-0.20261030142030-13de22078648
+// (SourceList), flat or not, their rows' titles after a muted prefix and
+// subtitles after a picture, search field (NativeSearchField) and split
+// view, whose dividers drag and whose sidebars slide, under the content.
+// Until MyGo does.
+replace github.com/egoist/mygo => github.com/hyoban/mygo v0.7.2-0.20261103080002-2c2f54c36672

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image"
 	"log"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -683,11 +684,17 @@ func (a *app) linkButton(c *ui.Context, key string, svg *ui.SVG, label, url stri
 // list's section heading, small and muted, without a bar or a divider,
 // with a detail at its end such as a count, and the body.
 func sideColumn(c *ui.Context, bg ui.Color, toolbar func(), title string, detail, body func()) {
+	insetColumn(c, bg, c.Theme().Space(4), c.Theme().Space(4), toolbar, title, detail, body)
+}
+
+// insetColumn is a side column whose heading starts and ends start and
+// end DIPs in, where its list's rows put what they show.
+func insetColumn(c *ui.Context, bg ui.Color, start, end float32, toolbar func(), title string, detail, body func()) {
 	t := c.Theme()
 	ui.Column(c).Fill().Background(bg).Children(func() {
 		toolbar()
 		ui.Row(c).Shrink(0).FillWidth().AlignItems(ui.Center).Gap(t.Space(2)).
-			Padding(t.Space(1), t.Space(4), 0, t.Space(4)).Children(func() {
+			Padding(t.Space(1), end, 0, start).Children(func() {
 			ui.Text(c, title).FontSize(smallSize).FontWeight(600).TextColor(t.TextMuted).SingleLine().
 				Ellipsis("…").Grow(1).MinWidth(0)
 			detail()
@@ -802,7 +809,14 @@ func (a *app) history(c *ui.Context) {
 	if a.nativeBar {
 		bg = ui.Transparent // over the window's color, as an inspector
 	}
-	sideColumn(c, bg, func() {
+	// The heading lines up with the rows' text, which AppKit's list puts
+	// 18 points in from its edges, and in from the scroll bar where one
+	// takes room, 15 points wide with 2 more of the list's beside it.
+	end := float32(18)
+	if c.Preferences().ScrollBarsAlways {
+		end += 17
+	}
+	insetColumn(c, bg, 18, end, func() {
 		a.toolbarPart(c, false, true, func() {
 			ui.Spacer(c)
 			toolGroup(c, "History Toolbar", func() {
@@ -820,8 +834,8 @@ func (a *app) history(c *ui.Context) {
 			return
 		}
 		a.commitList.List.Selected = &a.commitRow
-		// An inspector's list, of rows of two lines under their avatars.
-		a.commitList.Inset, a.commitList.RowHeight = true, 46
+		// A list of rows of two lines, without children, as Mail's messages.
+		a.commitList.Inset, a.commitList.Flat, a.commitList.RowHeight = false, true, 44
 		hashes := make([]string, len(a.commits))
 		index := make(map[string]int, len(a.commits))
 		for i, cm := range a.commits {
@@ -841,10 +855,9 @@ func (a *app) history(c *ui.Context) {
 func (a *app) commitItem(c *ui.Context) func(cm git.Commit) ui.SourceListItem {
 	dark := c.Theme().Dark
 	orange, purple, blue := system(c, systemOrange), system(c, systemPurple), system(c, systemBlue)
-	ring := c.Theme().Background
 	services := c.Services()
 	return func(cm git.Commit) ui.SourceListItem {
-		it := ui.SourceListItem{Title: cm.Subject, Bold: true, ImageSize: 34}
+		it := ui.SourceListItem{Title: cm.Subject}
 		if cm.Hash == git.Worktree || git.IsRange(cm.Hash) {
 			tint, glyph, name := orange, worktreeIcon, "worktree"
 			if cm.Hash != git.Worktree {
@@ -858,63 +871,110 @@ func (a *app) commitItem(c *ui.Context) func(cm git.Commit) ui.SourceListItem {
 				}
 			}
 			it.Subtitle = cm.Summary
-			it.Image = a.drawn(fmt.Sprint(name, dark), 30, func(c *ui.Context) {
-				ui.Box(c).Size(30, 30).Radius(999).Center().Background(tint.Alpha(0.16)).TextColor(tint).
-					Children(func() { ui.Icon(c, glyph).Size(15, 15) })
+			it.SubtitleImage = a.drawn(fmt.Sprint(name, dark), lineImage, lineImage, func(c *ui.Context) {
+				ui.Box(c).Size(lineImage, lineImage).Radius(999).Center().Background(tint.Alpha(0.16)).TextColor(tint).
+					Children(func() { ui.Icon(c, glyph).Size(10, 10) })
 			})
 			return it
 		}
-		// The remote's branch and the tags lead the line under the subject,
-		// which they leave whole.
+		// Who made it and when lead the line under the subject, after their
+		// avatars, as GitHub's history has them; the remote's branch and
+		// the tags follow.
 		var refs []string
 		if cm.Remote != "" {
 			refs = append(refs, cm.Remote)
 		}
-		it.Subtitle = strings.Join(append(append(refs, cm.Tags...), shortDate(cm.Time, time.Now()), authors(cm)), " · ")
+		// A Conventional Commit's subject keeps its scope, muted, and
+		// leaves its type out and its pull request to the line under it,
+		// as GitHub's history of a repository shows them.
+		cs := parseSubject(cm.Subject)
+		it.Title = cs.summary
+		if cs.scope != "" {
+			it.TitlePrefix = cs.scope + ": "
+		}
+		var about []string
+		if cs.pull != "" {
+			about = append(about, "#"+cs.pull)
+		}
+		it.Subtitle = strings.Join(append(append(append([]string{authors(cm), shortDate(cm.Time, time.Now())}, refs...), cm.Tags...), about...), " · ")
 		it.Tooltip = commitMessage(cm)
 		if cm.Unpushed {
 			// An arrow up, as Xcode marks the commits to push.
-			it.Badges = []ui.SourceListBadge{{Text: "↑", Color: blue, Bold: true}}
+			it.Badges = append(it.Badges, ui.SourceListBadge{Text: "↑", Color: blue, Bold: true})
 			it.Tooltip += "\n\nNot pushed yet"
 		}
-		var co *git.Person
-		key := fmt.Sprintf("avatar%v%s%s%p", dark, cm.Author, cm.Email, a.avatar(cm.Email))
-		if len(cm.CoAuthors) > 0 {
-			co = &cm.CoAuthors[0]
-			key += fmt.Sprintf("%s%s%p", co.Name, co.Email, a.avatar(co.Email))
+		// The author's avatar over the co-authors', each in turn over the
+		// next's, as GitHub stacks them.
+		people := append([]git.Person{{Name: cm.Author, Email: cm.Email}}, cm.CoAuthors...)
+		people = people[:min(len(people), 3)]
+		key := fmt.Sprint("avatars", dark)
+		for _, p := range people {
+			key += fmt.Sprintf("%s%s%p", p.Name, p.Email, a.avatar(p.Email))
 		}
-		it.Image = a.drawn(key, 30, func(c *ui.Context) {
-			ui.Box(c).Size(30, 30).Children(func() {
-				a.personAvatar(c, cm.Author, cm.Email, 30)
-				if co != nil {
-					// A ring of the window's color parts the two.
-					ui.Box(c).Size(19, 19).Radius(9.5).Center().Background(ring).
-						Absolute().Right(-4).Bottom(-4).Children(func() {
-						a.personAvatar(c, co.Name, co.Email, 16)
-					})
-				}
-			})
+		const step = lineImage - 5
+		it.SubtitleImage = a.drawn(key, lineImage+step*float32(len(people)-1), lineImage, func(c *ui.Context) {
+			for i := len(people) - 1; i >= 0; i-- {
+				a.personAvatar(c, people[i].Name, people[i].Email, lineImage).Absolute().Left(step * float32(i)).Top(0)
+			}
 		})
 		it.Menu = func(m *ui.Menu) { a.commitMenu(c, services, m, cm) }
 		return it
 	}
 }
 
-// drawn draws view, size DIPs square, as a picture for a list of the
-// system's, once for each key.
-func (a *app) drawn(key string, size int, view func(c *ui.Context)) *image.RGBA {
+// subject is a commit's subject as the history shows it: its scope, as
+// Conventional Commits write it, its summary, and the pull request GitHub
+// adds when it merges.
+type subject struct {
+	scope, summary, pull string
+}
+
+var (
+	conventional = regexp.MustCompile(`^([A-Za-z]+)(?:\(([^)]*)\))?(!)?: +(.+)$`)
+	pullSuffix   = regexp.MustCompile(` *\(#(\d+)\)$`)
+)
+
+// commitTypes are the types of Conventional Commits the history leaves
+// out: all but a revert, which reads as what it undoes without.
+var commitTypes = map[string]bool{"feat": true, "fix": true, "perf": true, "test": true, "docs": true,
+	"refactor": true, "style": true, "build": true, "ci": true, "chore": true}
+
+// parseSubject reads s as Conventional Commits write it, leaving a subject
+// written otherwise, or a breaking change's, its summary.
+func parseSubject(s string) subject {
+	var cs subject
+	if m := pullSuffix.FindStringSubmatchIndex(s); m != nil {
+		cs.pull, s = s[m[2]:m[3]], s[:m[0]]
+	}
+	cs.summary = s
+	if m := conventional.FindStringSubmatch(s); m != nil && m[3] == "" {
+		switch {
+		case commitTypes[strings.ToLower(m[1])]:
+			cs.scope, cs.summary = m[2], m[4]
+		case m[2] == "":
+			// No type's but a scope's, as "web: …", where labels type it.
+			cs.scope, cs.summary = m[1], m[4]
+		}
+	}
+	return cs
+}
+
+// lineImage is the height of the pictures before the history's subtitles.
+const lineImage = 16
+
+// drawn draws view, w by h DIPs, as a picture for a list of the system's,
+// once for each key.
+func (a *app) drawn(key string, w, h float32, view func(c *ui.Context)) *image.RGBA {
 	if pic, ok := a.pictures[key]; ok {
 		return pic
 	}
 	if a.pictures == nil {
 		a.pictures = map[string]*image.RGBA{}
 	}
-	// Room for what spills past the square, as a co-author's avatar.
-	room := size + 4
 	pic := ui.Render(func(c *ui.Context) {
 		c.Root().Background(ui.Transparent)
-		ui.Box(c).Size(float32(room), float32(room)).Children(func() { view(c) })
-	}, room, room, 2)
+		ui.Box(c).Size(w, h).Children(func() { view(c) })
+	}, int(math.Ceil(float64(w))), int(math.Ceil(float64(h))), 2)
 	a.pictures[key] = pic
 	return pic
 }

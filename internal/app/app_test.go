@@ -305,3 +305,23 @@ func TestCommitMessageShows(t *testing.T) {
 		t.Fatalf("commit %q, texts %q", cm.Subject, tt.Texts())
 	}
 }
+
+func TestParseSubject(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want subject
+	}{
+		{"web: replace AP32 owner doubles (#45342)", subject{scope: "web", summary: "replace AP32 owner doubles", pull: "45342"}},
+		{"fix(app): expand 20 unmodified lines a click", subject{scope: "app", summary: "expand 20 unmodified lines a click"}},
+		{"feat: build Peek for Intel Macs (#5)", subject{summary: "build Peek for Intel Macs", pull: "5"}},
+		{"feat(review)!: drop the old prompt", subject{summary: "feat(review)!: drop the old prompt"}},
+		{"revert(app): add a thing", subject{summary: "revert(app): add a thing"}},
+		{`Revert "feat: add a thing"`, subject{summary: `Revert "feat: add a thing"`}},
+		{"Webby(x): not a type", subject{summary: "Webby(x): not a type"}},
+		{"Merge branch 'main'", subject{summary: "Merge branch 'main'"}},
+	} {
+		if got := parseSubject(tc.in); got != tc.want {
+			t.Errorf("parseSubject(%q) = %+v, want %+v", tc.in, got, tc.want)
+		}
+	}
+}
