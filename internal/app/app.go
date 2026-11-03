@@ -1461,6 +1461,7 @@ func (a *app) loadCommits() {
 			a.updateReviewSource(h.review, h.reviewErr)
 			a.updateBranchReview(h.branchReview)
 			a.readPullRequest(false)
+			a.learnUsers(a.github)
 			if len(h.commits) > 0 {
 				a.commitRow = landingRow(h)
 				if row, ok := a.keptRow(); ok {

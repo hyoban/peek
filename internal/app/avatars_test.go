@@ -15,13 +15,16 @@ import (
 
 func TestAvatarURL(t *testing.T) {
 	for email, want := range map[string]string{
-		"41898282+github-actions[bot]@users.noreply.github.com": "https://avatars.githubusercontent.com/u/41898282?s=64",
+		"41898282+github-actions[bot]@users.noreply.github.com": "https://avatars-githubusercontent.webp.se/u/41898282?s=64",
 		"hyoban@users.noreply.github.com":                       "https://github.com/hyoban.png?size=64",
 		"ada@example.com":                                       "https://www.gravatar.com/avatar/HASH?s=64&d=404",
 	} {
-		if got := avatarURL(email, "HASH"); got != want {
+		if got := avatarURL(email, "HASH", ""); got != want {
 			t.Errorf("avatarURL(%q) = %q, want %q", email, got, want)
 		}
+	}
+	if got, want := avatarURL("ada@example.com", "HASH", "42"), "https://avatars-githubusercontent.webp.se/u/42?s=64"; got != want {
+		t.Errorf("avatarURL of a known account = %q, want %q", got, want)
 	}
 }
 
@@ -66,40 +69,40 @@ func TestAvatarDownloadsAgainOnceOld(t *testing.T) {
 	defer server.Close()
 	av := newAvatars()
 	av.dir = t.TempDir()
-	av.url = func(email, hash string) string { return server.URL }
+	av.url = func(email, hash, user string) string { return server.URL }
 	const email = "ada@example.com"
 
-	if bm, stale := av.load(email); bm != nil || stale || requests != 1 {
+	if bm, stale := av.load(email, ""); bm != nil || stale || requests != 1 {
 		t.Fatalf("first load: picture %v, stale %v, %d requests", bm != nil, stale, requests)
 	}
 	// The author adds a picture, which shows once the empty file is old.
 	picture = buf.Bytes()
-	if bm, stale := av.load(email); bm != nil || stale || requests != 1 {
+	if bm, stale := av.load(email, ""); bm != nil || stale || requests != 1 {
 		t.Fatalf("load while new: picture %v, stale %v, %d requests", bm != nil, stale, requests)
 	}
-	_, file := av.file(email)
+	_, file := av.file(email, "")
 	day := time.Now().Add(-missingAge - time.Minute)
 	if err := os.Chtimes(file, day, day); err != nil {
 		t.Fatal(err)
 	}
-	if _, stale := av.load(email); !stale {
+	if _, stale := av.load(email, ""); !stale {
 		t.Fatal("an empty file older than a day is not stale")
 	}
-	if bm, changed := av.refresh(email); bm == nil || !changed || requests != 2 {
+	if bm, changed := av.refresh(email, ""); bm == nil || !changed || requests != 2 {
 		t.Fatalf("refresh: picture %v, changed %v, %d requests", bm != nil, changed, requests)
 	}
 	// The picture downloaded again is unchanged, and is new again.
-	if bm, stale := av.load(email); bm == nil || stale {
+	if bm, stale := av.load(email, ""); bm == nil || stale {
 		t.Fatalf("load after refresh: picture %v, stale %v", bm != nil, stale)
 	}
 	week := time.Now().Add(-pictureAge - time.Minute)
 	if err := os.Chtimes(file, week, week); err != nil {
 		t.Fatal(err)
 	}
-	if bm, changed := av.refresh(email); bm != nil || changed || requests != 3 {
+	if bm, changed := av.refresh(email, ""); bm != nil || changed || requests != 3 {
 		t.Fatalf("unchanged refresh: picture %v, changed %v, %d requests", bm != nil, changed, requests)
 	}
-	if _, stale := av.load(email); stale {
+	if _, stale := av.load(email, ""); stale {
 		t.Error("an unchanged picture stays stale after downloading it again")
 	}
 }

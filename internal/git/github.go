@@ -191,6 +191,61 @@ func ListPullRequests(ctx context.Context, repo, page string) ([]PullRequest, er
 	return prs, nil
 }
 
+// GitHubUsers asks GitHub whose accounts the emails of the authors and
+// co-authors of the last commits on the default branch of the repository
+// whose page this is are, and returns the users' numeric IDs by email,
+// lower case. Emails of no account are left out.
+func GitHubUsers(ctx context.Context, repo, page string) (map[string]string, error) {
+	owner, name, _ := strings.Cut(ghRepo(page), "/")
+	const query = `query($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    defaultBranchRef { target { ... on Commit {
+      history(first: 100) { nodes { authors(first: 10) { nodes { email user { databaseId } } } } }
+    } } }
+  }
+}`
+	out, err := gh(ctx, repo, "api", "graphql", "-f", "query="+query, "-f", "owner="+owner, "-f", "name="+name)
+	if err != nil {
+		return nil, err
+	}
+	var r struct {
+		Data struct {
+			Repository struct {
+				DefaultBranchRef *struct {
+					Target struct {
+						History struct {
+							Nodes []struct {
+								Authors struct {
+									Nodes []struct {
+										Email string `json:"email"`
+										User  *struct {
+											ID int64 `json:"databaseId"`
+										} `json:"user"`
+									} `json:"nodes"`
+								} `json:"authors"`
+							} `json:"nodes"`
+						} `json:"history"`
+					} `json:"target"`
+				} `json:"defaultBranchRef"`
+			} `json:"repository"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(out), &r); err != nil {
+		return nil, fmt.Errorf("read GitHub's authors: %w", err)
+	}
+	users := map[string]string{}
+	if ref := r.Data.Repository.DefaultBranchRef; ref != nil {
+		for _, cm := range ref.Target.History.Nodes {
+			for _, au := range cm.Authors.Nodes {
+				if au.User != nil && au.Email != "" {
+					users[strings.ToLower(strings.TrimSpace(au.Email))] = strconv.FormatInt(au.User.ID, 10)
+				}
+			}
+		}
+	}
+	return users, nil
+}
+
 // BranchPull is the pull request of the branch checked out, open or
 // merged, as gh tells of it: its page, its description and the checks
 // run on its last commit.

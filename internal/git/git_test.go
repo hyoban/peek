@@ -356,3 +356,21 @@ func TestReadChecks(t *testing.T) {
 		t.Fatalf("state %v, %v", s, ok)
 	}
 }
+
+func TestGitHubUsers(t *testing.T) {
+	dir := t.TempDir()
+	script := `#!/bin/sh
+printf '%s' '{"data":{"repository":{"defaultBranchRef":{"target":{"history":{"nodes":[{"authors":{"nodes":[{"email":"Ada@Example.com","user":{"databaseId":42}},{"email":"bot@example.com","user":null}]}}]}}}}}}'
+`
+	if err := os.WriteFile(filepath.Join(dir, "gh"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	users, err := GitHubUsers(t.Context(), t.TempDir(), "https://github.com/hyoban/peek")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := map[string]string{"ada@example.com": "42"}; !maps.Equal(users, want) {
+		t.Errorf("users = %v, want %v", users, want)
+	}
+}
