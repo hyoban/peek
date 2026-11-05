@@ -888,18 +888,21 @@ func (a *app) commitItem(c *ui.Context) func(cm git.Commit) ui.SourceListItem {
 			refs = append(refs, cm.Remote)
 		}
 		// A Conventional Commit's subject keeps its scope, muted, and
-		// leaves its type out and its pull request to the line under it,
-		// as GitHub's history of a repository shows them.
+		// leaves its type and its pull request to the line under it, after
+		// when it was made.
 		cs := parseSubject(cm.Subject)
 		it.Title = cs.summary
 		if cs.scope != "" {
 			it.TitlePrefix = cs.scope + ": "
 		}
 		var about []string
+		if cs.kind != "" {
+			about = append(about, cs.kind)
+		}
 		if cs.pull != "" {
 			about = append(about, "#"+cs.pull)
 		}
-		it.Subtitle = strings.Join(append(append(append([]string{authors(cm), shortDate(cm.Time, time.Now())}, refs...), cm.Tags...), about...), " · ")
+		it.Subtitle = strings.Join(append(append(append([]string{authors(cm), shortDate(cm.Time, time.Now())}, about...), refs...), cm.Tags...), " · ")
 		it.Tooltip = commitMessage(cm)
 		if cm.Unpushed {
 			// An arrow up, as Xcode marks the commits to push.
@@ -925,11 +928,11 @@ func (a *app) commitItem(c *ui.Context) func(cm git.Commit) ui.SourceListItem {
 	}
 }
 
-// subject is a commit's subject as the history shows it: its scope, as
-// Conventional Commits write it, its summary, and the pull request GitHub
+// subject is a commit's subject as the history shows it: its type and
+// scope, as Conventional Commits write them, its summary, and the pull request GitHub
 // adds when it merges.
 type subject struct {
-	scope, summary, pull string
+	kind, scope, summary, pull string
 }
 
 var (
@@ -937,8 +940,8 @@ var (
 	pullSuffix   = regexp.MustCompile(` *\(#(\d+)\)$`)
 )
 
-// commitTypes are the types of Conventional Commits the history leaves
-// out: all but a revert, which reads as what it undoes without.
+// commitTypes are the types of Conventional Commits the history moves
+// from the subject to the line under it: all but a revert, which reads as what it undoes without.
 var commitTypes = map[string]bool{"feat": true, "fix": true, "perf": true, "test": true, "docs": true,
 	"refactor": true, "style": true, "build": true, "ci": true, "chore": true}
 
@@ -953,7 +956,7 @@ func parseSubject(s string) subject {
 	if m := conventional.FindStringSubmatch(s); m != nil && m[3] == "" {
 		switch {
 		case commitTypes[strings.ToLower(m[1])]:
-			cs.scope, cs.summary = m[2], m[4]
+			cs.kind, cs.scope, cs.summary = strings.ToLower(m[1]), m[2], m[4]
 		case m[2] == "":
 			// No type's but a scope's, as "web: …", where labels type it.
 			cs.scope, cs.summary = m[1], m[4]

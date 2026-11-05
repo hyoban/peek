@@ -312,8 +312,8 @@ func TestParseSubject(t *testing.T) {
 		want subject
 	}{
 		{"web: replace AP32 owner doubles (#45342)", subject{scope: "web", summary: "replace AP32 owner doubles", pull: "45342"}},
-		{"fix(app): expand 20 unmodified lines a click", subject{scope: "app", summary: "expand 20 unmodified lines a click"}},
-		{"feat: build Peek for Intel Macs (#5)", subject{summary: "build Peek for Intel Macs", pull: "5"}},
+		{"fix(app): expand 20 unmodified lines a click", subject{kind: "fix", scope: "app", summary: "expand 20 unmodified lines a click"}},
+		{"feat: build Peek for Intel Macs (#5)", subject{kind: "feat", summary: "build Peek for Intel Macs", pull: "5"}},
 		{"feat(review)!: drop the old prompt", subject{summary: "feat(review)!: drop the old prompt"}},
 		{"revert(app): add a thing", subject{summary: "revert(app): add a thing"}},
 		{`Revert "feat: add a thing"`, subject{summary: `Revert "feat: add a thing"`}},
