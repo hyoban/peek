@@ -219,6 +219,46 @@ func TestLoadCommitsCoAuthors(t *testing.T) {
 	}
 }
 
+func TestCreditPeopleLeavesOutClaude(t *testing.T) {
+	claude := Person{"Claude", "noreply@anthropic.com"}
+	model := Person{"Claude Opus 4.5", "noreply@anthropic.com"}
+	bob := Person{"Bob", "bob@example.com"}
+	for _, tc := range []struct {
+		name   string
+		author Person
+		co     []Person
+		want   []Person // the author, then the co-authors
+	}{
+		{"co-author", Person{"Ada", "ada@example.com"}, []Person{claude, bob}, []Person{{"Ada", "ada@example.com"}, bob}},
+		{"model co-author", Person{"Ada", "ada@example.com"}, []Person{model}, []Person{{"Ada", "ada@example.com"}}},
+		{"author", claude, []Person{bob}, []Person{bob}},
+		{"alone", claude, nil, []Person{claude}},
+		{"only Claudes", claude, []Person{model}, []Person{claude}},
+	} {
+		cm := Commit{Author: tc.author.Name, Email: tc.author.Email, CoAuthors: slices.Clone(tc.co)}
+		creditPeople(&cm)
+		if got := append([]Person{{cm.Author, cm.Email}}, cm.CoAuthors...); !slices.Equal(got, tc.want) {
+			t.Errorf("%s: %+v, want %+v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestLoadCommitsLeavesOutClaude(t *testing.T) {
+	dir := testutil.Repo(t)
+	msg := "Pair on it\n\nWhy.\n\nCo-authored-by: Claude <noreply@anthropic.com>\n"
+	if _, err := gitWith(dir, nil, msg, "-c", "user.name=Ada", "-c", "user.email=ada@example.com",
+		"commit", "-q", "-a", "-F", "-"); err != nil {
+		t.Fatal(err)
+	}
+	commits, err := LoadCommits(dir, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := commits[0]; got.CoAuthors != nil || got.Body != "Why." {
+		t.Errorf("co-authors %+v, body %q", got.CoAuthors, got.Body)
+	}
+}
+
 func TestCoAuthorLinesInProseStay(t *testing.T) {
 	dir := testutil.Repo(t)
 	msg := "Squash\n\n* First\n\nCo-authored-by: Dee <dee@example.com>\n\n* Second, more prose\n\nCo-authored-by: Bob <bob@example.com>\n"

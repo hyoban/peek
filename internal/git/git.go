@@ -27,7 +27,8 @@ type Commit struct {
 	Author  string
 	Email   string
 	// CoAuthors are the people the message's Co-authored-by trailers
-	// name, as GitHub credits them, less the author.
+	// name, as GitHub credits them, less the author. Claude is left out
+	// of the people, author or not, unless no one else made the commit.
 	CoAuthors []Person
 	Time      time.Time
 	Tags      []string // the tags on the commit
@@ -158,6 +159,7 @@ func LoadCommits(repo string, limit int) ([]Commit, error) {
 				cm.CoAuthors = append(cm.CoAuthors, p)
 			}
 		}
+		creditPeople(&cm)
 		for ref := range strings.SplitSeq(f[7], ", ") {
 			if tag, ok := strings.CutPrefix(ref, "tag: "); ok {
 				cm.Tags = append(cm.Tags, tag)
@@ -171,6 +173,26 @@ func LoadCommits(repo string, limit int) ([]Commit, error) {
 
 // Person is someone a commit credits, by name and email.
 type Person struct{ Name, Email string }
+
+// isClaude reports whether p is Claude, as Claude Code signs its
+// commits: "Claude <noreply@anthropic.com>", or a model's name there.
+func isClaude(p Person) bool {
+	return strings.EqualFold(p.Email, "noreply@anthropic.com") || strings.EqualFold(p.Name, "Claude")
+}
+
+// creditPeople leaves Claude out of the commit's people when someone
+// else made it too: a co-author named Claude is dropped, and an author
+// who is Claude gives its place to the first co-author.
+func creditPeople(cm *Commit) {
+	cm.CoAuthors = slices.DeleteFunc(cm.CoAuthors, isClaude)
+	if isClaude(Person{Name: cm.Author, Email: cm.Email}) && len(cm.CoAuthors) > 0 {
+		cm.Author, cm.Email = cm.CoAuthors[0].Name, cm.CoAuthors[0].Email
+		cm.CoAuthors = cm.CoAuthors[1:]
+	}
+	if len(cm.CoAuthors) == 0 {
+		cm.CoAuthors = nil
+	}
+}
 
 // parsePerson reads "Name <email>", as trailers name people.
 func parsePerson(s string) (Person, bool) {
