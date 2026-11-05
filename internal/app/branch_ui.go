@@ -85,6 +85,7 @@ func (a *app) branchLabel(c *ui.Context) {
 		a.openSwitcher()
 		a.switcher.focus = true
 	})
+	b.ContextMenu(func(m *ui.Menu) { copyBranchItem(c, m, a.branch) })
 	b.Children(func() {
 		ui.Row(c).MinWidth(0).Gap(t.Space(1)).AlignItems(ui.Center).Children(func() {
 			ui.Icon(c, branchIcon).Size(12, 12).Shrink(0)
@@ -239,6 +240,7 @@ type switchRow struct {
 	heading       string // the section it starts, "" for none
 	icon          *ui.SVG
 	title, detail string
+	branch        string // the branch's name to copy, "" for none
 }
 
 // tab is the switcher's tab that shows: the branches where the
@@ -273,11 +275,11 @@ func (a *app) rows() (rows []switchRow, preferred int) {
 		}
 		h := heading("Branches")
 		for _, b := range local {
-			rows = append(rows, switchRow{target: a.localTarget(b), heading: h(), icon: branchIcon, title: b})
+			rows = append(rows, switchRow{target: a.localTarget(b), heading: h(), icon: branchIcon, title: b, branch: b})
 		}
 		h = heading("Remote Branches")
 		for _, b := range remote {
-			rows = append(rows, switchRow{target: switchTarget{branch: b, remote: true}, heading: h(), icon: branchIcon, title: b})
+			rows = append(rows, switchRow{target: switchTarget{branch: b, remote: true}, heading: h(), icon: branchIcon, title: b, branch: b})
 		}
 		return rows, 0
 	}
@@ -304,7 +306,7 @@ func pullRow(target switchTarget, pr git.PullRequest) switchRow {
 	if pr.Draft {
 		detail = "Draft · " + detail
 	}
-	return switchRow{target: target, icon: pullIcon, title: fmt.Sprintf("#%d %s", pr.Number, pr.Title), detail: detail}
+	return switchRow{target: target, icon: pullIcon, title: fmt.Sprintf("#%d %s", pr.Number, pr.Title), detail: detail, branch: pr.Branch}
 }
 
 // submitSwitch checks out the row highlighted, as Enter in the field does.
@@ -534,6 +536,9 @@ func (a *app) switcherRow(c *ui.Context, row switchRow, lit bool) (hovered bool)
 		}
 	}
 	b.OnClick(func() { a.switchTo(target) })
+	if row.branch != "" {
+		b.ContextMenu(func(m *ui.Menu) { copyBranchItem(c, m, row.branch) })
+	}
 	b.Children(func() {
 		ui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
 			ui.Icon(c, row.icon).Size(14, 14).Shrink(0).TextColor(muted)
@@ -555,4 +560,13 @@ func (a *app) switcherRow(c *ui.Context, row switchRow, lit bool) (hovered bool)
 		})
 	})
 	return b.Hovered() && !lit
+}
+
+// copyBranchItem is the item of a branch's context menu that copies its
+// name.
+func copyBranchItem(c *ui.Context, m *ui.Menu, branch string) {
+	if m.Item("Copy Branch Name").Chosen() {
+		c.Services().WriteClipboard(branch)
+		c.Toast("Branch Name Copied")
+	}
 }

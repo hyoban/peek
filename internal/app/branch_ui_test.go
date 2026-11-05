@@ -311,3 +311,40 @@ func TestSwitcherKeepsItsHeight(t *testing.T) {
 		t.Fatalf("heights %d loading, %d loaded, %d of the pull requests; opens at %d", loading, loaded, pulls, a.switcherHeight())
 	}
 }
+
+// A branch's context menu, in the switcher or on the branch checked
+// out, copies its name.
+func TestCopyBranchName(t *testing.T) {
+	repo, _ := testutil.RemoteRepo(t)
+	testutil.Git(t, repo, "branch", "feature/copy-me")
+
+	p := &projects{apps: map[string]*app{}, inline: true}
+	p.open(repo)
+	tt := ui.NewTester(p.view, 1200, 800)
+	settle(tt)
+	if err := tt.RightClick("Switch Branch"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem("Copy Branch Name"); err != nil {
+		t.Fatal(err)
+	}
+	if got := tt.Clipboard(); got != "main" {
+		t.Fatalf("clipboard %q, want the branch checked out", got)
+	}
+	if err := tt.Click("Switch Branch"); err != nil {
+		t.Fatal(err)
+	}
+	settle(tt)
+	if err := tt.RightClick("feature/copy-me"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem("Copy Branch Name"); err != nil {
+		t.Fatal(err)
+	}
+	if got := tt.Clipboard(); got != "feature/copy-me" {
+		t.Fatalf("clipboard %q", got)
+	}
+	if git.CurrentBranch(repo) != "main" {
+		t.Fatal("copying checked the branch out")
+	}
+}
