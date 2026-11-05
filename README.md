@@ -318,6 +318,11 @@ The script creates a temporary clone at commit `9dc53da`, with `origin/main`
 `dify-agent-runtime/internal/agentcli/config.go` selected). It requires Screen
 Recording permission and control of System Events to switch appearance.
 Peek's saved projects, window state and the system appearance are restored afterward.
+Set `PEEK_APP` to shoot another build instead, such as one from `go tool mygo build -skip-dmg`:
+
+```bash
+PEEK_APP="$PWD/build/darwin-arm64/Peek.app" scripts/screenshots.sh path/to/dify
+```
 
 ### Performance
 

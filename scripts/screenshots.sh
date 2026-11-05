@@ -15,7 +15,7 @@ dify=${1:?usage: scripts/screenshots.sh path/to/dify}
 commit=9dc53da
 upstream=2d78a78 # 58 commits on, for the toolbar to offer them to pull
 file=dify-agent-runtime/internal/agentcli/config.go
-app=/Applications/Peek.app
+app=${PEEK_APP:-/Applications/Peek.app} # or another build of Peek
 docs=$(cd "$(dirname "$0")/.." && pwd)/docs
 state="$HOME/Library/Application Support/Peek"
 
