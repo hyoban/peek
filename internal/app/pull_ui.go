@@ -39,7 +39,7 @@ func (a *app) pullHeader(c *ui.Context, pr *git.BranchPull) {
 	services := c.Services()
 	ui.Column(c).FillWidth().Gap(t.Space(3)).Padding(t.Space(3), t.Space(4), t.Space(4), t.Space(4)).Children(func() {
 		ui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-			ui.Icon(c, pullIcon).Size(16, 16).Shrink(0).TextColor(pullTint(c, pr))
+			pullIcon.show(c, 16).Shrink(0).TextColor(pullTint(c, pr))
 			ui.RichText(c).FontWeight(600).FontSize(fontSize + 1).Grow(1).MinWidth(0).Children(func() {
 				ui.Text(c, pr.Title+" ")
 				ui.Link(c, "#"+strconv.Itoa(pr.Number), pr.URL)
@@ -104,7 +104,7 @@ func (a *app) pullChecks(c *ui.Context, pr *git.BranchPull) {
 			ui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
 				checkMark(c, state, 14)
 				ui.Text(c, checksSummary(pr)).FontWeight(600).Grow(1).MinWidth(0).SingleLine().Ellipsis("…")
-				chevron := ui.Icon(c, chevronIcon).Size(10, 10).Shrink(0).TextColor(t.TextMuted)
+				chevron := chevronIcon.show(c, 10).Shrink(0).TextColor(t.TextMuted)
 				if !open {
 					chevron.Rotate(-90)
 				}
@@ -149,11 +149,11 @@ func checkMark(c *ui.Context, s git.CheckState, size float32) {
 		ui.Spinner(c).Size(size, size).Shrink(0).Label("Running")
 	default:
 		glyph, label := checkStateGlyph(s)
-		ui.Icon(c, glyph).Size(size, size).Shrink(0).TextColor(checkTint(c, s)).Label(label)
+		glyph.show(c, size).Shrink(0).TextColor(checkTint(c, s)).Role(ui.RoleImage).Label(label)
 	}
 }
 
-func checkStateGlyph(s git.CheckState) (*ui.SVG, string) {
+func checkStateGlyph(s git.CheckState) (glyph, string) {
 	switch s {
 	case git.CheckFailed:
 		return crossCircleIcon, "Failed"
@@ -380,11 +380,11 @@ func mergeBox(c *ui.Context, m mergeStatus) {
 			case mergeChecking:
 				ui.Spinner(c).Size(14, 14).Shrink(0).Label("Checking")
 			case mergeReady:
-				ui.Icon(c, checkCircleIcon).Size(14, 14).Shrink(0).TextColor(tint)
+				checkCircleIcon.show(c, 14).Shrink(0).TextColor(tint)
 			case mergeWarning:
-				ui.Icon(c, warningIcon).Size(14, 14).Shrink(0).TextColor(tint)
+				warningIcon.show(c, 14).Shrink(0).TextColor(tint)
 			default:
-				ui.Icon(c, crossCircleIcon).Size(14, 14).Shrink(0).TextColor(tint)
+				crossCircleIcon.show(c, 14).Shrink(0).TextColor(tint)
 			}
 			ui.Text(c, m.headline).FontWeight(600).Grow(1).MinWidth(0).SingleLine().Ellipsis("…").Tooltip(m.headline)
 		})

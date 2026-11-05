@@ -642,16 +642,16 @@ func modeSwitch(c *ui.Context, selected *int, labels ...string) ui.Element {
 
 // paneButton shows or hides a column, as the sidebar buttons of macOS
 // toolbars: an icon alone, named for what a click does.
-func (a *app) paneButton(c *ui.Context, key string, svg *ui.SVG, on, collapsed *bool, pane string) {
+func (a *app) paneButton(c *ui.Context, key string, svg glyph, on, collapsed *bool, pane string) {
 	action := showOrHide(*on, pane)
 	ui.Button(c.Key(key), "").Shrink(0).Label(action).Tooltip(action).
-		Children(func() { ui.Icon(c, svg).Size(16, 16) }).OnClick(func() { a.toggle(on, collapsed) })
+		Children(func() { svg.show(c, 16) }).OnClick(func() { a.toggle(on, collapsed) })
 }
 
 // terminalButton shows or hides the terminal under the text.
 func (a *app) terminalButton(c *ui.Context) {
 	ui.Button(c.Key("terminal"), "").Shrink(0).Label(showOrHide(a.terminal.shown, "Terminal")).Tooltip(terminalTip(a.terminal.shown)).
-		Children(func() { ui.Icon(c, terminalIcon).Size(16, 16) }).OnClick(a.toggleTerminal)
+		Children(func() { terminalIcon.show(c, 16) }).OnClick(a.toggleTerminal)
 }
 
 // projectTitle is the title of the window, the project's name, which a
@@ -670,16 +670,16 @@ func (a *app) projectTitle(c *ui.Context) {
 	b.Children(func() {
 		ui.Row(c).MinWidth(0).Gap(t.Space(1)).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, path.Base(a.repo)).FontWeight(700).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
-			ui.Icon(c, chevronIcon).Size(9, 9).Shrink(0).TextColor(t.TextMuted)
+			chevronIcon.show(c, 9).Shrink(0).TextColor(t.TextMuted)
 		})
 	})
 }
 
 // linkButton opens the page in the browser, its icon alone.
-func (a *app) linkButton(c *ui.Context, key string, svg *ui.SVG, label, url string) {
+func (a *app) linkButton(c *ui.Context, key string, svg glyph, label, url string) {
 	services := c.Services()
 	ui.Button(c.Key(key), "").Shrink(0).Label(label).Tooltip(label + " — " + strings.TrimPrefix(url, "https://")).
-		Children(func() { ui.Icon(c, svg).Size(16, 16) }).OnClick(func() { services.OpenURL(url) })
+		Children(func() { svg.show(c, 16) }).OnClick(func() { services.OpenURL(url) })
 }
 
 // sideColumn builds a side column, the sidebar or the history: over bg,
@@ -876,7 +876,7 @@ func (a *app) commitItem(c *ui.Context) func(cm git.Commit) ui.SourceListItem {
 			it.Subtitle = cm.Summary
 			it.SubtitleImage = a.drawn(fmt.Sprint(name, dark), lineImage, lineImage, func(c *ui.Context) {
 				ui.Box(c).Size(lineImage, lineImage).Radius(999).Center().Background(tint.Alpha(0.16)).TextColor(tint).
-					Children(func() { ui.Icon(c, glyph).Size(10, 10) })
+					Children(func() { glyph.show(c, 10) })
 			})
 			return it
 		}

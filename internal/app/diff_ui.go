@@ -32,7 +32,7 @@ func (a *app) layoutButton(c *ui.Context) {
 		label, svg = "Show Unified", unifiedIcon
 	}
 	ui.Button(c.Key("layout"), "").Shrink(0).Label(label).Tooltip(label).
-		Children(func() { ui.Icon(c, svg).Size(16, 16) }).OnClick(func() { a.split = !a.split })
+		Children(func() { svg.show(c, 16) }).OnClick(func() { a.split = !a.split })
 }
 
 // configure sets the options of a file's diff that follow the window: its
@@ -191,7 +191,7 @@ func (a *app) changeButtons(c *ui.Context) {
 		angle      float32
 	}{{"previous-change", "Previous Change", -1, 180}, {"next-change", "Next Change", 1, 0}} {
 		ui.Button(c.Key(b.key), "").Shrink(0).Label(b.label).Tooltip(b.label).Children(func() {
-			ui.Icon(c, chevronIcon).Size(12, 12).Rotate(b.angle)
+			chevronIcon.show(c, 12).Rotate(b.angle)
 		}).OnClick(func() { a.goChange(b.step) })
 	}
 }
@@ -388,7 +388,7 @@ func (a *app) commentsButton(c *ui.Context) {
 	})
 	b.Children(func() {
 		ui.Row(c).Gap(t.Space(1)).AlignItems(ui.Center).Children(func() {
-			ui.Icon(c, commentIcon).Size(13, 13).Shrink(0)
+			commentIcon.show(c, 13).Shrink(0)
 			ui.Text(c, label).FontSize(smallSize).SingleLine()
 		})
 	})
@@ -480,11 +480,12 @@ func findingTitle(f review.Finding) string { return fmt.Sprintf("[P%d] %s", f.Pr
 func (a *app) annotation(c *ui.Context, d *fileDiff, an editor.DiffAnnotation) {
 	switch k := an.Key.(type) {
 	case revealKey:
-		// A box from a little over the change down well past the view,
-		// which scrolling into view puts at the top, under the pinned
-		// header, as a box taller than the view shows from its start.
+		// A box a little over the change, lined up with the top of the
+		// view, under the pinned header, gliding there as the user steps
+		// from change to change.
 		a.change.reveal = false
-		ui.Box(c.Key("reveal")).Absolute().Left(0).Top(-56).Width(1).Height(4000).ScrollIntoView()
+		ui.Box(c.Key("reveal")).Absolute().Left(0).Top(-56).Width(1).Height(1).
+			ScrollIntoView(ui.ScrollIntoViewOptions{Block: ui.ScrollStart, Animation: &ui.Smooth})
 	case findingKey:
 		if fs := a.findings(d); int(k) < len(fs) {
 			findingCard(c, fs[k])

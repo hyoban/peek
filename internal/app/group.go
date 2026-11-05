@@ -198,7 +198,7 @@ func (a *app) memberTrees(c *ui.Context, members []*app, key, label string) {
 				}
 			})
 			heading.Children(func() {
-				chevron := ui.Icon(c, chevronIcon).Size(10, 10).Shrink(0).TextColor(t.TextMuted)
+				chevron := chevronIcon.show(c, 10).Shrink(0).TextColor(t.TextMuted)
 				if folded {
 					chevron.Rotate(-90)
 				}

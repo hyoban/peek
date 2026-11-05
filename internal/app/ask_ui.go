@@ -108,9 +108,9 @@ func templatesButton(c *ui.Context, s *askState, text *string) {
 		Gap(t.Space(1)).Label("Shortcuts").Tooltip("Shortcuts: requests to start from").TextColor(t.TextMuted).
 		Background(t.Text.Alpha(0.06))
 	b.Children(func() {
-		ui.Icon(c, shortcutsIcon).Size(13, 13)
+		shortcutsIcon.show(c, 13)
 		ui.Text(c, "Shortcuts").FontSize(smallSize).SingleLine()
-		ui.Icon(c, chevronIcon).Size(9, 9)
+		chevronIcon.show(c, 9)
 	})
 	b.Menu(func(m *ui.Menu) {
 		for i, tp := range askTemplates {

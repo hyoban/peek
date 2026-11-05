@@ -128,7 +128,7 @@ func activity(c *ui.Context, key, text, tooltip, stop string, cancel func()) {
 		ui.Text(c, text).TextColor(t.TextMuted).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
 	})
 	ui.Button(c.Key(key+"-stop"), "").Shrink(0).Label(stop).Tooltip(stop).
-		Children(func() { ui.Icon(c, stopIcon).Size(12, 12) }).OnClick(cancel)
+		Children(func() { stopIcon.show(c, 12) }).OnClick(cancel)
 }
 
 // alertState is an alert about what failed meanwhile, such as a push,

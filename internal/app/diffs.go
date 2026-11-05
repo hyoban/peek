@@ -406,7 +406,7 @@ func (a *app) commitTags(c *ui.Context, tags []string) {
 						c.Toast("Tag Name Copied")
 					}
 				}).Children(func() {
-				ui.Icon(c, tagIcon).Size(10, 10).Shrink(0)
+				tagIcon.show(c, 10).Shrink(0)
 				ui.Text(c, tag).FontSize(smallSize).FontWeight(500).SingleLine()
 			})
 		}
@@ -435,7 +435,7 @@ func (a *app) diffHeader(c *ui.Context, d *fileDiff) {
 	// hand, tells it, as the hand is for links on a Mac.
 	bar.KeepFocus().OnClick(func() { d.flipped = !d.flipped })
 	bar.Children(func() {
-		chevron := ui.Icon(c, chevronIcon).Size(10, 10).Shrink(0).TextColor(t.TextMuted)
+		chevron := chevronIcon.show(c, 10).Shrink(0).TextColor(t.TextMuted)
 		if d.folded() {
 			chevron.Rotate(-90)
 		}

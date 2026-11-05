@@ -167,7 +167,7 @@ func (p *projects) welcome(c *ui.Context) {
 	ui.Column(c).Fill().Background(t.Background).Children(func() {
 		ui.Row(c).Height(titleBarHeight).Shrink(0).FillWidth().DragWindow()
 		ui.Column(c).Grow(1).FillWidth().Center().Gap(t.Space(2)).Padding(t.Space(6)).Children(func() {
-			ui.Icon(c, repoIcon).Size(48, 48).TextColor(t.TextMuted).Margin(0, 0, t.Space(2), 0)
+			repoIcon.show(c, 48).TextColor(t.TextMuted).Margin(0, 0, t.Space(2), 0)
 			ui.Text(c, "No Repository").FontSize(fontSize + 4).FontWeight(700)
 			ui.Text(c, "Open a folder in a Git repository to see its history.").TextColor(t.TextMuted).TextAlign(ui.Center)
 			ui.PrimaryButton(c.Key("open"), "Open Folder…").Margin(t.Space(2), 0, 0, 0).OnClick(p.choose)
@@ -184,7 +184,7 @@ func (p *projects) welcome(c *ui.Context) {
 					b.OnClick(func() { p.open(repo) })
 					b.Children(func() {
 						ui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-							ui.Icon(c, folderIcon).Size(15, 15).Shrink(0).TextColor(t.Accent)
+							folderIcon.show(c, 15).Shrink(0).TextColor(t.Accent)
 							ui.Text(c, p.label(repo)).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
 						})
 					})

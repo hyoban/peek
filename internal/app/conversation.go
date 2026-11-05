@@ -211,7 +211,7 @@ func (a *app) navigatorBar(c *ui.Context) {
 			for _, nav := range []struct {
 				n     int
 				label string
-				icon  *ui.SVG
+				icon  glyph
 			}{{navFiles, "File Navigator", folderIcon}, {navConversations, "Conversation Navigator", commentIcon}} {
 				on := a.navigator == nav.n
 				b := ui.ButtonBase(c.Key("nav-" + nav.label)).Grow(1).Height(24).Radius(999).AlignItems(ui.Center).Justify(ui.Center).
@@ -219,7 +219,7 @@ func (a *app) navigatorBar(c *ui.Context) {
 				if on {
 					b.Background(t.Text.Alpha(0.1)).TextColor(t.Text)
 				}
-				b.Children(func() { ui.Icon(c, nav.icon).Size(15, 15) })
+				b.Children(func() { nav.icon.show(c, 15) })
 				b.OnClick(func() { a.showNavigator(nav.n) })
 			}
 		})
@@ -361,10 +361,11 @@ func (a *app) turnView(c *ui.Context, conv *conversation, tn *turn) {
 			ui.Spinner(c).Size(12, 12)
 			ui.Text(c, phase).TextColor(t.TextMuted)
 		})
-		// The transcript follows the answer as it grows, as it comes.
+		// The transcript follows the answer as it grows, gliding as it
+		// comes.
 		if n := len(tn.partial) + 1; n != a.streamed {
 			a.streamed = n
-			stage.ScrollIntoView()
+			stage.ScrollIntoView(ui.ScrollIntoViewOptions{Animation: &ui.Smooth})
 		}
 		return
 	case tn.Review != nil:
@@ -375,7 +376,7 @@ func (a *app) turnView(c *ui.Context, conv *conversation, tn *turn) {
 	// An error after what Codex wrote before it, if anything.
 	if tn.Err != "" {
 		ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Start).Children(func() {
-			ui.Icon(c, warningIcon).Size(16, 16).Shrink(0).TextColor(system(c, systemOrange))
+			warningIcon.show(c, 16).Shrink(0).TextColor(system(c, systemOrange))
 			ui.Text(c, tn.Err).TextColor(t.TextMuted).Selectable().Grow(1).MinWidth(0)
 		})
 	}
@@ -384,7 +385,7 @@ func (a *app) turnView(c *ui.Context, conv *conversation, tn *turn) {
 		b := ui.ButtonBase(c.Key("copy")).Size(26, 26).Radius(t.Radius).AlignItems(ui.Center).Justify(ui.Center).
 			Label("Copy").Tooltip("Copy").TextColor(t.TextMuted)
 		flat(b, t, false)
-		b.Children(func() { ui.Icon(c, copyIcon).Size(15, 15) })
+		b.Children(func() { copyIcon.show(c, 15) })
 		b.OnClick(func() {
 			services.WriteClipboard(tn.text(conv.Scope))
 			c.Toast("Copied")
@@ -407,7 +408,7 @@ func reviewView(c *ui.Context, r *review.Result) {
 		glyph, tint = warningIcon, system(c, systemOrange)
 	}
 	ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-		ui.Icon(c, glyph).Size(18, 18).TextColor(tint)
+		glyph.show(c, 18).TextColor(tint)
 		ui.Text(c, reviewHeading(r)).FontWeight(600).FontSize(fontSize + 1)
 	})
 	ui.Text(c, r.Summary).Selectable()
@@ -478,7 +479,7 @@ func stopButton(c *ui.Context, stop func()) {
 	t := c.Theme()
 	b := ui.ButtonBase(c.Key("reply-stop")).Shrink(0).Size(28, 28).Radius(14).Label("Stop").Tooltip("Stop").
 		AlignItems(ui.Center).Justify(ui.Center).Background(t.Text).TextColor(t.Background).OnClick(stop)
-	b.Children(func() { ui.Icon(c, stopIcon).Size(12, 12) })
+	b.Children(func() { stopIcon.show(c, 12) })
 }
 
 // sendButton is the round button sending a request, the accent's while
@@ -492,5 +493,5 @@ func sendButton(c *ui.Context, key, label string, can bool, send func()) {
 	} else {
 		b.Background(t.Text.Alpha(0.08)).TextColor(t.TextMuted)
 	}
-	b.Children(func() { ui.Icon(c, sendIcon).Size(14, 14) })
+	b.Children(func() { sendIcon.show(c, 14) })
 }

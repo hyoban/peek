@@ -43,7 +43,7 @@ func (a *app) pullButton(c *ui.Context) {
 			return
 		}
 		ui.Row(c).Gap(t.Space(0.5)).AlignItems(ui.Center).Children(func() {
-			ui.Icon(c, pullArrow).Size(11, 11).Shrink(0)
+			pullArrow.show(c, 11).Shrink(0)
 			ui.Text(c, strconv.Itoa(a.behind)).FontSize(smallSize).FontWeight(600).SingleLine()
 		})
 	})

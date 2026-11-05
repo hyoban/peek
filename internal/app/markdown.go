@@ -143,7 +143,7 @@ func (a *app) previewButton(c *ui.Context) {
 		}
 		a.previewed[p] = !on
 	})
-	b.Children(func() { ui.Icon(c, previewIcon).Size(15, 15).TextColor(color) })
+	b.Children(func() { previewIcon.show(c, 15).TextColor(color) })
 }
 
 // previewView shows the Markdown as it reads, in a column no wider than

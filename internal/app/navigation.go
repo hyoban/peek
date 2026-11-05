@@ -338,7 +338,7 @@ func (a *app) navigationTools(c *ui.Context) {
 	t := c.Theme()
 	for _, b := range []struct {
 		name        string
-		svg         *ui.SVG
+		svg         glyph
 		step, count int
 	}{
 		{"Go Back", backIcon, -1, len(a.navigation.back)},
@@ -348,7 +348,7 @@ func (a *app) navigationTools(c *ui.Context) {
 			Label(b.name).Tooltip(b.name).TextColor(t.TextMuted).
 			Disabled(b.count == 0 || !a.readableSource() || a.navigation.busy)
 		flat(button, t, false)
-		button.Children(func() { ui.Icon(c, b.svg).Size(14, 14) }).OnClick(func() { a.goBack(b.step) })
+		button.Children(func() { b.svg.show(c, 14) }).OnClick(func() { a.goBack(b.step) })
 	}
 	a.definitionStatus(c)
 }

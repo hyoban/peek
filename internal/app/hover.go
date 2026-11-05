@@ -82,7 +82,7 @@ func verbosityButtons(c *ui.Context, more, less bool, step func(int)) {
 	ui.Row(c.Key("verbosity")).FillWidth().Justify(ui.End).Gap(2).Children(func() {
 		for _, b := range []struct {
 			name    string
-			svg     *ui.SVG
+			svg     glyph
 			step    int
 			enabled bool
 		}{
@@ -92,7 +92,7 @@ func verbosityButtons(c *ui.Context, more, less bool, step func(int)) {
 			button := ui.ButtonBase(c.Key(b.name)).Size(20, 18).Shrink(0).Center().Radius(4).
 				Label(b.name).Tooltip(b.name).TextColor(t.TextMuted).Disabled(!b.enabled)
 			flat(button, t, false)
-			button.Children(func() { ui.Icon(c, b.svg).Size(12, 12) }).OnClick(func() { step(b.step) })
+			button.Children(func() { b.svg.show(c, 12) }).OnClick(func() { step(b.step) })
 		}
 	})
 }

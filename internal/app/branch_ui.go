@@ -89,7 +89,7 @@ func (a *app) branchLabel(c *ui.Context) {
 	b.ContextMenu(func(m *ui.Menu) { copyBranchItem(c, m, a.branch) })
 	b.Children(func() {
 		ui.Row(c).MinWidth(0).Gap(t.Space(1)).AlignItems(ui.Center).Children(func() {
-			ui.Icon(c, branchIcon).Size(12, 12).Shrink(0)
+			branchIcon.show(c, 12).Shrink(0)
 			ui.Text(c, a.branch).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
 		})
 	})
@@ -239,7 +239,7 @@ func (a *app) matches() (local, remote []string, prs []git.PullRequest, named in
 type switchRow struct {
 	target        switchTarget
 	heading       string // the section it starts, "" for none
-	icon          *ui.SVG
+	icon          glyph
 	title, detail string
 	branch        string // the branch's name to copy, "" for none
 }
@@ -533,7 +533,9 @@ func (a *app) switcherRow(c *ui.Context, row switchRow, lit bool) (hovered bool)
 		b.Background(t.Accent)
 		if a.switcher.reveal {
 			a.switcher.reveal = false
-			b.ScrollIntoView()
+			// The current branch in the middle of the list, as the list
+			// opens.
+			b.ScrollIntoView(ui.ScrollIntoViewOptions{Block: ui.ScrollCenter})
 		}
 	}
 	b.OnClick(func() { a.switchTo(target) })
@@ -553,7 +555,7 @@ func (a *app) switcherRow(c *ui.Context, row switchRow, lit bool) (hovered bool)
 	}
 	b.Children(func() {
 		ui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-			ui.Icon(c, row.icon).Size(14, 14).Shrink(0).TextColor(muted)
+			row.icon.show(c, 14).Shrink(0).TextColor(muted)
 			weight := 400
 			if current {
 				weight = 600
@@ -567,7 +569,7 @@ func (a *app) switcherRow(c *ui.Context, row switchRow, lit bool) (hovered bool)
 				if lit {
 					check = t.AccentText
 				}
-				ui.Icon(c, checkIcon).Size(12, 12).Shrink(0).TextColor(check)
+				checkIcon.show(c, 12).Shrink(0).TextColor(check)
 			}
 		})
 	})
