@@ -62,7 +62,7 @@ func (a *app) discardable() bool {
 // discardMenu is the item of a context menu that discards the changes to
 // the files of the diffs, after asking.
 func (a *app) discardMenu(m *ui.Menu, diffs []*fileDiff) {
-	if m.Item("Discard Changes…").Disabled(!a.discardable() || len(diffs) == 0).Chosen() {
+	if m.Item("Discard Changes…").Icon(menuIcon("arrow.uturn.backward")).Disabled(!a.discardable() || len(diffs) == 0).Chosen() {
 		a.confirmDiscard(diffs)
 	}
 }

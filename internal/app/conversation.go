@@ -271,11 +271,11 @@ func (a *app) conversationItem(c *ui.Context, deleted **conversation) func(conv 
 			detail += " · " + conv.Scope
 		}
 		return ui.SourceListItem{Title: conv.Title, Subtitle: detail, Busy: a.running(conv), Menu: func(m *ui.Menu) {
-			if m.Item("Copy Conversation").Chosen() {
+			if m.Item("Copy Conversation").Icon(menuIcon("doc.on.doc")).Chosen() {
 				services.WriteClipboard(conv.text())
 			}
 			m.Separator()
-			if m.Item("Delete Conversation").Chosen() {
+			if m.Item("Delete Conversation").Icon(menuIcon("trash")).Chosen() {
 				*deleted = conv
 			}
 		}}

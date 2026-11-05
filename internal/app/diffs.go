@@ -191,12 +191,12 @@ func countRead(diffs []*fileDiff) int {
 func (a *app) readMenu(m *ui.Menu, item string) {
 	diffs := a.diffsUnder(item)
 	n := countRead(diffs)
-	if m.Item("Mark as Viewed").Disabled(n == len(diffs)).Chosen() {
+	if m.Item("Mark as Viewed").Icon(menuIcon("eye")).Disabled(n == len(diffs)).Chosen() {
 		for _, d := range diffs {
 			a.setRead(d, true)
 		}
 	}
-	if m.Item("Mark as Not Viewed").Disabled(n == 0).Chosen() {
+	if m.Item("Mark as Not Viewed").Icon(menuIcon("eye.slash")).Disabled(n == 0).Chosen() {
 		for _, d := range diffs {
 			a.setRead(d, false)
 		}
@@ -379,7 +379,7 @@ func (a *app) commitMessage(c *ui.Context) {
 				}
 				ui.Text(c, cm.Short).FontSize(smallSize).Font(monoFamily).TextColor(t.TextMuted).SingleLine().
 					Tooltip(cm.Hash).ContextMenu(func(m *ui.Menu) {
-					if m.Item("Copy Commit Hash").Chosen() {
+					if m.Item("Copy Commit Hash").Icon(menuIcon("number")).Chosen() {
 						services.WriteClipboard(cm.Hash)
 						c.Toast("Commit Hash Copied")
 					}
@@ -401,7 +401,7 @@ func (a *app) commitTags(c *ui.Context, tags []string) {
 			ui.Row(c.Key("tag:"+tag)).Gap(t.Space(1)).AlignItems(ui.Center).Padding(0, t.Space(1.5)).
 				Radius(999).Background(t.TextMuted.Alpha(0.12)).TextColor(t.TextMuted).Tooltip("Tag " + tag).
 				ContextMenu(func(m *ui.Menu) {
-					if m.Item("Copy Tag Name").Chosen() {
+					if m.Item("Copy Tag Name").Icon(menuIcon("tag")).Chosen() {
 						services.WriteClipboard(tag)
 						c.Toast("Tag Name Copied")
 					}

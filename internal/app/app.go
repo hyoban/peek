@@ -993,17 +993,17 @@ func commitMessage(cm git.Commit) string {
 // commitMenu is the context menu of a commit's row: copying its hash or
 // message, and its page on GitHub.
 func (a *app) commitMenu(c *ui.Context, services ui.Services, m *ui.Menu, cm git.Commit) {
-	if m.Item("Copy Commit Hash").Chosen() {
+	if m.Item("Copy Commit Hash").Icon(menuIcon("number")).Chosen() {
 		services.WriteClipboard(cm.Hash)
 		c.Toast("Commit Hash Copied")
 	}
-	if m.Item("Copy Commit Message").Chosen() {
+	if m.Item("Copy Commit Message").Icon(menuIcon("doc.on.doc")).Chosen() {
 		services.WriteClipboard(commitMessage(cm))
 		c.Toast("Commit Message Copied")
 	}
 	if a.github != "" {
 		m.Separator()
-		if m.Item("Open on GitHub").Chosen() {
+		if m.Item("Open on GitHub").Icon(menuIcon("safari")).Chosen() {
 			services.OpenURL(a.github + "/commit/" + cm.Hash)
 		}
 	}
@@ -1246,13 +1246,13 @@ func (a *app) treeItem(c *ui.Context, tree *pathTree) func(p string) ui.SourceLi
 func (a *app) fileMenu(services ui.Services, m *ui.Menu, p string, isDir bool) {
 	local := filepath.Join(a.repo, filepath.FromSlash(p))
 	there := exists(local)
-	if m.Item("Copy Path").Chosen() {
+	if m.Item("Copy Path").Icon(menuIcon("doc.on.doc")).Chosen() {
 		services.WriteClipboard(p)
 	}
-	if m.Item("Show in Finder").Disabled(!there).Chosen() {
+	if m.Item("Show in Finder").Icon(menuIcon("folder")).Disabled(!there).Chosen() {
 		mygo.Shell.ShowItemInFolder(local)
 	}
-	if !isDir && m.Item("Open with External Editor").Disabled(!there).Chosen() {
+	if !isDir && m.Item("Open with External Editor").Icon(menuIcon("arrow.up.forward.app")).Disabled(!there).Chosen() {
 		mygo.Shell.OpenPath(local)
 	}
 	cm, ok := a.current()
@@ -1265,7 +1265,7 @@ func (a *app) fileMenu(services ui.Services, m *ui.Menu, p string, isDir bool) {
 	}
 	m.Separator()
 	gone := a.mode == modeChanges && a.changes[p].Status == "D"
-	if m.Item("Open on GitHub").Disabled(gone).Chosen() {
+	if m.Item("Open on GitHub").Icon(menuIcon("safari")).Disabled(gone).Chosen() {
 		services.OpenURL(a.github + "/" + kind + git.Tip(cm.Hash) + "/" + p)
 	}
 }

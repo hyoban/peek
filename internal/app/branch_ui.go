@@ -546,7 +546,7 @@ func (a *app) switcherRow(c *ui.Context, row switchRow, lit bool) (hovered bool)
 			}
 			if target.worktree != "" {
 				m.Separator()
-				if m.Item("Remove Worktree…").Disabled(a.worktreeBusy()).Chosen() {
+				if m.Item("Remove Worktree…").Icon(menuIcon("trash")).Disabled(a.worktreeBusy()).Chosen() {
 					a.switcher.open = false
 					a.confirmRemoveWorktree(target.worktree, cmp.Or(row.branch, target.branch))
 				}
@@ -579,7 +579,7 @@ func (a *app) switcherRow(c *ui.Context, row switchRow, lit bool) (hovered bool)
 // copyBranchItem is the item of a branch's context menu that copies its
 // name.
 func copyBranchItem(c *ui.Context, m *ui.Menu, branch string) {
-	if m.Item("Copy Branch Name").Chosen() {
+	if m.Item("Copy Branch Name").Icon(menuIcon("doc.on.doc")).Chosen() {
 		c.Services().WriteClipboard(branch)
 		c.Toast("Branch Name Copied")
 	}

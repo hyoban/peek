@@ -79,7 +79,7 @@ func (a *app) configureNavigation() {
 		a.code.OnDefinition = a.goDefinition
 		a.code.OnHover = a.hover
 		a.code.ContextMenu = func(m *ui.Menu) {
-			if m.Item("Go to Definition").Chosen() {
+			if m.Item("Go to Definition").Icon(menuIcon("arrow.right")).Chosen() {
 				a.goDefinition(a.code.Cursor())
 			}
 		}
@@ -87,10 +87,10 @@ func (a *app) configureNavigation() {
 		a.code.OnDefinition = func(offset int) { a.goPackage(offset, false) }
 		a.code.OnHover = a.packageHover
 		a.code.ContextMenu = func(m *ui.Menu) {
-			if m.Item("Go to Definition").Chosen() {
+			if m.Item("Go to Definition").Icon(menuIcon("arrow.right")).Chosen() {
 				a.goPackage(a.code.Cursor(), false)
 			}
-			if m.Item("Open Package on npmx").Chosen() {
+			if m.Item("Open Package on npmx").Icon(menuIcon("safari")).Chosen() {
 				a.goPackage(a.code.Cursor(), true)
 			}
 		}

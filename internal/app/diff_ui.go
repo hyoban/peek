@@ -255,20 +255,20 @@ func (a *app) linesMenu(c *ui.Context, m *ui.Menu, d *fileDiff) {
 	}
 	r, ok := d.state.SelectedLines()
 	services := c.Services()
-	if m.Item("Copy Reference to Lines").Disabled(!ok).Chosen() {
+	if m.Item("Copy Reference to Lines").Icon(menuIcon("doc.on.doc")).Disabled(!ok).Chosen() {
 		services.WriteClipboard(lineReference(d.change, r))
 		c.Toast("Reference Copied")
 	}
 	cm, _ := a.current()
 	online := ok && a.github != "" && cm.Hash != git.Worktree
-	if m.Item("Copy GitHub Link to Lines").Disabled(!online).Chosen() {
+	if m.Item("Copy GitHub Link to Lines").Icon(menuIcon("link")).Disabled(!online).Chosen() {
 		services.WriteClipboard(lineLink(a.github, cm.Hash, d.change, r))
 		c.Toast("Link Copied")
 	}
-	if m.Item("Open Lines on GitHub").Disabled(!online).Chosen() {
+	if m.Item("Open Lines on GitHub").Icon(menuIcon("safari")).Disabled(!online).Chosen() {
 		services.OpenURL(lineLink(a.github, cm.Hash, d.change, r))
 	}
-	if m.Item("Comment on Lines").Disabled(!ok).Chosen() {
+	if m.Item("Comment on Lines").Icon(menuIcon("text.bubble")).Disabled(!ok).Chosen() {
 		a.addComment(d, r)
 	}
 }
@@ -372,12 +372,12 @@ func (a *app) commentsButton(c *ui.Context) {
 		TextColor(t.TextMuted).Label(label).Tooltip("Copy the comments as a prompt")
 	flat(b, t, false)
 	b.Menu(func(m *ui.Menu) {
-		if m.Item("Copy Comments").Chosen() {
+		if m.Item("Copy Comments").Icon(menuIcon("doc.on.doc")).Chosen() {
 			c.Services().WriteClipboard(a.commentsPrompt())
 			c.Toast("Comments Copied")
 		}
 		m.Separator()
-		if m.Item("Delete Comments").Chosen() {
+		if m.Item("Delete Comments").Icon(menuIcon("trash")).Chosen() {
 			cm, _ := a.current()
 			for key := range a.comments {
 				if strings.HasPrefix(key, a.entryKey(cm.Hash)+"\x00") {
