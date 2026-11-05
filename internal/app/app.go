@@ -103,6 +103,8 @@ type app struct {
 	alert                           alertState
 	confirming                      confirmState
 	discarding                      bool // the changes are being discarded
+	removingWorktrees               bool // worktrees are being listed or removed
+	worktreeProgress                worktreeProgress
 	// shot is the view the app is to open at, for screenshots, nil for
 	// none or once it is shown.
 	shot *shot
@@ -335,6 +337,7 @@ func (a *app) view(c *ui.Context) {
 	a.branchSwitcher(c)
 	a.alerts(c)
 	a.confirmations(c)
+	a.worktreeProgressSheet(c)
 	a.sync(c)
 	// Over the window's material the sidebar shows it, and the other
 	// columns draw their own backgrounds, as AppKit's source lists do: the

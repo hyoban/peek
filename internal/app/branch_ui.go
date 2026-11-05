@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"peek/internal/git"
@@ -536,8 +537,19 @@ func (a *app) switcherRow(c *ui.Context, row switchRow, lit bool) (hovered bool)
 		}
 	}
 	b.OnClick(func() { a.switchTo(target) })
-	if row.branch != "" {
-		b.ContextMenu(func(m *ui.Menu) { copyBranchItem(c, m, row.branch) })
+	if row.branch != "" || target.worktree != "" {
+		b.ContextMenu(func(m *ui.Menu) {
+			if row.branch != "" {
+				copyBranchItem(c, m, row.branch)
+			}
+			if target.worktree != "" {
+				m.Separator()
+				if m.Item("Remove Worktree…").Disabled(a.worktreeBusy()).Chosen() {
+					a.switcher.open = false
+					a.confirmRemoveWorktree(target.worktree, cmp.Or(row.branch, target.branch))
+				}
+			}
+		})
 	}
 	b.Children(func() {
 		ui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
