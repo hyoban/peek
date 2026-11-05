@@ -9,8 +9,8 @@ Browse uncommitted changes, compare a branch, or read any commit's files. Follow
 Read the selected commit, uncommitted changes, or branch comparison as a stack of diffs, with changed files on the left and history on the right. Switch between unified and side-by-side views, mark files as viewed, and step through changes across files.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/changes-dark.png">
-  <img alt="Changes mode: the changed files, their diffs and the history" src="docs/changes-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/user-attachments/assets/e0ca2efb-0d19-499a-a7ba-30fe667a0ace">
+  <img alt="Changes mode: the changed files, their diffs and the history" src="https://github.com/user-attachments/assets/2d32d8f7-2d13-4b7a-9ad3-a3e549209da5">
 </picture>
 
 ## Files
@@ -18,8 +18,8 @@ Read the selected commit, uncommitted changes, or branch comparison as a stack o
 Browse every file at the selected commit or in the working tree. Related files are nested together; images and Markdown have previews, and Go, TypeScript and Kotlin files in the working tree support definition lookup.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/files-dark.png">
-  <img alt="Files mode: the commit's files and the text of one of them" src="docs/files-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/user-attachments/assets/445bd24a-9153-4ab6-adca-5ca32550d94d">
+  <img alt="Files mode: the commit's files, the text of one of them and the terminal" src="https://github.com/user-attachments/assets/e218529b-8fd0-494c-be55-bbb1cc85b1e5">
 </picture>
 
 ## Install
@@ -306,8 +306,10 @@ MYGO_UPDATER_PRIVATE_KEY="$(cat ~/Library/Application\ Support/mygo/update-keys/
 ### Screenshots
 
 The screenshots show Peek browsing [Dify](https://github.com/langgenius/dify)
-in light and dark appearance. Regenerate them in `docs/` using the installed
-app and a local Dify clone:
+in light and dark appearance. They are kept out of the repository, as
+attachments to [#7](https://github.com/hyoban/peek/issues/7), for clones to
+stay small. Retake them into `build/screenshots/` using the installed app and
+a local Dify clone:
 
 ```bash
 scripts/screenshots.sh path/to/dify
@@ -315,13 +317,21 @@ scripts/screenshots.sh path/to/dify
 
 The script creates a temporary clone at commit `9dc53da`, with `origin/main`
 58 commits ahead, and captures Changes and Files (with
-`dify-agent-runtime/internal/agentcli/config.go` selected). It requires Screen
+`dify-agent-runtime/internal/agentcli/config.go` selected and the terminal
+showing that folder's recent commits). It requires Screen
 Recording permission and control of System Events to switch appearance.
-Peek's saved projects, window state and the system appearance are restored afterward.
+Peek's saved projects, views, window state and the system appearance are restored afterward.
 Set `PEEK_APP` to shoot another build instead, such as one from `go tool mygo build -skip-dmg`:
 
 ```bash
 PEEK_APP="$PWD/build/darwin-arm64/Peek.app" scripts/screenshots.sh path/to/dify
+```
+
+Then upload them in a comment on #7 and point the README's images at the
+attachments it gets:
+
+```bash
+cd build/screenshots && gh issue comment 7 --body "![Changes, light](./changes-light.png) ![Changes, dark](./changes-dark.png) ![Files, light](./files-light.png) ![Files, dark](./files-dark.png)" --attach changes-light.png --attach changes-dark.png --attach files-light.png --attach files-dark.png
 ```
 
 ### Performance

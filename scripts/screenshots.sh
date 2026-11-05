@@ -1,5 +1,6 @@
 #!/bin/bash
-# Takes the README's screenshots of the installed Peek's window, into docs/:
+# Takes the README's screenshots of the installed Peek's window, into
+# build/screenshots/, for a comment on issue #7 to hold:
 # Changes and Files, in the light and the dark appearance, over a clone of
 # Dify at the commit the README names, the window with its shadow over the
 # desktop's wallpaper, as the appearance draws it.
@@ -8,15 +9,17 @@
 #
 # It needs Screen Recording for the app it runs in, to capture the window,
 # and lets it control System Events, to switch the appearance. Peek's
-# saved projects and window, and the appearance, are put back as they were.
+# saved projects, views and window, and the appearance, are put back as they were.
 set -euo pipefail
 
 dify=${1:?usage: scripts/screenshots.sh path/to/dify}
 commit=9dc53da
 upstream=2d78a78 # 58 commits on, for the toolbar to offer them to pull
 file=dify-agent-runtime/internal/agentcli/config.go
+terminal="git --no-pager log --oneline -6 -- ${file%/*}" # run in Files' terminal
 app=${PEEK_APP:-/Applications/Peek.app} # or another build of Peek
-docs=$(cd "$(dirname "$0")/.." && pwd)/docs
+docs=$(cd "$(dirname "$0")/.." && pwd)/build/screenshots
+mkdir -p "$docs"
 state="$HOME/Library/Application Support/Peek"
 
 work=$(mktemp -d)
@@ -45,10 +48,10 @@ launch() {
 	return 1
 }
 
-# Peek's saved projects and window, and the appearance, as they were.
+# Peek's saved projects, views and window, and the appearance, as they were.
 was_dark=$(osascript -e 'tell application "System Events" to tell appearance preferences to get dark mode')
 quit
-cp "$state"/window-state.json "$state"/open "$state"/recent "$saved"/ 2>/dev/null || true
+cp "$state"/window-state.json "$state"/views.json "$state"/open "$state"/recent "$saved"/ 2>/dev/null || true
 restore() {
 	set +e
 	quit
@@ -130,11 +133,14 @@ shoot() { # mode appearance
 	quit
 	# The project alone, in a window of 1280 by 800 points, or as wide as
 	# Stage Manager leaves room for.
+	# Each from no view kept, as one shot leaves its view for the next.
 	printf '%s\n' "$work/dify" >"$state/open"
+	rm -f "$state/views.json"
 	printf '{"main": {"x": 100, "y": 60, "width": 1280, "height": 800}}\n' >"$state/window-state.json"
-	# The commit, and in Files the file, which Changes shows from the top.
+	# The commit, and in Files the file, which Changes shows from the top,
+	# and the terminal under it, running a command.
 	local env=(--env PEEK_SHOT_COMMIT="$commit" --env PEEK_SHOT_MODE="$1")
-	if [ "$1" = files ]; then env+=(--env PEEK_SHOT_FILE="$file"); fi
+	if [ "$1" = files ]; then env+=(--env PEEK_SHOT_FILE="$file" --env PEEK_SHOT_TERMINAL="$terminal"); fi
 	launch "${env[@]}"
 	sleep 10 # the history, the diffs and the avatars
 	launch # in front, drawn as active
