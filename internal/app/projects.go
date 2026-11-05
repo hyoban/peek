@@ -428,7 +428,8 @@ func (p *projects) openWith(dir string, parent *mygo.Window, open func(repo stri
 type menuItems struct {
 	changes, files, sidebar, history, viewed  *menuItem
 	terminal                                  *menuItem
-	layout, nextChange, previousChange        *menuItem
+	layout, whitespace                        *menuItem
+	nextChange, previousChange                *menuItem
 	find                                      *menuItem
 	definition, back, forward                 *menuItem
 	refresh, pull, ship, ask, review, explain *menuItem
@@ -503,7 +504,13 @@ func (p *projects) setMenu() {
 				a.setRead(d, !d.read)
 			}
 		}),
-		layout:         item("Show Side by Side", "Ctrl+Cmd+D", func(a *app) { a.split = !a.split }),
+		layout: item("Show Side by Side", "Ctrl+Cmd+D", func(a *app) { a.split = !a.split }),
+		whitespace: newMenuItem(&mygo.MenuItem{Label: "Ignore Whitespace", Type: mygo.MenuItemCheckbox,
+			Checked: p.prefs().IgnoreWhitespace, Click: do(func(*app) {
+				s := p.prefs()
+				s.IgnoreWhitespace = !s.IgnoreWhitespace
+				p.setPrefs(s)
+			})}),
 		nextChange:     item("Next Change", "Ctrl+Cmd+Down", func(a *app) { a.goChange(1) }),
 		previousChange: item("Previous Change", "Ctrl+Cmd+Up", func(a *app) { a.goChange(-1) }),
 		find:           item("Find…", "Cmd+F", func(a *app) { a.find(editor.Find) }),
@@ -593,7 +600,7 @@ func (p *projects) setMenu() {
 			mygo.Separator(),
 			m.sidebar.MenuItem, m.history.MenuItem, m.terminal.MenuItem,
 			mygo.Separator(),
-			m.layout.MenuItem,
+			m.layout.MenuItem, m.whitespace.MenuItem,
 			mygo.Separator(),
 			m.nextChange.MenuItem, m.previousChange.MenuItem,
 			m.viewed.MenuItem,
@@ -630,7 +637,7 @@ func (p *projects) syncMenu() {
 		return
 	}
 	if a == nil {
-		for _, item := range []*menuItem{m.changes, m.files, m.sidebar, m.history, m.terminal, m.viewed, m.find, m.layout, m.nextChange, m.previousChange,
+		for _, item := range []*menuItem{m.changes, m.files, m.sidebar, m.history, m.terminal, m.viewed, m.find, m.layout, m.whitespace, m.nextChange, m.previousChange,
 			m.refresh, m.pull, m.ship, m.discard, m.ask, m.review, m.explain, m.branch, m.cleanUp, m.github, m.finder, m.definition, m.back, m.forward, m.add} {
 			item.show(item.shownLabel, false, item.shownChecked)
 		}
@@ -654,6 +661,7 @@ func (p *projects) syncMenu() {
 	}
 	diffs := a.mode == modeChanges && len(a.diffs) > 0
 	m.layout.show(layout, a.mode == modeChanges, false)
+	m.whitespace.show("Ignore Whitespace", a.mode == modeChanges, p.prefs().IgnoreWhitespace)
 	m.nextChange.show("Next Change", diffs, false)
 	m.previousChange.show("Previous Change", diffs, false)
 	m.find.show("Find…", a.findable(), false)

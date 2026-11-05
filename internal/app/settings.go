@@ -51,16 +51,17 @@ type settings struct {
 
 // defaultSettings are Peek's choices before the user's.
 var defaultSettings = settings{
-	Reopen:         true,
-	Notify:         true,
-	NestFiles:      true,
-	FoldKinds:      true,
-	WrapLines:      true,
-	FoldImports:    true,
-	AutoFetch:      true,
-	FetchMinutes:   3,
-	CodeSize:       codeSize,
-	ReviewBlocking: review.DefaultBlocking,
+	Reopen:           true,
+	Notify:           true,
+	NestFiles:        true,
+	IgnoreWhitespace: true,
+	FoldKinds:        true,
+	WrapLines:        true,
+	FoldImports:      true,
+	AutoFetch:        true,
+	FetchMinutes:     3,
+	CodeSize:         codeSize,
+	ReviewBlocking:   review.DefaultBlocking,
 }
 
 // fetchMinutes are the intervals the Settings window offers, and
@@ -530,7 +531,7 @@ func (p *projects) textEditingSettings(c *ui.Context) {
 	}).Description("For the first repository opened; View ▸ Show Side by Side (⌃⌘D) switches it.")
 	settingsField(c, "Whitespace", func() {
 		ui.NativeCheckbox(c.Key("ignoreWhitespace"), &s.IgnoreWhitespace, "Ignore whitespace in diffs")
-	}).Description("Changes of indentation or spacing alone show no difference; the files’ counts still include them.")
+	}).Description("Changes of indentation or spacing alone show no difference; View ▸ Ignore Whitespace switches it. The files’ counts still include them.")
 	settingsSection(c)
 	settingsField(c, "Files", func() {
 		ui.Column(c).Gap(c.Theme().Space(1.5)).Children(func() {
