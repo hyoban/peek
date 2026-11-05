@@ -25,12 +25,16 @@ func TestMenuBarItems(t *testing.T) {
 	}
 	var labels []string
 	checked := map[string]bool{}
+	subtitles := map[string]string{}
 	for _, it := range p.menuBarItems() {
 		labels = append(labels, it.Label)
 		checked[it.Label] = it.Checked
+		subtitles[it.Label] = it.Subtitle
 	}
-	openLabel := p.label(open) + " — main, 3 files changed"
-	closedLabel := p.label(closed) + " — main, 1 file changed"
+	openLabel, closedLabel := p.label(open), p.label(closed)
+	if subtitles[openLabel] != "main, 3 files changed" || subtitles[closedLabel] != "main, 1 file changed" {
+		t.Errorf("subtitles %q, want each repository's branch and files changed", subtitles)
+	}
 	pull := "Pull 2 New Commits into " + path.Base(closed)
 	want := []string{openLabel, closedLabel, "", pull, "", "Open Folder…", "", "Show in Menu Bar", "Hide When Inactive", "Settings…", "", "Quit Peek"}
 	if len(labels) != len(want) {

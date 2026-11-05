@@ -148,10 +148,11 @@ func (p *projects) menuBarItems() []*mygo.MenuItem {
 	for _, repo := range p.recent {
 		s := p.statusOf(repo)
 		items = append(items, &mygo.MenuItem{
-			Label:   p.label(repo) + repoDetail(p.apps[repo], s),
-			ToolTip: repo,
-			Type:    mygo.MenuItemCheckbox,
-			Checked: p.cur != nil && p.cur.repo == repo,
+			Label:    p.label(repo),
+			Subtitle: repoDetail(p.apps[repo], s),
+			ToolTip:  repo,
+			Type:     mygo.MenuItemCheckbox,
+			Checked:  p.cur != nil && p.cur.repo == repo,
 			Click: func(it *mygo.MenuItem, _ *mygo.Window) {
 				it.SetChecked(true) // checked as it shows, not toggled
 				p.openRepo(repo)
@@ -189,8 +190,9 @@ func (p *projects) menuBarItems() []*mygo.MenuItem {
 	)
 }
 
-// repoDetail follows a repository's name in the menu: its branch, the
-// files it changes and what its window is busy with.
+// repoDetail shows under a repository's name in the menu, as macOS's
+// menus show a second line: its branch, the files it changes and what its
+// window is busy with.
 func repoDetail(a *app, s repoStatus) string {
 	if !s.loaded {
 		return ""
@@ -208,7 +210,7 @@ func repoDetail(a *app, s repoStatus) string {
 	case a.switcher.running != "":
 		parts = append(parts, "Checking out…")
 	}
-	return " — " + strings.Join(parts, ", ")
+	return strings.Join(parts, ", ")
 }
 
 // statusOf is the status of a recent repository: its window's where it
