@@ -25,7 +25,7 @@ PEEK_DEV=1 go tool mygo build -skip-dmg &&
   osascript -e 'tell application "/Applications/Peek Dev.app" to quit' &&
   while pgrep -qf "/Applications/Peek Dev.app/Contents/MacOS/"; do sleep 0.2; done &&
   rm -rf "/Applications/Peek Dev.app" &&
-  ditto "build/darwin-arm64/Peek Dev.app" "/Applications/Peek Dev.app" &&
+  mv "build/darwin-arm64/Peek Dev.app" "/Applications/Peek Dev.app" &&
   env -i HOME="$HOME" USER="$USER" LOGNAME="$LOGNAME" open "/Applications/Peek Dev.app"
 ```
 
