@@ -370,33 +370,64 @@ func (a *app) watch() {
 			}
 		}
 	}()
+	go follow(ctx, a.repo, churn, func(events []mygo.FileEvent) {
+		if ignoredOnly(a.repo, events) {
+			return
+		}
+		if gitOnly(events) {
+			win.Update(a.reread)
+		} else {
+			win.Update(a.refresh)
+		}
+	})
+	// A linked work tree's index, HEAD and branches are in the main
+	// checkout's .git, which a commit made here changes and nothing in
+	// the work tree: followed apart, for the history to show it.
 	go func() {
-		w, err := mygo.WatchFiles(ctx, a.repo, mygo.FileWatchOptions{
-			Recursive: true,
-			HintsOnly: true, // what changed is for git to say
-			Ignore:    churn,
-			Debounce:  300 * time.Millisecond,
-			MaxDelay:  2 * time.Second,
-		})
+		dirs := git.ReadGitDirs(a.repo)
+		if dirs.Common != "" {
+			go follow(ctx, dirs.Common, sharedChurn(dirs.Own), func([]mygo.FileEvent) { win.Update(a.reread) })
+		}
+		if dirs.Apart != "" {
+			go follow(ctx, dirs.Apart, churn, func([]mygo.FileEvent) { win.Update(a.reread) })
+		}
+	}()
+}
+
+// follow hands the changes of the folder over to changed, batch after
+// batch, until ctx ends or the watch does.
+func follow(ctx context.Context, dir string, ignore func(string, bool) bool, changed func([]mygo.FileEvent)) {
+	w, err := mygo.WatchFiles(ctx, dir, mygo.FileWatchOptions{
+		Recursive: true,
+		HintsOnly: true, // what changed is for git to say
+		Ignore:    ignore,
+		Debounce:  300 * time.Millisecond,
+		MaxDelay:  2 * time.Second,
+	})
+	if err != nil {
+		return
+	}
+	defer w.Close()
+	for {
+		events, err := w.Next(ctx)
 		if err != nil {
 			return
 		}
-		defer w.Close()
-		for {
-			events, err := w.Next(ctx)
-			if err != nil {
-				return
-			}
-			if ignoredOnly(a.repo, events) {
-				continue
-			}
-			if gitOnly(events) {
-				win.Update(a.reread)
-			} else {
-				win.Update(a.refresh)
-			}
+		changed(events)
+	}
+}
+
+// sharedChurn is what of the main checkout's .git a linked work tree
+// leaves alone: git's objects and logs as churn has them, and the other
+// work trees' folders. own is the work tree's, as "worktrees/name".
+func sharedChurn(own string) func(string, bool) bool {
+	return func(p string, isDir bool) bool {
+		switch p {
+		case "objects", "logs", "lfs", own + "/logs":
+			return true
 		}
-	}()
+		return strings.HasPrefix(p, "worktrees/") && p != own && !strings.HasPrefix(p, own+"/")
+	}
 }
 
 // ignoredOnly reports whether the changes are all in folders git ignores,

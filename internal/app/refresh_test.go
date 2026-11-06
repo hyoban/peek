@@ -355,3 +355,25 @@ func TestGitOnly(t *testing.T) {
 		}
 	}
 }
+
+// A linked work tree follows its own folder of the main checkout's .git
+// and its branches, not git's objects nor the other work trees.
+func TestSharedChurn(t *testing.T) {
+	ignore := sharedChurn("worktrees/here")
+	for p, want := range map[string]bool{
+		"":                    false,
+		"refs":                false,
+		"refs/heads/feature":  false,
+		"worktrees":           false,
+		"worktrees/here":      false,
+		"worktrees/here/logs": true,
+		"worktrees/other":     true,
+		"worktrees/herein":    true,
+		"objects":             true,
+		"logs":                true,
+	} {
+		if got := ignore(p, true); got != want {
+			t.Errorf("ignore(%q) = %v, want %v", p, got, want)
+		}
+	}
+}
