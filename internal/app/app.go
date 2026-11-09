@@ -859,19 +859,23 @@ func (a *app) commitItem(c *ui.Context) func(cm git.Commit) ui.SourceListItem {
 	dark := c.Theme().Dark
 	orange, purple, blue := system(c, systemOrange), system(c, systemPurple), system(c, systemBlue)
 	services := c.Services()
+	// The system's list asks for a row when it needs it, between frames
+	// too, when the frame's theme is gone: the checks' mark is colored
+	// now.
+	var checks []ui.SourceListBadge
+	var checksTip string
+	if pr := a.pullReq; pr != nil && a.pullFor == a.branchURL {
+		if b, ok := checksBadge(c, pr); ok {
+			checks, checksTip = []ui.SourceListBadge{b}, "\n\n#"+strconv.Itoa(pr.Number)+": "+checksSummary(pr)
+		}
+	}
 	return func(cm git.Commit) ui.SourceListItem {
 		it := ui.SourceListItem{Title: cm.Subject}
 		if cm.Hash == git.Worktree || git.IsRange(cm.Hash) {
 			tint, glyph, name := orange, worktreeIcon, "worktree"
 			if cm.Hash != git.Worktree {
 				tint, glyph, name = purple, branchIcon, "range"
-				it.Tooltip = cm.Body
-				if pr := a.pullReq; pr != nil && a.pullFor == a.branchURL {
-					if b, ok := checksBadge(c, pr); ok {
-						it.Badges = []ui.SourceListBadge{b}
-						it.Tooltip += "\n\n#" + strconv.Itoa(pr.Number) + ": " + checksSummary(pr)
-					}
-				}
+				it.Tooltip, it.Badges = cm.Body+checksTip, checks
 			}
 			it.Subtitle = cm.Summary
 			it.SubtitleImage = a.drawn(fmt.Sprint(name, dark), lineImage, lineImage, func(c *ui.Context) {

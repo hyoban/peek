@@ -8,23 +8,15 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/egoist/mygo/ui"
 )
 
 // The branch's changes show its pull request over their diffs: its title,
 // its checks and its description, the failing check listed at once; the
 // history's row of them marks how the checks stand.
 func TestPullHeader(t *testing.T) {
-	repo, _ := testutil.RemoteRepo(t)
-	testutil.Git(t, repo, "switch", "-q", "-c", "feature")
-	if err := os.WriteFile(filepath.Join(repo, "feature.txt"), []byte("feature\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	testutil.Git(t, repo, "add", "--all")
-	testutil.Git(t, repo, "commit", "-q", "-m", "Add the feature")
-	testutil.Git(t, repo, "push", "-q", "-u", "origin", "feature")
-	testutil.Git(t, repo, "remote", "set-url", "origin", "https://github.com/hyoban/peek.git")
-	testutil.FakeGH(t, "https://github.com/hyoban/peek")
-	a, tt := testApp(t, repo, nil)
+	a, tt := testApp(t, pullRepo(t), nil)
 	settle(tt)
 	if cm, ok := a.current(); !ok || !git.IsRange(cm.Hash) {
 		t.Fatalf("shown %+v, want the branch's changes", cm)
@@ -123,5 +115,42 @@ func TestPullHeaderComesInView(t *testing.T) {
 	settle(tt)
 	if r, ok := tt.Find("By ada into main"); !ok || r.H == 0 {
 		t.Fatalf("pull request's header out of sight: %+v", r)
+	}
+}
+
+// pullRepo is a repository on a branch whose pull request gh tells of,
+// with its checks: one failed, one running and one passed.
+func pullRepo(t *testing.T) string {
+	t.Helper()
+	repo, _ := testutil.RemoteRepo(t)
+	testutil.Git(t, repo, "switch", "-q", "-c", "feature")
+	if err := os.WriteFile(filepath.Join(repo, "feature.txt"), []byte("feature\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Git(t, repo, "add", "--all")
+	testutil.Git(t, repo, "commit", "-q", "-m", "Add the feature")
+	testutil.Git(t, repo, "push", "-q", "-u", "origin", "feature")
+	testutil.Git(t, repo, "remote", "set-url", "origin", "https://github.com/hyoban/peek.git")
+	testutil.FakeGH(t, "https://github.com/hyoban/peek")
+	return repo
+}
+
+// The system's list asks for the row of the branch's changes when it
+// needs it, between frames too, and gets it with the checks' mark (#9).
+func TestChecksBadgeBetweenFrames(t *testing.T) {
+	a, _ := testApp(t, pullRepo(t), nil)
+	var item func(git.Commit) ui.SourceListItem
+	tt := ui.NewTester(func(c *ui.Context) {
+		a.view(c)
+		item = a.commitItem(c)
+	}, 1200, 800)
+	settle(tt)
+	settle(tt)
+	i := slices.IndexFunc(a.commits, func(cm git.Commit) bool { return git.IsRange(cm.Hash) })
+	if i < 0 || a.pullReq == nil {
+		t.Fatalf("no branch's changes or pull request in %+v", a.commits)
+	}
+	if it := item(a.commits[i]); len(it.Badges) != 1 || it.Badges[0].Text != "✕" {
+		t.Fatalf("badges %+v, want the failed checks' cross", it.Badges)
 	}
 }
