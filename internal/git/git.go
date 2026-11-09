@@ -137,6 +137,9 @@ func LoadCommits(repo string, limit int) ([]Commit, error) {
 		"--format=%H"+sep+"%h"+sep+"%s"+sep+"%an"+sep+"%ae"+sep+"%at"+sep+
 			"%(trailers:key=Co-authored-by,valueonly,unfold,separator=%x1d)"+sep+"%D"+sep+"%b"+end)
 	if err != nil {
+		if unborn(repo) {
+			return nil, nil // a branch with no commits yet has no history
+		}
 		return nil, err
 	}
 	var commits []Commit
@@ -271,6 +274,9 @@ func LoadWorktreeChanges(repo string) ([]Change, error) {
 	var wg sync.WaitGroup
 	wg.Go(func() { untracked, untrackedErr = git(repo, "ls-files", "-z", "--others", "--exclude-standard") })
 	changes, err := countedChanges(repo, "diff", "HEAD", "-z", "-M")
+	if err != nil && unborn(repo) {
+		changes, err = countedChanges(repo, "diff", emptyTree(repo), "-z", "-M")
+	}
 	wg.Wait()
 	if err := cmp.Or(err, untrackedErr); err != nil {
 		return nil, err
@@ -665,7 +671,33 @@ func Patch(repo, hash string, ch Change, limit int) (string, error) {
 	}
 	// a/ and b/ whatever the user's diff.noprefix or diff.mnemonicPrefix.
 	args = append(args, "--no-ext-diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/", "--")
-	return Bounded(repo, limit, append(args, paths...)...)
+	out, err := Bounded(repo, limit, append(args, paths...)...)
+	if err != nil && hash == Worktree && unborn(repo) {
+		args[2] = emptyTree(repo)
+		return Bounded(repo, limit, append(args, paths...)...)
+	}
+	return out, err
+}
+
+// unborn reports whether HEAD names a branch with no commits yet, as a
+// repository's own first branch before its first commit, or one made
+// with checkout --orphan.
+func unborn(repo string) bool {
+	if _, err := git(repo, "rev-parse", "--verify", "--quiet", "HEAD"); err == nil {
+		return false
+	}
+	_, err := git(repo, "symbolic-ref", "--quiet", "HEAD")
+	return err == nil
+}
+
+// emptyTree returns the hash of the tree with nothing in it, which git
+// knows without its being stored, in the repository's own object format.
+func emptyTree(repo string) string {
+	out, err := gitWith(repo, nil, "", "hash-object", "-t", "tree", "--stdin")
+	if err != nil {
+		return "4b825dc642cb6eb9a060e54bf8d69288fbee4904" // SHA-1's
+	}
+	return strings.TrimSpace(out)
 }
 
 // AllIgnored reports whether git ignores every one of these paths of the

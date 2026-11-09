@@ -414,3 +414,41 @@ printf '%s' '{"data":{"repository":{"defaultBranchRef":{"target":{"history":{"no
 		t.Errorf("users = %v, want %v", users, want)
 	}
 }
+
+// A branch with no commits yet, as a repository's first before its first
+// commit, has no history, and its files are all new.
+func TestBranchWithNoCommits(t *testing.T) {
+	repo := testutil.Repo(t)
+	testutil.Git(t, repo, "checkout", "-q", "--orphan", "fresh")
+	testutil.Git(t, repo, "read-tree", "--empty")
+	testutil.Git(t, repo, "add", "main.go")
+	if got := CurrentBranch(repo); got != "fresh" {
+		t.Errorf("CurrentBranch = %q, want fresh", got)
+	}
+	commits, err := LoadCommits(repo, 10)
+	if err != nil || len(commits) != 0 {
+		t.Errorf("LoadCommits = %v, %v, want none", commits, err)
+	}
+	changes, err := LoadWorktreeChanges(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var paths []string
+	for _, ch := range changes {
+		if ch.Status != "A" {
+			t.Errorf("%s: status %q, want A", ch.Path, ch.Status)
+		}
+		paths = append(paths, ch.Path)
+	}
+	slices.Sort(paths)
+	if want := []string{"docs/new.md", "main.go"}; !slices.Equal(paths, want) {
+		t.Errorf("changes = %v, want %v", paths, want)
+	}
+	patch, err := Patch(repo, Worktree, Change{Status: "A", Old: "main.go", Path: "main.go"}, 1<<20)
+	if err != nil || !strings.Contains(patch, "+func main() {}") {
+		t.Errorf("Patch = %q, %v", patch, err)
+	}
+	if _, ok := BranchBase(repo); ok {
+		t.Error("BranchBase: ok on a branch with no commits")
+	}
+}
