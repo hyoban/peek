@@ -434,7 +434,7 @@ type menuItems struct {
 	definition, back, forward                 *menuItem
 	refresh, pull, ship, ask, review, explain *menuItem
 	branch, cleanUp, discard                  *menuItem
-	github, finder                            *menuItem
+	github, finder, quickLook                 *menuItem
 	add                                       *menuItem
 }
 
@@ -553,7 +553,12 @@ func (p *projects) setMenu() {
 		discard: item("Discard All Changes…", "", func(a *app) { a.confirmDiscard(a.diffs) }),
 		github:  item("Open on GitHub", "", func(a *app) { mygo.Shell.OpenExternal(a.githubPage()) }),
 		finder:  item("Show in Finder", "Alt+Cmd+R", func(a *app) { mygo.Shell.ShowItemInFolder(a.repo) }),
-		add:     item("Add Folder…", "Shift+Cmd+O", func(*app) { p.chooseToAdd() }),
+		quickLook: item("Quick Look", "Cmd+Y", func(a *app) {
+			if p := a.quickLookPath(); p != "" {
+				mygo.Shell.PreviewItem(p)
+			}
+		}),
+		add: item("Add Folder…", "Shift+Cmd+O", func(*app) { p.chooseToAdd() }),
 	}
 	p.menu = m
 	edit := []*mygo.MenuItem{
@@ -591,6 +596,8 @@ func (p *projects) setMenu() {
 			{Label: "Open Folder…", Accelerator: "CmdOrCtrl+O", Click: func(*mygo.MenuItem, *mygo.Window) { p.choose() }},
 			m.add.MenuItem,
 			{Role: mygo.RoleOpenRecent},
+			mygo.Separator(),
+			m.quickLook.MenuItem,
 			mygo.Separator(),
 			{Role: mygo.RoleClose},
 		}},
@@ -638,7 +645,7 @@ func (p *projects) syncMenu() {
 	}
 	if a == nil {
 		for _, item := range []*menuItem{m.changes, m.files, m.sidebar, m.history, m.terminal, m.viewed, m.find, m.layout, m.whitespace, m.nextChange, m.previousChange,
-			m.refresh, m.pull, m.ship, m.discard, m.ask, m.review, m.explain, m.branch, m.cleanUp, m.github, m.finder, m.definition, m.back, m.forward, m.add} {
+			m.refresh, m.pull, m.ship, m.discard, m.ask, m.review, m.explain, m.branch, m.cleanUp, m.github, m.finder, m.quickLook, m.definition, m.back, m.forward, m.add} {
 			item.show(item.shownLabel, false, item.shownChecked)
 		}
 		return
@@ -693,6 +700,11 @@ func (p *projects) syncMenu() {
 	m.cleanUp.show("Clean Up Worktrees…", !a.worktreeBusy(), false)
 	m.github.show("Open on GitHub", a.githubPage() != "", false)
 	m.finder.show("Show in Finder", true, false)
+	if p := a.quickLookPath(); p != "" {
+		m.quickLook.show("Quick Look “"+filepath.Base(p)+"”", true, false)
+	} else {
+		m.quickLook.show("Quick Look", false, false)
+	}
 	m.add.show("Add Folder…", true, false)
 }
 
@@ -748,4 +760,30 @@ func (p *projects) restore() {
 	for _, repo := range slices.Backward(open) {
 		p.open(repo)
 	}
+}
+
+// quickLookPath is the file Quick Look shows, as Finder's File menu does
+// with ⌘Y: the work tree's file chosen in the changes or shown in the
+// files, as it is on disk. A commit's files are not on disk, as they were.
+func (a *app) quickLookPath() string {
+	var p string
+	switch a.mode {
+	case modeChanges:
+		if cm, ok := a.current(); !ok || cm.Hash != git.Worktree {
+			return ""
+		}
+		p = a.changeTree.chosen()
+		if p == "" || a.changeTree.isDir(p) {
+			p = a.file
+		}
+	case modeFiles:
+		if a.codeHash != git.Worktree {
+			return ""
+		}
+		p = a.codePath
+	}
+	if p == "" || filepath.IsAbs(p) {
+		return p // a file outside the repository opens by its path
+	}
+	return filepath.Join(a.repo, filepath.FromSlash(p))
 }
