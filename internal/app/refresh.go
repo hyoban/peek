@@ -114,6 +114,7 @@ func readHistory(repo string) history {
 // refresh reads the history and the work tree again, as the watch asks
 // once files change, keeping what shows where it still is.
 func (a *app) refresh() {
+	a.codeLinks = nil // files come and go
 	a.restartDefinitions()
 	a.reread()
 }

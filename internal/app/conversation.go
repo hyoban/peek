@@ -4,9 +4,11 @@ import (
 	"crypto/sha1"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"peek/internal/review"
+	"strconv"
 	"strings"
 	"time"
 
@@ -348,7 +350,7 @@ func (a *app) turnView(c *ui.Context, conv *conversation, tn *turn) {
 	case !tn.done():
 		// What Codex wrote so far, as it streams, over what it does now.
 		if tn.partial != "" {
-			answerView(c, tn.partial)
+			a.answerView(c, tn.partial)
 		}
 		phase := a.answer.phase
 		if a.review.conv == conv {
@@ -371,7 +373,7 @@ func (a *app) turnView(c *ui.Context, conv *conversation, tn *turn) {
 	case tn.Review != nil:
 		reviewView(c, tn.Review)
 	case tn.Answer != "":
-		answerView(c, tn.Answer)
+		a.answerView(c, tn.Answer)
 	}
 	// An error after what Codex wrote before it, if anything.
 	if tn.Err != "" {
@@ -394,9 +396,57 @@ func (a *app) turnView(c *ui.Context, conv *conversation, tn *turn) {
 }
 
 // answerView is an answer of Codex's in its conversation, as its
-// Markdown reads.
-func answerView(c *ui.Context, text string) {
-	markdown.View(c, text, &markdown.Options{Theme: &markdown.Theme{CodeFont: monoFamily}, WrapCode: true})
+// Markdown reads: code naming a file of the repository, as
+// `internal/app/diffs.go:480`, links to it, at its line.
+func (a *app) answerView(c *ui.Context, text string) {
+	if a.answerMarkdown == nil {
+		a.answerMarkdown = &markdown.Options{Theme: &markdown.Theme{CodeFont: monoFamily}, WrapCode: true,
+			CodeLink: a.codeLink, OnLink: a.hoverLink}
+	}
+	markdown.View(c, text, a.answerMarkdown)
+}
+
+// codeLink is where code in an answer goes: a file of the repository it
+// names, by its path from the repository's root or its own, with the line
+// a colon may follow it with, as a file URL hoverLink opens. Code that
+// names none stays text. It is asked as the answer builds, so it reads
+// what it found before (codeLinks).
+func (a *app) codeLink(code string) (string, bool) {
+	code = strings.TrimSpace(code)
+	if len(code) > 300 || !strings.ContainsAny(code, "./") || strings.ContainsAny(code, " \t\n\"'`()[]{}<>|*?$") {
+		return "", false
+	}
+	key := a.repo + "\x00" + code
+	dest, seen := a.codeLinks[key]
+	if !seen {
+		dest = fileLink(a.repo, code)
+		if a.codeLinks == nil {
+			a.codeLinks = map[string]string{}
+		}
+		a.codeLinks[key] = dest
+	}
+	return dest, dest != ""
+}
+
+// fileLink returns the file URL of the file of repo that code names, at
+// its line, or "" where repo has no such file.
+func fileLink(repo, code string) string {
+	place := parsePlace(code)
+	p := place.path
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(repo, filepath.FromSlash(p))
+	}
+	if _, inside := repoPath(repo, p); !inside {
+		return ""
+	}
+	if info, err := os.Stat(p); err != nil || !info.Mode().IsRegular() {
+		return ""
+	}
+	u := (&url.URL{Scheme: "file", Path: p}).String()
+	if place.line > 0 {
+		u += "#L" + strconv.Itoa(place.line)
+	}
+	return u
 }
 
 // reviewView is a review in its conversation: the verdict beside its

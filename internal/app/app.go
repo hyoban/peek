@@ -56,7 +56,11 @@ type app struct {
 	// pullMarkdown shows its description, and checksOpen tells, by its
 	// page, whether its checks list where the user chose.
 	pullMarkdown *markdown.Options
-	checksOpen   map[string]bool
+	// answerMarkdown is how Codex's answers read, and codeLinks where the
+	// code in them goes, by repository and code, "" for none (codeLink).
+	answerMarkdown *markdown.Options
+	codeLinks      map[string]string
+	checksOpen     map[string]bool
 	// inline runs loads on the UI thread, as tests and snapshots want,
 	// and redraw asks for the frame a window's Update would draw then.
 	// Those a pass starts wait in published for the next, as a window's
