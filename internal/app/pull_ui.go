@@ -10,6 +10,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/markdown"
+	"github.com/egoist/mygo/ui/markdown/parser"
 )
 
 // shownPull is the branch's pull request where the branch's changes show,
@@ -69,7 +70,7 @@ func (a *app) pullHeader(c *ui.Context, pr *git.BranchPull) {
 			ui.Column(c).FillWidth().Children(func() {
 				if a.pullMarkdown == nil {
 					a.pullMarkdown = &markdown.Options{Theme: &markdown.Theme{CodeFont: monoFamily}, WrapCode: true,
-						OnLink: func(u string) { services.OpenURL(u) }}
+						OnLink: func(u string) { services.OpenURL(u) }, Resolve: func(in parser.Inline) (string, bool) { return githubRef(in, a.github) }}
 				}
 				markdown.View(c, body, a.pullMarkdown)
 			})
@@ -395,4 +396,30 @@ func mergeBox(c *ui.Context, m mergeStatus) {
 			})
 		}
 	})
+}
+
+// githubRef is where a mention or a reference to an issue or a pull
+// request in GitHub's Markdown goes, as GitHub links them: a person's or
+// a team's page, or the issue's, which GitHub sends on to the pull request
+// of its number. A reference within the repository needs its page, github.
+func githubRef(in parser.Inline, github string) (string, bool) {
+	const site = "https://github.com/"
+	if login := in.Login(); login != "" {
+		if org, team, ok := strings.Cut(login, "/"); ok {
+			return site + "orgs/" + org + "/teams/" + team, true
+		}
+		return site + login, true
+	}
+	repo, n := in.Ref()
+	if n == 0 {
+		return "", false
+	}
+	page := strings.TrimSuffix(github, "/")
+	if repo != "" {
+		page = site + repo
+	}
+	if page == "" {
+		return "", false
+	}
+	return page + "/issues/" + strconv.Itoa(n), true
 }

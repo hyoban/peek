@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/markdown/parser"
 )
 
 // The branch's changes show its pull request over their diffs: its title,
@@ -152,5 +153,29 @@ func TestChecksBadgeBetweenFrames(t *testing.T) {
 	}
 	if it := item(a.commits[i]); len(it.Badges) != 1 || it.Badges[0].Text != "✕" {
 		t.Fatalf("badges %+v, want the failed checks' cross", it.Badges)
+	}
+}
+
+// A pull request's description links its mentions and references as
+// GitHub does: within the repository, in another, and of people and
+// teams.
+func TestGithubRef(t *testing.T) {
+	const repo = "https://github.com/hyoban/peek"
+	for _, c := range []struct {
+		in   parser.Inline
+		want string
+	}{
+		{parser.Inline{Kind: parser.Reference, Text: "#12"}, repo + "/issues/12"},
+		{parser.Inline{Kind: parser.Reference, Text: "GH-7"}, repo + "/issues/7"},
+		{parser.Inline{Kind: parser.Reference, Text: "egoist/mygo#1631"}, "https://github.com/egoist/mygo/issues/1631"},
+		{parser.Inline{Kind: parser.Mention, Text: "@octocat"}, "https://github.com/octocat"},
+		{parser.Inline{Kind: parser.Mention, Text: "@github/docs"}, "https://github.com/orgs/github/teams/docs"},
+	} {
+		if got, ok := githubRef(c.in, repo); !ok || got != c.want {
+			t.Errorf("%s: %q, %v; want %q", c.in.Text, got, ok, c.want)
+		}
+	}
+	if got, ok := githubRef(parser.Inline{Kind: parser.Reference, Text: "#12"}, ""); ok {
+		t.Errorf("#12 without the repository's page went to %q", got)
 	}
 }
