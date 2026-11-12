@@ -87,6 +87,7 @@ func (a *app) runAnswer(conv *conversation) {
 	repo := a.repo
 	a.background(func() func() {
 		defer cancel()
+		defer a.keepRunning("Codex is answering")()
 		var text string
 		var err error
 		if session == "" && !git.IsRange(cm.Hash) && cm.Hash != git.Worktree {

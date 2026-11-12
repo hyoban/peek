@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -40,6 +41,18 @@ func (k *codexTask) activity(c *ui.Context, text, tooltip, stop string) toolButt
 		c.After(time.Second)
 	}
 	return b
+}
+
+// keepRunning keeps macOS from napping the app while Codex works for it,
+// out of sight or not, until the returned function is called: App Nap
+// would slow its output's reading within a minute of the window being
+// covered, while the Mac still sleeps when idle. Loads run inline, as in
+// tests, leave the system alone.
+func (a *app) keepRunning(reason string) (release func()) {
+	if a.inline {
+		return func() {}
+	}
+	return mygo.Power.KeepRunning(reason)
 }
 
 // codexProgress reports the task's stages from off the UI thread, while

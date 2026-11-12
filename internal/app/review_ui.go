@@ -91,6 +91,7 @@ func (a *app) startReview(request string) {
 	progress := a.codexProgress(ctx, &a.review.codexTask, func() bool { return !a.review.stale && a.review.sourceID == snapshot.ID })
 	a.background(func() func() {
 		defer cancel()
+		defer a.keepRunning("Codex is reviewing the changes")()
 		var session string
 		run := func(ctx context.Context, repo string, snapshot review.Snapshot) (review.Result, error) {
 			progress("Starting…", "Starting Codex")
