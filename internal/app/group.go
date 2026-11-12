@@ -207,7 +207,7 @@ func (a *app) memberTrees(c *ui.Context, members []*app, key, label string) {
 					color = t.Text // the repository shown
 				}
 				ui.Text(c, a.projects.label(m.repo)).FontSize(smallSize).FontWeight(700).TextColor(color).
-					SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
+					SingleLine().Ellipsis("…").TruncateMiddle().Grow(1).MinWidth(0)
 				if m.mode == modeChanges && len(m.diffs) > 0 {
 					added, deleted := sumLines(m.diffs)
 					lineCounts(c, added, deleted, false)

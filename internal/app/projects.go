@@ -185,7 +185,7 @@ func (p *projects) welcome(c *ui.Context) {
 					b.Children(func() {
 						ui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
 							folderIcon.show(c, 15).Shrink(0).TextColor(t.Accent)
-							ui.Text(c, p.label(repo)).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
+							ui.Text(c, p.label(repo)).SingleLine().Ellipsis("…").TruncateMiddle().Grow(1).MinWidth(0)
 						})
 					})
 				}

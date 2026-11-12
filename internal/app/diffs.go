@@ -446,7 +446,7 @@ func (a *app) diffHeader(c *ui.Context, d *fileDiff) {
 		if ch.Old != ch.Path {
 			where = "from " + ch.Old
 		}
-		ui.Text(c, where).FontSize(smallSize).TextColor(t.TextMuted).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
+		ui.Text(c, where).FontSize(smallSize).TextColor(t.TextMuted).SingleLine().Ellipsis("…").TruncateMiddle().Grow(1).MinWidth(0)
 		if d.state != nil {
 			if r, ok := d.state.SelectedLines(); ok && !d.patch {
 				a.linesButton(c, d, r)
