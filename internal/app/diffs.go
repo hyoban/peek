@@ -477,7 +477,12 @@ func (a *app) diffBody(c *ui.Context, d *fileDiff) {
 		ui.Row(c).FillWidth().Padding(t.Space(4), t.Space(3)).Children(func() { ui.Spinner(c).Label("Loading") })
 	default:
 		a.configure(c, d)
-		editor.DiffView(c.Key("diff:"+d.change.Path), d.state).FillWidth().Padding(0, 0, t.Space(4))
+		// The room below is the column's: a diff as high as its lines
+		// (FitContent) takes its height with its padding, which would
+		// cover its last line.
+		ui.Column(c).FillWidth().Padding(0, 0, t.Space(4)).Children(func() {
+			editor.DiffView(c.Key("diff:"+d.change.Path), d.state).FillWidth()
+		})
 	}
 }
 
