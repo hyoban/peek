@@ -873,6 +873,7 @@ func (a *app) commitItem(c *ui.Context) func(cm git.Commit) ui.SourceListItem {
 		it := ui.SourceListItem{Title: cm.Subject}
 		if cm.Hash == git.Worktree || git.IsRange(cm.Hash) {
 			tint, glyph, name := orange, worktreeIcon, "worktree"
+			it.Tooltip = cm.Body
 			if cm.Hash != git.Worktree {
 				tint, glyph, name = purple, branchIcon, "range"
 				it.Tooltip, it.Badges = cm.Body+checksTip, checks

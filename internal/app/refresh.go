@@ -51,12 +51,14 @@ func readHistory(repo string) history {
 		behind      int
 		upstream    string
 		published   git.Published
+		op          git.Operation
 	)
 	// The review's snapshot asks too, not to wait on a read of its own.
 	hasUnpushed := sync.OnceValue(func() bool { return git.HasUnpushedCommits(repo) })
 	wg.Go(func() { commits, err = git.LoadCommits(repo, 500) })
 	wg.Go(func() { published = git.ReadPublished(repo, 500) })
 	wg.Go(func() { changes, _ = git.LoadWorktreeChanges(repo) })
+	wg.Go(func() { op = git.ReadOperation(repo) })
 	wg.Go(func() { snapshot, snapshotErr = review.ReadSnapshotWith(repo, hasUnpushed) })
 	wg.Go(func() { r, hasBranch = git.BranchBase(repo) })
 	wg.Go(func() { branch = git.CurrentBranch(repo) })
@@ -79,6 +81,17 @@ func readHistory(repo string) history {
 		summary = count(n, "file") + " changed"
 	}
 	wt := git.Commit{Hash: git.Worktree, Subject: "Uncommitted Changes", Summary: summary}
+	// A merge, a rebase or a cherry-pick stopped midway names its changes,
+	// which are mostly what it brings in, and tells the files left to
+	// resolve first, as they keep it from being committed.
+	if op.Title != "" {
+		wt.Subject = op.Title
+		wt.Body = op.Title + " is in progress; its changes are the work tree's."
+		if op.Conflicts > 0 {
+			wt.Summary = count(op.Conflicts, "conflict") + " · " + summary
+			wt.Body += "\n" + count(op.Conflicts, "file") + " to resolve before committing."
+		}
+	}
 	entries := []git.Commit{wt}
 	var branchReview review.Snapshot
 	// The branch's changes since it left the branch it is to merge into,
