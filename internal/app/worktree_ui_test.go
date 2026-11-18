@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -152,5 +153,29 @@ func TestWorktreeProgress(t *testing.T) {
 	tt.Frame()
 	if tt.HasText("Removing Worktrees") {
 		t.Fatal("progress left up")
+	}
+}
+
+// An alert names a few worktrees and counts the rest, so its buttons stay
+// on the screen however many there are.
+func TestListLines(t *testing.T) {
+	lines := func(n int) []string {
+		l := make([]string, n)
+		for i := range l {
+			l[i] = fmt.Sprint(i + 1)
+		}
+		return l
+	}
+	for _, tc := range []struct {
+		n    int
+		want string
+	}{
+		{1, "1"},
+		{6, "1\n2\n3\n4\n5\n6"}, // one more is named, not counted
+		{12, "1\n2\n3\n4\n5\nand 7 more"},
+	} {
+		if got := listLines(lines(tc.n)); got != tc.want {
+			t.Errorf("listLines(%d lines) = %q, want %q", tc.n, got, tc.want)
+		}
 	}
 }

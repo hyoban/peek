@@ -73,7 +73,21 @@ func keptNote(kept []git.KeptWorktree) string {
 	for i, w := range kept {
 		lines[i] = worktreeLine(w.Branch, w.Dir, w.Reason)
 	}
-	return "\n\nKept:\n" + strings.Join(lines, "\n")
+	return "\n\nKept:\n" + listLines(lines)
+}
+
+// alertListMax is how many worktrees an alert names before it counts the
+// rest: AppKit's alerts don't scroll, so a longer list pushes their buttons
+// off the screen.
+const alertListMax = 5
+
+// listLines joins the lines of a list in an alert, naming the first few
+// and counting the rest, as Finder names a few of the items it asks about.
+func listLines(lines []string) string {
+	if len(lines) <= alertListMax+1 { // a line for one more names it as well
+		return strings.Join(lines, "\n")
+	}
+	return strings.Join(lines[:alertListMax], "\n") + fmt.Sprintf("\nand %d more", len(lines)-alertListMax)
 }
 
 // worktreeLine names a worktree by its branch, else its folder, and where
@@ -104,7 +118,7 @@ func (a *app) confirmCleanUp(done []git.DoneWorktree, kept []git.KeptWorktree) {
 	if len(done) == 1 {
 		title = fmt.Sprintf("Remove the worktree of “%s”?", done[0].Branch)
 	}
-	message := strings.Join(lines, "\n") + "\n\nThe folders are deleted; the branches are kept. Worktrees with uncommitted changes aren’t removed." + keptNote(kept)
+	message := listLines(lines) + "\n\nThe folders are deleted; the branches are kept. Worktrees with uncommitted changes aren’t removed." + keptNote(kept)
 	a.confirm(title, message, "Remove Worktrees", func() { a.removeWorktrees(done, false, false) })
 }
 
@@ -174,7 +188,7 @@ func (a *app) removeWorktrees(list []git.DoneWorktree, force, alone bool) {
 				for i, w := range failed {
 					lines[i] = worktreeLine(w.Branch, w.Dir, w.Reason)
 				}
-				message := strings.Join(lines, "\n")
+				message := listLines(lines)
 				if len(changed) > 0 {
 					message += "\n\nRemove one with changes from the branch switcher to discard them."
 				}
