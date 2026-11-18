@@ -413,12 +413,16 @@ func (a *app) commitTags(c *ui.Context, tags []string) {
 	})
 }
 
+// diffHeaderHeight is the height of a file's bar, pinned over its diff,
+// which the diff's find bar and the match it finds show below.
+const diffHeaderHeight = 32
+
 // diffHeader is a file's bar, pinned while its diff scrolls.
 func (a *app) diffHeader(c *ui.Context, d *fileDiff) {
 	t := c.Theme()
 	ch := d.change
 	dir, name := path.Split(ch.Path)
-	bar := ui.Row(c).FillWidth().Height(32).AlignItems(ui.Center).Gap(t.Space(2)).Padding(0, t.Space(4)).
+	bar := ui.Row(c).FillWidth().Height(diffHeaderHeight).AlignItems(ui.Center).Gap(t.Space(2)).Padding(0, t.Space(4)).
 		Background(t.Surface).BorderColor(t.Border.Alpha(0.6)).BorderWidth(0, 0, 1)
 	services := c.Services()
 	bar.ContextMenu(func(m *ui.Menu) {

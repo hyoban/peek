@@ -38,4 +38,4 @@ require (
 // subtitles after a picture, search field (NativeSearchField) and split
 // view, whose dividers drag and whose sidebars slide, under the content.
 // Until MyGo does.
-replace github.com/egoist/mygo => github.com/hyoban/mygo v0.7.2-0.20261112042456-af6fb4c4647a
+replace github.com/egoist/mygo => github.com/hyoban/mygo v0.7.2-0.20261118133716-c3f378f92ad2
