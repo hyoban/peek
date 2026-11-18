@@ -106,6 +106,31 @@ func PruneWorktrees(ctx context.Context, repo string) error {
 	return gitFailure(err)
 }
 
+// PruneTrackedRemotes fetches, quietly and without asking for
+// credentials, each remote a local branch tracks, pruning the branches
+// it deleted, for CleanableWorktrees to see them gone: a branch merged
+// by squashing, as a merge queue does, is never merged into the default
+// branch, and its remote deleting it is the only sign it is done with.
+// It fetches every remote it can, and returns what failed.
+func PruneTrackedRemotes(ctx context.Context, repo string) error {
+	out, err := Run(ctx, repo, "for-each-ref", "--format=%(upstream:remotename)", "refs/heads")
+	if err != nil {
+		return err
+	}
+	var errs []error
+	seen := map[string]bool{}
+	for _, remote := range strings.Fields(out) {
+		if remote == "." || seen[remote] {
+			continue
+		}
+		seen[remote] = true
+		if _, err := Run(ctx, repo, "fetch", "--quiet", "--prune", "--no-tags", "--no-write-fetch-head", "--", remote); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
 // CleanableWorktrees lists the repository's other work trees whose
 // branches are done with: the remote they tracked deleted them, or they
 // were pushed and are merged into the default branch. It keeps, saying

@@ -105,3 +105,33 @@ func TestCleanableWorktrees(t *testing.T) {
 		t.Errorf("missing worktree kept: %s", list)
 	}
 }
+
+// A branch merged by squashing, which the remote then deleted, is only
+// cleanable once its remote is fetched with pruning; a remote that can't
+// be reached is reported and leaves the rest fetched.
+func TestPruneTrackedRemotes(t *testing.T) {
+	ctx := context.Background()
+	repo, remote := testutil.RemoteRepo(t)
+	dir := filepath.Join(t.TempDir(), "squashed")
+	testutil.Git(t, repo, "worktree", "add", "-q", "-b", "squashed", dir)
+	os.WriteFile(filepath.Join(dir, "squashed.txt"), []byte("squashed\n"), 0o644)
+	testutil.Git(t, dir, "add", "--all")
+	testutil.Git(t, dir, "commit", "-q", "-m", "Add squashed")
+	testutil.Git(t, dir, "push", "-q", "-u", "origin", "squashed")
+	testutil.Git(t, remote, "branch", "-D", "squashed")
+
+	if done, _, err := CleanableWorktrees(ctx, repo); err != nil || len(done) != 0 {
+		t.Fatalf("cleanable before fetching %v, %v", done, err)
+	}
+	testutil.Git(t, repo, "remote", "add", "dead", filepath.Join(t.TempDir(), "missing"))
+	testutil.Git(t, repo, "branch", "-q", "elsewhere")
+	testutil.Git(t, repo, "config", "branch.elsewhere.remote", "dead")
+	testutil.Git(t, repo, "config", "branch.elsewhere.merge", "refs/heads/elsewhere")
+	if err := PruneTrackedRemotes(ctx, repo); err == nil || !strings.Contains(err.Error(), "dead") {
+		t.Errorf("unreachable remote: %v", err)
+	}
+	done, _, err := CleanableWorktrees(ctx, repo)
+	if err != nil || len(done) != 1 || done[0].Branch != "squashed" || !done[0].Gone {
+		t.Fatalf("cleanable after fetching %v, %v", done, err)
+	}
+}

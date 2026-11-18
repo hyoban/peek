@@ -101,6 +101,27 @@ func TestCleanUpWorktrees(t *testing.T) {
 	}
 }
 
+// Clean Up Worktrees… fetches to learn the branches the remote deleted,
+// as it does those merged by squashing.
+func TestCleanUpWorktreesFetches(t *testing.T) {
+	repo, remote := testutil.RemoteRepo(t)
+	squashed := filepath.Join(t.TempDir(), "squashed")
+	testutil.Git(t, repo, "worktree", "add", "-q", "-b", "squashed", squashed)
+	os.WriteFile(filepath.Join(squashed, "squashed.txt"), []byte("squashed\n"), 0o644)
+	testutil.Git(t, squashed, "add", "--all")
+	testutil.Git(t, squashed, "commit", "-q", "-m", "Add squashed")
+	testutil.Git(t, squashed, "push", "-q", "-u", "origin", "squashed")
+	testutil.Git(t, remote, "branch", "-D", "squashed")
+
+	a, tt := testApp(t, repo, nil)
+	settle(tt)
+	a.cleanUpWorktrees()
+	settle(tt)
+	if !tt.HasText("Remove the worktree of “squashed”?") {
+		t.Fatalf("no alert asking, texts %q", tt.Texts())
+	}
+}
+
 // Worktrees cleaned up that have changes are kept, each named with what
 // it has.
 func TestCleanUpWorktreesWithChanges(t *testing.T) {

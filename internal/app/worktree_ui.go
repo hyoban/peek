@@ -35,9 +35,10 @@ func (a *app) confirmRemoveWorktree(dir, branch string) {
 }
 
 // cleanUpWorktrees lists the worktrees whose branches are merged or
-// deleted from their remote, forgetting those whose folders are gone,
-// then asks before removing them, as Repository ▸ Clean Up Worktrees…
-// does.
+// deleted from their remote, fetching the remotes first to learn which
+// they deleted and forgetting those whose folders are gone, then asks
+// before removing them, as Repository ▸ Clean Up Worktrees… does. A
+// remote that can't be reached leaves its branches as last fetched.
 func (a *app) cleanUpWorktrees() {
 	if a.worktreeBusy() {
 		return
@@ -45,6 +46,9 @@ func (a *app) cleanUpWorktrees() {
 	a.removingWorktrees = true
 	repo := a.repo
 	a.background(func() func() {
+		fetchCtx, cancelFetch := context.WithTimeout(context.Background(), 20*time.Second)
+		git.PruneTrackedRemotes(fetchCtx, repo)
+		cancelFetch()
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		pruneErr := git.PruneWorktrees(ctx, repo)
